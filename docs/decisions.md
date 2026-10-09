@@ -221,3 +221,34 @@ cut-and-paste as the only way to move tiles.
 **Why:** one type means one set of transforms and one file format; a no-op hides bugs; an edit
 to what the user cannot see is a surprise; Tiled's maps come in every orientation; moving a
 selection is Tiled's most requested missing feature.
+
+## 2026-10-09 — Editor core choices
+
+**Decided:** the editor core is synchronous and owned by the UI thread, with every blocking job
+run by the window on a worker and fed back as an intent; dirty state is a version number per
+asset that transactions bump and refreshes do not; a transaction is undone only while every
+asset it touched is still at the version it left, else the editor names the later step; the
+selection, the carried tiles, the current layer and the AutoMap setup are recorded in every
+transaction; the keymap has its own chord type; settings are a `settings.toml` with versioned
+migration and the session a `session.json`.
+**Instead of:** threads and timers inside the core; dirty by pointer equality with the saved
+root; undoing a cross-asset transaction unconditionally; selections outside the history;
+the toolkit's shortcut type; the toolkit's own persistence.
+**Why:** a core that is a function of what it is told is testable without a window and without
+time; a version survives tileset refreshes that a pointer does not; silently undoing someone
+else's later change is data loss; a selection that undo does not restore leaves the user lost;
+the core must not name a toolkit; files a person can read and diff.
+
+## 2026-10-09 — Application choices
+
+**Decided:** tools implement one trait over gestures that carry the modifiers held at their
+start and now; the window applies intents at the end of the frame and carries out effects; a
+modal stack is the only knowledge of modality; file dialogs are asynchronous; the window
+repaints only for input and for things that will change; Tiled's modifiers are kept where Tiled
+has them, with the status bar naming what each held modifier does.
+**Instead of:** a dispatch inside the canvas with a gesture enum per tool family; panels that
+mutate the editor or leave mailboxes; fifteen booleans that mean "a modal is open"; blocking
+dialogs inside dispatch; repainting every frame; a new modifier vocabulary across the board.
+**Why:** tools as state machines get headless tests; one intent path means one order of
+effects; one stack means one answer; a blocked frame is a stall; an idle editor should cost
+nothing; Tiled users keep their habits and the hint makes the mixture discoverable.
