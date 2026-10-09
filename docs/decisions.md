@@ -143,3 +143,50 @@ in `apps/`.
 its fields.
 **Why:** logic tested without a window is fast and stable; the window stays small enough to read;
 and the live link can run the same editor logic for `bt` without a widget in sight.
+
+## 2026-10-09 — Representation choices in the data model
+
+**Decided:** every real number from a file is `f64`; tile layers key their chunks in a
+`BTreeMap` ordered by row then column; flag sets use the `bitflags` crate; a Wang id is eight
+lanes (`[u8; 8]`), packed into a `u64` only inside the terrain filler; a tileset's kind (atlas
+or collection) is an enum; a cell is eight bytes with the empty cell canonical.
+**Instead of:** `f32` where Tiled's own UI uses single precision; a `HashMap` of chunks sorted
+by each writer; hand-written flag newtypes; a packed `u64` Wang id everywhere; an optional
+image field that leaves "collection with columns" representable.
+**Why:** JSON files store fifteen digits and must come back byte for byte; every walk over a
+layer is deterministic without sorting; one way to write a flag set; readers of the model want
+a lane, not a shift; invalid states that cannot be built need no checks.
+
+## 2026-10-09 — Byte identity policies
+
+**Decided:** TMX reals are written with Qt's six significant digits and JSON reals with Qt's
+fifteen; a map keeps the `firstgid` the file gave each tileset as a hint and the writer uses
+the hints while they still form a valid sequence; `version` and `tiledversion` are written back
+as read; zstd layer data is written at `ruzstd`'s fastest level and is the one documented
+exception to byte identity; zlib and gzip go through a port of zlib's deflate.
+**Instead of:** shortest round-trip numbers everywhere (more precise, every file rewritten);
+recomputing every gid on every save (Tiled's way, which shifts gids when an image is missing);
+a native zstd library (not pure Rust) or no zstd at all.
+**Why:** a Tiled user who opens a map here and saves it must see no diff; precision beyond
+Tiled's cannot be stored in Tiled's files anyway.
+
+## 2026-10-09 — Deliberate departures from Tiled's reader
+
+**Decided:** JSON layers without `visible` or `opacity` load visible and opaque; `next_*_id`
+values lower than an id in use are raised with a warning; a trailing comma in CSV data is
+accepted; a `propertytype` naming a type the project lacks is kept and written back; a world
+pattern that does not compile is kept with a warning; unknown elements, attributes and keys
+produce a warning.
+**Instead of:** copying Tiled's behaviour in each case (invisible layers, duplicate ids, a hard
+error, a dropped type link, a dropped pattern, a debug message).
+**Why:** each of Tiled's behaviours is a bug or a data loss that its own documentation does not
+describe; being more lenient than Tiled is safe, being stricter is not, and nothing is dropped
+silently.
+
+## 2026-10-09 — Embedded images are bytes in the model
+
+**Decided:** an image embedded in a Tiled file is kept as bytes in its `ImageRef` and decoded
+through `bt-image` by content hash.
+**Instead of:** writing it to a temporary folder at load time and referring to that file.
+**Why:** loading a file must not write anything; a temporary folder the system cleans up is a
+reference that can break; the bytes are what the writer needs anyway.

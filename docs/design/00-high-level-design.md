@@ -214,8 +214,8 @@ Anything two crates would otherwise copy goes here; anything only one crate need
 build it, the renderer reads it, the editing crates mutate it, and undo is built on cloning it.
 
 - **Map**: orientation (orthogonal, isometric, staggered, hexagonal, oblique), tile size, render
-  order, stagger axis and index, hex side length, background colour, infinite or not (stored
-  once, on the map), an ordered list of tileset references, a layer tree, properties, and one
+  order, stagger axis and index, hex side length, background colour, infinite or not (every tile
+  layer's bounds follow it), an ordered list of tileset references, a layer tree, properties, and one
   named `FileFormat` value holding what a byte-identical write needs (format version, layer data
   encoding and compression, line endings, chunk size, export settings, the tileset references as
   written). Tilesets carry the same kind of value.
@@ -229,8 +229,8 @@ build it, the renderer reads it, the editing crates mutate it, and undo is built
   zero meaning empty), flip flags (horizontal, vertical, anti-diagonal, hexagonal 120°) and a
   local tile id. Global ids are computed only when writing files.
 - **Tilesets** are shared, immutable values (`Arc<Tileset>`): image or collection, tiles with
-  their properties, animation frames, collision shapes, Wang sets (Tiled's `u64` Wang id with
-  eight 8-bit lanes, kept verbatim), transformation flags. A map refers to an external tileset by
+  their properties, animation frames, collision shapes, Wang sets (the eight lanes of Tiled's
+  Wang id, in Tiled's order), transformation flags. A map refers to an external tileset by
   path and to an embedded one by holding it; two maps open on the same `.tsx` share one `Arc`.
 - **Objects** live in object layers in Tiled's pixel space. The shape is one enum (rectangle,
   ellipse, point, polygon, polyline, text, tile), so a tile object cannot also be a polygon; each
