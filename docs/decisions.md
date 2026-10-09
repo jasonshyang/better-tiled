@@ -357,3 +357,21 @@ running Godot inside an export; free-text warnings.
 survives renames; game code can convert positions with the layer's own grid; a user can paint
 any tile and no cell lacks tile data; Godot 4.3 must load the output; the report is the same in
 the editor, in `bt` and as JSON.
+
+## 2026-10-09 — Testing choices
+
+**Decided:** missing data, GPU or Godot fails a test unless one variable turns it into a loud
+skip, and CI fails on any skip that is not the private packs (or Godot off Linux); fixtures are
+built in code at run time and committed only when small and ours; oracles are Tiled's own
+expected results, property statements where Tiled is unseedable, a CPU compositor, Godot
+headless and the packs' previews; goldens are rewritten only by an explicit variable and
+reviewed as behaviour changes; randomised tests use seeded generators with the seed and case
+printed, and the readers get libFuzzer targets run weekly; timing checks assert only in
+optimised builds; agent runs and windowed checks are release gates run by hand, not tests;
+shared fixture builders live in `bt-test-data`, which `bt-core` and `bt-image` do not use.
+**Instead of:** silent skips; committed copies of Tiled's or a pack's files; `proptest` or
+`insta` dependencies; timing assertions in debug builds; agent transcripts kept in the
+repository; a separate fixtures crate.
+**Why:** a suite that passes on a machine without the data proves nothing unless it says what
+it did not run; fixtures beside their assertions stay readable; one language and few test
+dependencies keep CI simple; a gate that needs a person's eyes is not pretended to be a test.
