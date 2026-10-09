@@ -1,0 +1,18 @@
+[package]
+name = "bt-core"
+description = "better-tiled's data model: maps, tilesets, objects, properties, terrain sets, worlds and projects, with the grid geometry of every Tiled orientation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+bitflags.workspace = true
+bt-utils.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -7,6 +7,11 @@ or reproduces someone else's work, with the notices their licenses ask to be kep
 | Crate | Follows | License of the original |
 |---|---|---|
 | `crates/bt-utils` (`src/raster.rs`) | Alois Zingl's "Bresenham Curve Rasterizing Algorithms" | MIT |
+| `crates/bt-core` (the grid geometry, the custom-type rules, the tileset arithmetic) | libtiled, Tiled's core library | BSD-2-Clause |
+
+Tiled's editor (`src/tiled` in Tiled's repository) is licensed under the GNU GPL; no code
+derived from it is in a crate licensed under MIT or Apache-2.0. The crates that port it say so in
+their documentation and are licensed under the GPL.
 
 ## Bresenham Curve Rasterizing Algorithms — MIT License
 
@@ -28,3 +33,30 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## libtiled — BSD 2-Clause License
+
+<https://github.com/mapeditor/tiled> (`src/libtiled`)
+
+Copyright 2008-2026, Thorbjørn Lindeijer and libtiled contributors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+   1. Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
