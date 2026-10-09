@@ -283,3 +283,36 @@ strings for warnings; full runs after every stroke; `bt-project` depending on th
 **Why:** a working copy with renamed layers is where a run and its explanation drift apart;
 one source of truth for what a tile means; the editor and `bt` group and act on problems; a
 stroke must cost its window; a file format crate must not depend on an algorithm crate.
+
+## 2026-10-09 — Project file choices
+
+**Decided:** `better-tiled.json` is found upward from the map, stopping at the repository's top
+and below the home folder, and created next to the open `.tiled-project` only when the map's
+search reaches that folder; keys and paths are relative to the file and kept in the map's own
+form, never canonicalised; unknown keys are kept at every level and output is sorted; painted
+cells are text rows with run lengths; checksums are FNV-1a of a canonical byte stream; every
+write is a locked re-read, a change to the caller's own record and an atomic rename, with the
+lock in the per-user runtime folder; orphaned entries are reported, never dropped.
+**Instead of:** entries in `.tiled-project` (Tiled rewrites it with only the keys it knows) or
+as map properties (Tiled shows them); a file per map; canonical paths (a path through a link or
+a macOS temp folder is another path, and tilesets stop matching); binary or base64 rows; a
+lock file beside the project file; silent fresh starts.
+**Why:** a clone of the repository carries the file; a diff of it is readable; two programs
+write it without losing each other's entries; the rules and the map read their tilesets by the
+same paths; nothing in the user's repository is created that they did not ask for.
+
+## 2026-10-09 — Agent tooling choices
+
+**Decided:** one library, `bt-script`, behind `bt` and the editor's live link; `clap` derive
+types as the single command table with `--json` on every command; outcomes are typed and text is
+one renderer with `Problem`, `Warning`, `Note` and `Fact` lines, problems first; names are slugs
+with qualification and suggestions; a sprite stands where its measured foot is; shapes are
+rasterised by cell centre and narrowed by grounds; a script is all or nothing with per-operation
+seeds; `check` states facts and the guide holds the ways out; `bt` never writes a tileset file;
+the guide is checked against the command table by tests; agent runs are a manual release gate.
+**Instead of:** a hand-written argument parser; string reports; advice in problem lines;
+domain generators (bridges, crossings) or answers ("where should X go"); persisting names into
+`.tsx` files; validating with the agents' own reports.
+**Why:** one table cannot drift from the guide; typed outcomes are what tests and the editor
+read; agents act on problem lines that name a concrete place and skip prose; primitives compose
+across every kind of map while generators fit one pack; a tileset is the user's file.
