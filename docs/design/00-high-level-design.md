@@ -318,8 +318,10 @@ window agree.
 - Tile images are packed into 2D-array texture pages; tiles are drawn as instances that name a
   sprite by index; animation advances through a small remap table, so no instance buffer is
   rebuilt for an animated tile.
-- Tile layers are cached per 16×16 chunk, keyed by the chunk's `Arc`, which the cache retains;
-  instance data lives on the GPU per chunk and is uploaded only when the chunk changes.
+- Tile layers are cached per 16×16 chunk, keyed by the chunk's `Arc`, which the cache retains:
+  a chunk's instances are rebuilt only when the chunk changes, and a frame uploads only the
+  visible ones. Far zoomed out, a chunk is drawn as one picture of itself, so the instance count
+  stays bounded at any zoom.
 - Pages, sprites and chunk caches are evicted under a byte budget; the renderer is created once
   and never recreated to forget a tileset.
 - The fragment shader samples with clamped texel loads ("sharp bilinear" magnified, box

@@ -190,3 +190,34 @@ through `bt-image` by content hash.
 **Instead of:** writing it to a temporary folder at load time and referring to that file.
 **Why:** loading a file must not write anything; a temporary folder the system cleans up is a
 reference that can break; the bytes are what the writer needs anyway.
+
+## 2026-10-09 — Rendering choices
+
+**Decided:** a layer with a blend mode is composited as a whole against what is below it; the
+parallax origin keeps the sign Tiled's documentation gives; top-down object layers sort by
+screen y everywhere, hit tests included; tint uses Tiled's exact formula; far zoom draws each
+chunk as one impostor picture; the grid, outlines, selection, marks and text are drawn by the
+renderer itself; a frame assembles the visible instances from per-chunk caches on the CPU.
+**Instead of:** blending every primitive as Tiled does (impossible in one GPU pass without
+backdrop reads); copying the 1.11 sign regression; sorting by pixel y as Tiled's export does;
+leaving vector drawing to the window's widget painter; keeping chunk instances resident on the
+GPU with one draw per chunk.
+**Why:** per-layer compositing differs from Tiled only where tiles overlap inside one blended
+layer; the documented parallax is what users read; one order for drawing and picking; one
+drawing path cannot drift from itself; impostors are what keeps a million-cell view inside the
+budget; per-chunk GPU slots cannot interleave chunks in Tiled's draw order on projected grids,
+and the CPU assembly is linear in what is visible.
+
+## 2026-10-09 — Editing choices
+
+**Decided:** one `Brush` type for the Stamp tool, the fills, the quick stamps and the saved
+stamps; an impossible request (a missing layer, object or tileset) is a typed error; the eraser
+leaves hidden layers alone; every operation that depends on the grid goes through the map
+geometry, staggered and hexagonal maps included; a selection carries its tiles on the grid's
+own lattice.
+**Instead of:** three brush representations; `None` or `false` for a bad id; Tiled's
+Shift-erase of hidden layers; stamps and snapping that work on square grids only; Tiled's
+cut-and-paste as the only way to move tiles.
+**Why:** one type means one set of transforms and one file format; a no-op hides bugs; an edit
+to what the user cannot see is a surprise; Tiled's maps come in every orientation; moving a
+selection is Tiled's most requested missing feature.
