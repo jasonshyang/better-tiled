@@ -102,6 +102,7 @@ Commands and their options are `clap` derive types declared once. The table is t
 | `mark` | `MAP SHAPE [--label TEXT] [--add] [--no-focus] [--with FILE]`; `MAP --clear` |
 | `open`, `save` | `MAP` |
 | `godot` | `setup \| export \| status \| verify …` |
+| `export` | `MAP\|TILESET OUT [--embed-tilesets] [--detach-templates] [--resolve-types] [--minimize]`; `MAP OUT.json --resolved`; `--schema` |
 
 Every command takes `--project FILE` (the `.tiled-project` whose custom types apply; else the
 nearest one above the map) and `--json`. Unknown options are usage errors that list the known
@@ -424,6 +425,18 @@ the editor's unsaved changes to it. `new` writes an empty map like another (its 
 layers, emptied, with a hint for each layer that was filled with one tile, properties cleared,
 file properties rebased) or from a size, a tile size, tilesets and `name:kind` layers; an
 existing file needs `--force`.
+
+### 10.8 `export`
+
+`export MAP OUT` writes the map in the format `OUT`'s extension names, through `bt-tmx` with
+Tiled's export options: `.tmx`, `.tmj` or `.json` (Tiled's JSON), `.js`; a tileset to `.tsx`,
+`.tsj` or `.json`; `.png` a plain picture of the map without rulers; `.tscn` the Godot export of
+`12-godot-export.md`. `OUT.json --resolved` writes the resolved scene JSON for other programs:
+no global ids, flips as booleans, templates detached and inherited properties written out,
+tiles with their terrain names, every cell's centre and every object's screen position and
+outline on every orientation, image paths relative to the file; its JSON Schema ships with the
+program (`bt export --schema` prints it) and every export is validated against it in tests.
+Oblique maps are refused. Read-only targets are refused like any other write.
 
 ## 11. Check
 

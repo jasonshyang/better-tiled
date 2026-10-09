@@ -316,3 +316,44 @@ domain generators (bridges, crossings) or answers ("where should X go"); persist
 **Why:** one table cannot drift from the guide; typed outcomes are what tests and the editor
 read; agents act on problem lines that name a concrete place and skip prose; primitives compose
 across every kind of map while generators fit one pack; a tileset is the user's file.
+
+## 2026-10-09 — Live link choices
+
+**Decided:** `bt-live` is transport and protocol only, generic over the work it hands the
+window (a `Handler` on the connection thread, a deadline channel to the window's thread); one
+request per connection, one JSON line each way, a versioned `Status`; sockets in the private
+per-user runtime folder under `/tmp`, checked for ownership and mode on both sides; scripts run
+inside the editor process on a base the editor hands out, land as one transaction only while
+the document's version is the base's, and rerun on a conflict up to three times; a job past its
+deadline is dropped; marks never switch the shown map; no live link on Windows.
+**Instead of:** a crate that knows maps (it would depend on `bt-core` and `bt-script`); a
+long-lived session with streaming; a socket in the data folder (long `$HOME` paths break the
+104-byte limit, and sandboxes change `$HOME`); running scripts in `bt` on a TMX snapshot (a
+round trip replaces the person's tilesets and loses unsaved tileset edits); applying an edit
+whenever it arrives; named pipes on Windows.
+**Why:** the thinnest crate that two programs share; a request that cannot hang either side;
+the person's keystrokes are never interleaved with or overwritten by an agent's edit; an edit
+`bt` reported as timed out is never applied unseen.
+
+## 2026-10-09 — Godot export choices
+
+**Decided:** generated files are build output under a contract (a `;` header with an FNV-1a
+hash, a marker on the root, a uid derived from the path, replace only what is ours and
+unchanged, otherwise refuse with the way out and write nothing, backups on Replace); names and
+unique ids from Tiled ids, with ids on Godot 4.6+ projects; every orientation but oblique on
+Godot's grids with the TileMapLayers at Tiled's offset and objects shifted; a hex side Godot
+cannot draw falls back to half-offset squares with a warning; a complete TileSet shared per
+grid by default with append-only sources; animations in atlas sources of their own; custom
+data in Tiled's types; Tiled's property names keep Tiled's meaning but for two reported fixes,
+and better-tiled's start with `godot`; rotated instances at the rotated centre with rotation;
+corner-set seams under Godot's brush accepted; the parallax origin noted, not corrected;
+`verify` runs Godot only on request; one code list for the report.
+**Instead of:** merging into or rewriting changed files; counter names; moving the layers and
+keeping objects at Tiled's coordinates; refusing hex sides Godot lacks; a TileSet of the tiles
+used, inside each scene; Tiled's exporter's placement of rotated instances; an alternative tile
+per centre colour for corner sets; a `scroll_offset` correction a camera zoom would break;
+running Godot inside an export; free-text warnings.
+**Why:** nothing done in Godot is lost silently and every refusal has a way out; a level scene
+survives renames; game code can convert positions with the layer's own grid; a user can paint
+any tile and no cell lacks tile data; Godot 4.3 must load the output; the report is the same in
+the editor, in `bt` and as JSON.
