@@ -1,0 +1,20 @@
+[package]
+name = "bt-utils"
+description = "Primitives shared by better-tiled's crates: rectangles, seeded randomness, rasterising, banded regions, hashes, atomic writes, paths and text"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+glam.workspace = true
+thiserror.workspace = true
+
+
+[dev-dependencies]
+bt-test-data.workspace = true
+
+[lints]
+workspace = true
