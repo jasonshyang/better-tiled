@@ -1,0 +1,22 @@
+[package]
+name = "bt-image"
+description = "better-tiled's image files: decoding on worker threads, caching, sizes from headers, colour keys and alpha bounds"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+bt-utils.workspace = true
+glam.workspace = true
+# The formats Tiled reads through Qt; all pure Rust.
+image = { workspace = true, features = ["bmp", "gif", "ico", "jpeg", "png", "pnm", "tga", "tiff", "webp"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data.workspace = true
+
+[lints]
+workspace = true

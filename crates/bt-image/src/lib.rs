@@ -1,0 +1,20 @@
+//! The one place image files are decoded: PNG, JPEG, GIF, BMP, WebP, TGA, TIFF, PNM and ICO, the
+//! formats Tiled reads. It reads an image's size from its header without decoding it, applies a
+//! colour key, measures alpha bounds (where a sprite's feet are), and keeps decoded images in a
+//! store that decodes on worker threads, so a tileset's images never stall a frame. A map file
+//! can be the image of a tileset, a tile or an image layer; the store draws it through a
+//! [`MapImageSource`] it is given.
+
+mod decode;
+mod error;
+mod key;
+mod measure;
+mod probe;
+mod store;
+
+pub use decode::{DecodedImage, decode_bytes, decode_file, is_map_file};
+pub use error::Error;
+pub use key::{ColorKey, ImageInput, ImageKey, ImageRequest};
+pub use measure::{alpha_bounds, bottom_center};
+pub use probe::{probe_size, probe_size_of_bytes};
+pub use store::{ImagePoll, ImageStore, ImageStoreBuilder, MapImageSource, NestedImages};
