@@ -1,0 +1,28 @@
+//! Which recorded skips are allowed: continuous integration may skip only what it can never have
+//! (the purchased packs), never what it should have fetched.
+
+/// The lines of a skip log whose missing thing starts with none of `allowed`.
+pub fn disallowed_skips<'log>(log: &'log str, allowed: &[&str]) -> Vec<&'log str> {
+    log.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| !allowed.iter().any(|prefix| line.starts_with(prefix)))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_allowed_skips_pass() {
+        let log = "assets/Epic RPG World - Desert V1.6\nreference/tiled/examples\n\nassets/x.tmx\n";
+        assert_eq!(
+            disallowed_skips(log, &["assets/"]),
+            ["reference/tiled/examples"]
+        );
+        assert!(disallowed_skips(log, &["assets/", "reference/"]).is_empty());
+        assert_eq!(disallowed_skips("Godot 4\n", &["assets/"]), ["Godot 4"]);
+        assert!(disallowed_skips("", &[]).is_empty());
+    }
+}

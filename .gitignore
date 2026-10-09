@@ -1,0 +1,6 @@
+/target
+# Test corpora that are never committed: the purchased packs, and Tiled's sources
+# (scripts/fetch-reference.sh).
+/assets
+/reference
+.DS_Store

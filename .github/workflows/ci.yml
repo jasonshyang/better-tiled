@@ -1,0 +1,52 @@
+# Format, lints and tests on every platform better-tiled supports (docs/design/13-testing.md, §11).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TERM_COLOR: always
+      # The purchased packs are never on these machines: their tests skip, and say so.
+      BT_SKIP_MISSING_TEST_DATA: "1"
+      BT_SKIP_LOG: ${{ github.workspace }}/target/skips.txt
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Lints
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Fetch Tiled's examples and test data
+        shell: bash
+        run: scripts/fetch-reference.sh
+
+      - name: Tests
+        run: cargo test --workspace
+
+      # Only the packs may be skipped: a skip of reference/ means the fetch or a path is broken.
+      - name: Skips
+        run: cargo run --quiet -p bt-test-data --bin check-skips -- "${{ env.BT_SKIP_LOG }}" --allow assets/
+
+      - name: Keep what failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-${{ matrix.os }}
+          path: target/skips.txt
+          if-no-files-found: ignore

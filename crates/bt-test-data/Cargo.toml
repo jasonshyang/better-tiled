@@ -1,0 +1,12 @@
+[package]
+name = "bt-test-data"
+description = "Finds better-tiled's git-ignored test corpora and gives tests folders of their own"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
