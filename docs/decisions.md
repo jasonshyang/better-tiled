@@ -252,3 +252,34 @@ dialogs inside dispatch; repainting every frame; a new modifier vocabulary acros
 **Why:** tools as state machines get headless tests; one intent path means one order of
 effects; one stack means one answer; a blocked frame is a stall; an idle editor should cost
 nothing; Tiled users keep their habits and the hint makes the mixture discoverable.
+
+## 2026-10-09 — Terrain choices
+
+**Decided:** the solver keeps Tiled's quirks that change results (the `isComplete` check that
+never holds for corner and edge sets, the lookahead that can leave a cell invalid when a worse
+tile would have worked, no backtracking); every choice is a function of the seed and the cell;
+a fill may be given a colour to prefer; diagnostics are typed (`Needed` with a `Cause`) and the
+sentences are built from them; the autotile layouts, detection, auto-labelling, patterns and
+RPG Maker expansion live in the crate, not in the window.
+**Instead of:** a better solver (backtracking, higher tiers) that would fill what Tiled leaves
+red; Tiled's unseedable picks; Tiled's fill that ignores the chosen colour; strings for what a
+cell lacks; labelling logic inside the tileset editor's widgets.
+**Why:** a pack's terrain set must paint here as it paints in Tiled, red cells included, or its
+author's fixes will not match; a preview that equals the paint needs a seed; filling an area
+with one terrain is what people reach for; a typed need can be checked against the set; `bt`
+and the editor label tilesets alike.
+
+## 2026-10-09 — AutoMap choices
+
+**Decided:** bindings are a name map the engine takes, never a renamed, hidden or unlocked copy
+of the map; `MatchType` comes from tile properties only (the loader resolves classes); problems
+and rule-map information are typed; region runs are exact and fall back with a reason; the
+differences from Tiled listed in `08-automap.md`, §12 (seeded randomness, lattice phase,
+inherited locks, no duplicated objects, ordered new layers, warnings for unreadable options, no
+recursion or duplication on reload); the project-file records of AutoMap layers are defined in
+`bt-project` and converted here.
+**Instead of:** Tiled's behaviour in each case; a hardcoded table of the built-in tiles' ids;
+strings for warnings; full runs after every stroke; `bt-project` depending on this crate.
+**Why:** a working copy with renamed layers is where a run and its explanation drift apart;
+one source of truth for what a tile means; the editor and `bt` group and act on problems; a
+stroke must cost its window; a file format crate must not depend on an algorithm crate.
