@@ -1,0 +1,30 @@
+[package]
+name = "bt-tmx"
+description = "better-tiled's file formats: Tiled's maps, tilesets, templates, worlds, projects, stamps and rule lists, read leniently and written byte for byte as Tiled writes them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+base64.workspace = true
+bt-core.workspace = true
+bt-image.workspace = true
+bt-utils.workspace = true
+# Inflating only: compressing goes through the zlib port in `deflate`.
+flate2.workspace = true
+glam.workspace = true
+# The patterns of `.world` files.
+regex.workspace = true
+roxmltree.workspace = true
+ruzstd.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data.workspace = true
+
+[lints]
+workspace = true

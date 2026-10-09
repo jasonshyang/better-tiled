@@ -8,6 +8,9 @@ or reproduces someone else's work, with the notices their licenses ask to be kep
 |---|---|---|
 | `crates/bt-utils` (`src/raster.rs`) | Alois Zingl's "Bresenham Curve Rasterizing Algorithms" | MIT |
 | `crates/bt-core` (the grid geometry, the custom-type rules, the tileset arithmetic) | libtiled, Tiled's core library | BSD-2-Clause |
+| `crates/bt-tmx` (the readers and writers of Tiled's formats) | libtiled's `MapReader`, `MapWriter` and variant converters | BSD-2-Clause |
+| `crates/bt-tmx` (`src/deflate.rs`) | zlib's `deflate.c` and `trees.c` (an altered version) | zlib |
+| `crates/bt-tmx` (`src/json/print.rs`) | the layout of Tiled's `JsonWriter` (`plugins/json/qjsonparser/json.cpp`) | permissive, below |
 
 Tiled's editor (`src/tiled` in Tiled's repository) is licensed under the GNU GPL; no code
 derived from it is in a crate licensed under MIT or Apache-2.0. The crates that port it say so in
@@ -60,3 +63,40 @@ OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## zlib — zlib License
+
+<https://zlib.net>. `crates/bt-tmx/src/deflate.rs` is an altered version of zlib's source code
+(ported to Rust and reduced to the code paths Tiled's compression uses), not the original
+software.
+
+Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+
+Jean-loup Gailly        Mark Adler
+jloup@gzip.org          madler@alumni.caltech.edu
+
+## Tiled's JSON writer
+
+<https://github.com/mapeditor/tiled> (`src/plugins/json/qjsonparser/json.cpp`). The layout
+`crates/bt-tmx/src/json/print.rs` reproduces is that writer's.
+
+Copyright (c) 2010 Girish Ramakrishnan <girish@forwardbias.in>
+
+Use, modification and distribution is allowed without limitation,
+warranty, liability or support of any kind.

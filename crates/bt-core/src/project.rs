@@ -1,5 +1,7 @@
 //! Projects (`.tiled-project` files).
 
+use std::collections::BTreeMap;
+
 use crate::custom_types::CustomTypes;
 use crate::file_ref::FileRef;
 use crate::property::Properties;
@@ -25,6 +27,9 @@ pub struct Project {
     pub custom_types: CustomTypes,
     /// Custom properties of the project (Tiled 1.11).
     pub properties: Properties,
+    /// Keys of the project file that this version does not know, with their values as JSON
+    /// text, written back as they were.
+    pub unknown_keys: BTreeMap<String, String>,
 }
 
 impl Default for Project {
@@ -38,6 +43,7 @@ impl Default for Project {
             compatibility_version: CompatibilityVersion::Latest,
             custom_types: CustomTypes::default(),
             properties: Properties::new(),
+            unknown_keys: BTreeMap::new(),
         }
     }
 }
