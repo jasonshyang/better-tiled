@@ -46,6 +46,13 @@ impl Workers {
         Ok(())
     }
 
+    /// Delivers intents as if a job had sent them (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn inject(&mut self, intents: Vec<Intent>) {
+        self.running += 1;
+        let _ = self.sender.send(intents);
+    }
+
     /// The intents of the jobs that finished since the last call.
     pub(crate) fn take_results(&mut self) -> Vec<Intent> {
         let mut intents = Vec::new();

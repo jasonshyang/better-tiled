@@ -74,6 +74,25 @@ impl TestWindow {
         self.settle();
     }
 
+    /// Answers the file dialog the window asked for with `path`, as its worker would; the
+    /// window must have asked exactly `request`.
+    pub(crate) fn answer_file_dialog(&mut self, request: bt_editor::FileRequest, path: &Path) {
+        let asked = self.harness.state_mut().take_file_requests();
+        assert_eq!(
+            asked,
+            std::slice::from_ref(&request),
+            "the file dialogs the window asked for"
+        );
+        self.harness
+            .state_mut()
+            .inject_worker_result(vec![bt_editor::Intent::FilePicked {
+                request,
+                path: Some(path.to_path_buf()),
+            }]);
+        self.harness.run_steps(2);
+        self.settle();
+    }
+
     /// Presses a key with modifiers.
     pub(crate) fn press(&mut self, modifiers: egui::Modifiers, key: egui::Key) {
         self.harness.key_press_modifiers(modifiers, key);

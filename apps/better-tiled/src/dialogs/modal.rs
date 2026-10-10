@@ -3,8 +3,12 @@
 //! with its details, or a dialog.
 //! Enter gives the default answer; Escape cancels, when Cancel is an answer.
 
+use std::path::PathBuf;
+
 use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
 
+use super::new_map::NewMapDialog;
+use super::new_tileset::{DialogRequest, NewTilesetDialog};
 use super::palette::PaletteDialog;
 
 /// Something modal.
@@ -16,6 +20,10 @@ pub(crate) enum Modal {
     Error(Notice),
     /// The command palette.
     Palette(PaletteDialog),
+    /// New Map.
+    NewMap(NewMapDialog),
+    /// New Tileset.
+    NewTileset(NewTilesetDialog),
 }
 
 /// The open modals; the last is shown.
@@ -51,8 +59,25 @@ impl Modals {
         })
     }
 
-    /// Shows the top modal; an answer goes to `out` and closes it.
-    pub(crate) fn show(&mut self, ctx: &egui::Context, editor: &Editor, out: &mut Vec<Intent>) {
+    /// The image a dialog asked for, chosen.
+    pub(crate) fn deliver_tileset_image(&mut self, path: PathBuf) {
+        for modal in self.stack.iter_mut().rev() {
+            if let Modal::NewTileset(dialog) = modal {
+                dialog.set_image(path);
+                return;
+            }
+        }
+    }
+
+    /// Shows the top modal; an answer goes to `out` and closes it, and what a dialog needs
+    /// the window to do goes to `requests`.
+    pub(crate) fn show(
+        &mut self,
+        ctx: &egui::Context,
+        editor: &Editor,
+        out: &mut Vec<Intent>,
+        requests: &mut Vec<DialogRequest>,
+    ) {
         let Some(modal) = self.stack.last_mut() else {
             return;
         };
@@ -60,6 +85,8 @@ impl Modals {
             Modal::Decision(decision) => show_decision(ctx, decision, out),
             Modal::Error(notice) => show_error(ctx, notice),
             Modal::Palette(palette) => palette.show(ctx, editor, out),
+            Modal::NewMap(dialog) => dialog.show(ctx, out),
+            Modal::NewTileset(dialog) => dialog.show(ctx, out, requests),
         };
         if closed {
             self.stack.pop();

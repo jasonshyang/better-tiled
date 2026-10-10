@@ -13,9 +13,7 @@ use crate::notice::Notice;
 pub(crate) fn pending(id: ActionId) -> bool {
     matches!(
         id,
-        ActionId::NewMap
-            | ActionId::NewTileset
-            | ActionId::Preferences
+        ActionId::Preferences
             | ActionId::Cut
             | ActionId::Copy
             | ActionId::Paste
@@ -84,7 +82,9 @@ impl Editor {
         };
         match id {
             ActionId::NewMap => vec![Effect::Show(Dialog::NewMap)],
-            ActionId::NewTileset => vec![Effect::Show(Dialog::NewTileset)],
+            ActionId::NewTileset => {
+                on_document(self, |_, doc| vec![Effect::Show(Dialog::NewTileset(doc))])
+            }
             ActionId::Open => vec![Effect::PickFile(FileRequest::Open)],
             ActionId::Save => on_document(self, Editor::save),
             ActionId::SaveAs => on_document(self, |editor, doc| vec![editor.save_as_request(doc)]),

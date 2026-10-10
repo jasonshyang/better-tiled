@@ -232,7 +232,8 @@ action_table! {
     NewMap => ActionSpec::new(ActionId::NewMap, "new_map", "New Map…", "file create")
         .keys(&[cmd('n')]),
     /// Make a new tileset.
-    NewTileset => ActionSpec::new(ActionId::NewTileset, "new_tileset", "New Tileset…", "file create tiles image"),
+    NewTileset => ActionSpec::new(ActionId::NewTileset, "new_tileset", "New Tileset…", "file create tiles image")
+        .on(Map),
     /// Open a file.
     Open => ActionSpec::new(ActionId::Open, "open", "Open…", "file load").keys(&[cmd('o')]),
     /// Save the current document.

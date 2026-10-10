@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
-use bt_editor::{ActionId, DocumentId, Editor, Intent, Notice, Severity};
+use bt_editor::{ActionId, DocumentId, Editor, FileRequest, Intent, Notice, Severity};
 use bt_image::ImageStore;
 
 use super::menu::menu_bar;
@@ -18,8 +18,8 @@ use super::status_bar::{StatusInput, status_bar};
 use super::tabs::tab_strip;
 use crate::canvas::{Canvas, CanvasFrame, CanvasGpu};
 use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun};
-use crate::dialogs::Modals;
-use crate::files::{BackgroundWriter, WATCH_INTERVAL, Watcher, dropped_files};
+use crate::dialogs::{DialogRequest, Modals};
+use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{LayersPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
@@ -44,6 +44,8 @@ pub(crate) struct App {
     pub(super) tile_images: TileImages,
     pub(super) modals: Modals,
     pub(super) workers: Workers,
+    /// How files are asked for.
+    pub(super) file_dialogs: FileDialogs,
     pub(super) writer: BackgroundWriter,
     /// Looks at the files on disk for changes.
     watcher: Watcher,
@@ -105,7 +107,18 @@ impl App {
     /// The window without a GPU: the canvas draws no map (for the window's tests).
     #[cfg(test)]
     pub(crate) fn without_gpu(ctx: &egui::Context, startup: Startup) -> Result<App, String> {
-        App::assemble(ctx, startup)
+        let mut app = App::assemble(ctx, startup)?;
+        app.file_dialogs = FileDialogs::Recorded(Vec::new());
+        Ok(app)
+    }
+
+    /// The file dialogs asked for and not answered yet (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn take_file_requests(&mut self) -> Vec<FileRequest> {
+        match &mut self.file_dialogs {
+            FileDialogs::Recorded(requests) => std::mem::take(requests),
+            FileDialogs::System => Vec::new(),
+        }
     }
 
     /// The editor (for the window's tests).
@@ -125,6 +138,12 @@ impl App {
     pub(crate) fn poll_files_now(&mut self) {
         self.watcher.set_watched(self.editor.watched());
         self.watcher.poll_now();
+    }
+
+    /// Delivers intents as a worker would (for the window's tests: a file dialog's answer).
+    #[cfg(test)]
+    pub(crate) fn inject_worker_result(&mut self, intents: Vec<Intent>) {
+        self.workers.inject(intents);
     }
 
     /// Whether a modal is open (for the window's tests).
@@ -172,6 +191,7 @@ impl App {
             tile_images: TileImages::default(),
             modals: Modals::default(),
             workers: Workers::new(ctx.clone()),
+            file_dialogs: FileDialogs::System,
             writer,
             watcher: Watcher::new(),
             watch_listed: Instant::now(),
@@ -536,7 +556,20 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame_started = Instant::now();
         let finished = self.workers.take_results();
-        self.intents.extend(finished);
+        for intent in finished {
+            match intent {
+                // The New Tileset dialog's own question.
+                Intent::FilePicked {
+                    request: FileRequest::TilesetImage,
+                    path,
+                } => {
+                    if let Some(path) = path {
+                        self.modals.deliver_tileset_image(path);
+                    }
+                }
+                other => self.intents.push(other),
+            }
+        }
         if let Some(observed) = self.watcher.take_observations() {
             self.intents.push(Intent::Observed(observed));
         }
@@ -570,7 +603,21 @@ impl eframe::App for App {
         self.show_status_bar(ui);
         self.show_panels(ui);
         self.show_center(ui);
-        self.modals.show(&ctx, &self.editor, &mut self.intents);
+        let mut requests = Vec::new();
+        self.modals
+            .show(&ctx, &self.editor, &mut self.intents, &mut requests);
+        for request in requests {
+            match request {
+                DialogRequest::PickTilesetImage => {
+                    let asked = self
+                        .file_dialogs
+                        .ask(&mut self.workers, FileRequest::TilesetImage);
+                    if let Err(problem) = asked {
+                        self.notify(Notice::error(problem));
+                    }
+                }
+            }
+        }
         self.apply_intents(&ctx);
         self.end_frame(&ctx);
         self.sync_quit_guard();

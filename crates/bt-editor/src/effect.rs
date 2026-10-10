@@ -38,8 +38,8 @@ pub enum Effect {
 pub enum Dialog {
     /// New Map.
     NewMap,
-    /// New Tileset.
-    NewTileset,
+    /// New Tileset, adding to the map of a document.
+    NewTileset(DocumentId),
     /// The preferences.
     Preferences,
     /// The command palette.
@@ -51,6 +51,8 @@ pub enum Dialog {
 pub enum FileRequest {
     /// Files to open.
     Open,
+    /// An image for a new tileset (the window's own: the editor never sees the answer).
+    TilesetImage,
     /// Where to save a document.
     SaveAs {
         /// The document.

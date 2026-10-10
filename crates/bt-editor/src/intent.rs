@@ -8,7 +8,7 @@ use bt_core::LayerId;
 use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
-use crate::files::Loaded;
+use crate::files::{Loaded, NewMap, NewTileset};
 use crate::recovery::Orphan;
 use crate::watch::Observation;
 
@@ -19,6 +19,15 @@ pub enum Intent {
     Run(ActionId),
     /// Run an entry of the command palette.
     RunPalette(PaletteTarget),
+    /// Make a new map and open it.
+    CreateMap(NewMap),
+    /// Add a new tileset to a map.
+    CreateTileset {
+        /// The map's document.
+        doc: DocumentId,
+        /// The tileset.
+        tileset: NewTileset,
+    },
     /// Open a file (or focus its tab).
     Open(PathBuf),
     /// A load the editor asked for finished.

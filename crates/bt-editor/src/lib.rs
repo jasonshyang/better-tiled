@@ -29,7 +29,7 @@ pub use effect::{
     Choice, Decision, DecisionId, Dialog, Effect, FileRequest, Purpose, Question, ViewRequest,
 };
 pub use error::EditError;
-pub use files::{LoadJob, Loaded};
+pub use files::{LoadJob, Loaded, NewMap, NewTileset, NewTilesetSource};
 pub use history::{
     AssetChange, DEFAULT_HISTORY_LIMIT, History, HistoryEntry, MergeKey, SelectionChange,
     Transaction, Tx,

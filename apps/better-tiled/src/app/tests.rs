@@ -197,6 +197,45 @@ fn the_palette_finds_and_runs_a_command() {
 }
 
 #[test]
+fn a_map_and_a_tileset_are_made_from_scratch() {
+    let scratch = Scratch::new("window-new-map").unwrap();
+    let image = bt_test_data::fixtures::Atlas::builder()
+        .name("terrain")
+        .tile_size(32, 32)
+        .grid(4, 2)
+        .build_in(scratch.path())
+        .unwrap();
+    let image_path = scratch.join("terrain.png");
+    let _ = image;
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.press(command(), egui::Key::N);
+    assert!(window.has_modal(), "New Map asks");
+    window.press(egui::Modifiers::NONE, egui::Key::Enter);
+    assert!(!window.has_modal());
+    let doc = window.editor().current().expect("the new map is open");
+    let map = window.editor().map_of(doc).unwrap();
+    assert_eq!((map.width, map.height, map.tile_width), (30, 20, 32));
+    assert_eq!(map.layers[0].name, "Tile Layer 1");
+    assert!(window.editor().has_unsaved(), "a new map is unsaved");
+
+    window.press(command() | egui::Modifiers::SHIFT, egui::Key::P);
+    window.type_text("new tileset");
+    window.press(egui::Modifiers::NONE, egui::Key::Enter);
+    assert!(window.has_modal(), "New Tileset asks");
+    window.click("Browse…");
+    window.answer_file_dialog(bt_editor::FileRequest::TilesetImage, &image_path);
+    window.click("OK");
+    assert!(!window.has_modal());
+    let map = window.editor().map_of(doc).unwrap();
+    assert_eq!(map.tilesets.len(), 1);
+    assert_eq!(
+        map.tilesets[0].tileset.name, "terrain",
+        "named after the image"
+    );
+    assert_eq!(map.tilesets[0].tileset.tile_count(), 8);
+}
+
+#[test]
 fn closing_with_unsaved_work_asks_first() {
     let scratch = Scratch::new("window-close-unsaved").unwrap();
     let Some(path) = desert(&scratch) else {

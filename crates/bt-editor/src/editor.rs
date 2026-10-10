@@ -136,6 +136,8 @@ impl Editor {
         match intent {
             Intent::Run(id) => self.run(id),
             Intent::RunPalette(target) => self.run_palette(target),
+            Intent::CreateMap(new) => self.create_map(&new),
+            Intent::CreateTileset { doc, tileset } => self.create_tileset(doc, &tileset),
             Intent::Open(path) => self.open(&path),
             Intent::Loaded(loaded) => {
                 let recovered = loaded.recovered_from.is_some();

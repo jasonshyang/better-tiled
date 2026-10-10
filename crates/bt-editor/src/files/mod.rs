@@ -2,6 +2,7 @@
 
 mod close;
 mod load;
+mod new;
 mod open;
 mod save;
 
@@ -20,6 +21,7 @@ pub use load::{LoadJob, Loaded};
 pub(crate) use load::{
     LoadKind, LoadPurpose, LoadSource, LoadedContent, LoadedFiles, ProjectChoice,
 };
+pub use new::{NewMap, NewTileset, NewTilesetSource};
 
 /// What the editor knows about files beyond the assets: the loaders the maps were read with
 /// (holding their templates, for writing), the open project, questions awaiting answers, and

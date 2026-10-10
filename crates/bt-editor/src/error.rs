@@ -47,6 +47,9 @@ pub enum EditError {
         /// What it was.
         label: String,
     },
+    /// The operation could not be carried out on the map.
+    #[error(transparent)]
+    Operation(#[from] bt_edit::EditError),
     /// A later change to an asset was made where it cannot be named (its history was dropped).
     #[error("{asset} changed since; undo its later changes first")]
     ChangedSince {

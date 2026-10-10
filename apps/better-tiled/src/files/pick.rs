@@ -8,8 +8,42 @@ use crate::workers::Workers;
 /// The map formats the dialogs offer.
 const MAP_EXTENSIONS: [&str; 3] = ["tmx", "tmj", "json"];
 
+/// The image formats the dialogs offer (what `bt-image` decodes).
+const IMAGE_EXTENSIONS: [&str; 10] = [
+    "png", "jpg", "jpeg", "gif", "bmp", "webp", "tga", "tif", "tiff", "ico",
+];
+
+/// How the window asks for files: with the system's dialogs, or (in the window's tests, which
+/// have no system to show them) by recording what it asked, for the test to answer.
+#[derive(Debug)]
+pub(crate) enum FileDialogs {
+    /// The system's dialogs, on workers.
+    System,
+    /// The requests made, unanswered.
+    #[cfg(test)]
+    Recorded(Vec<FileRequest>),
+}
+
+impl FileDialogs {
+    /// Asks for a file.
+    pub(crate) fn ask(
+        &mut self,
+        workers: &mut Workers,
+        request: FileRequest,
+    ) -> Result<(), String> {
+        match self {
+            FileDialogs::System => pick_file(workers, request),
+            #[cfg(test)]
+            FileDialogs::Recorded(requests) => {
+                requests.push(request);
+                Ok(())
+            }
+        }
+    }
+}
+
 /// Asks for a file on a worker.
-pub(crate) fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
+fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
     workers.spawn("file-dialog", move || match &request {
         FileRequest::Open => {
             let dialog = rfd::AsyncFileDialog::new()
@@ -30,6 +64,17 @@ pub(crate) fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(
                     path: Some(file.path().to_path_buf()),
                 })
                 .collect()
+        }
+        FileRequest::TilesetImage => {
+            let dialog = rfd::AsyncFileDialog::new()
+                .set_title("Tileset Image")
+                .add_filter("Images", &IMAGE_EXTENSIONS)
+                .add_filter("All files", &["*"]);
+            let picked = pollster::block_on(dialog.pick_file());
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
         }
         FileRequest::SaveAs { suggested, .. } => {
             let mut dialog = rfd::AsyncFileDialog::new()

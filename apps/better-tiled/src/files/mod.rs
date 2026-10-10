@@ -7,6 +7,6 @@ mod watcher;
 mod writer;
 
 pub(crate) use drop::dropped_files;
-pub(crate) use pick::pick_file;
+pub(crate) use pick::FileDialogs;
 pub(crate) use watcher::{WATCH_INTERVAL, Watcher};
 pub(crate) use writer::BackgroundWriter;
