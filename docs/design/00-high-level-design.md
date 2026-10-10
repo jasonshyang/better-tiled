@@ -321,8 +321,8 @@ window agree.
   rebuilt for an animated tile.
 - Tile layers are cached per 16×16 chunk, keyed by the chunk's `Arc`, which the cache retains:
   a chunk's instances are rebuilt only when the chunk changes, and a frame uploads only the
-  visible ones. Far zoomed out, a chunk is drawn as one picture of itself, so the instance count
-  stays bounded at any zoom.
+  visible ones. Far zoomed out, the tile layers are drawn from pictures of world-aligned squares,
+  each holding a run of layers, so the work stays bounded by the screen at any zoom.
 - Pages, sprites and chunk caches are evicted under a byte budget; the renderer is created once
   and never recreated to forget a tileset.
 - The fragment shader samples with clamped texel loads ("sharp bilinear" magnified, box
@@ -475,7 +475,7 @@ apps/better-tiled/src/
 │                  properties, Godot setup, export; each driven by an effect from bt-editor
 ├── files/         the window side of open, save, reload and close; dialogs; the watcher's timer
 ├── live/          the socket server for bt and its job queue
-└── platform/      macOS quit guard, reveal in Finder, open with the system editor
+└── platform/      the macOS quit key, reveal in Finder, open with the system editor
 ```
 
 Modals are one stack of one enum, so "is a modal open" is one question. Dialogs run from
@@ -786,6 +786,12 @@ algorithms (the oracle before the port).
 
 M0 was built on 2026-10-10; `01-data-model.md`, `02-file-formats.md` and the M0 parts of this
 doc and `13-testing.md` are as built.
+
+M1 was built on 2026-10-10; `03-rendering.md` and the M1 parts of `05-editor-core.md`,
+`06-application.md` (their §1.1) and `13-testing.md` are as built. Building it changed two
+designs, recorded in `decisions.md`: far zoom draws squares of layer runs instead of a picture
+per chunk, and the macOS quit key is routed to the window instead of adding a delegate method
+with `unsafe` code, which is left for design review.
 
 ## 18. Glossary
 

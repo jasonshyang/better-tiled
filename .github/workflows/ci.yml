@@ -18,6 +18,8 @@ jobs:
       # The purchased packs are never on these machines: their tests skip, and say so.
       BT_SKIP_MISSING_TEST_DATA: "1"
       BT_SKIP_LOG: ${{ github.workspace }}/target/skips.txt
+      # Golden pictures that differ leave the actual picture and the difference here.
+      BT_GOLDEN_DIFF_DIR: ${{ github.workspace }}/target/golden-diffs
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +38,18 @@ jobs:
         shell: bash
         run: scripts/fetch-reference.sh
 
+      # The renderer's tests draw on the platform's software adapter (lavapipe on Linux, WARP
+      # on Windows) and on the runner's Metal device on macOS.
+      - name: Software GPU
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update
+            sudo apt-get install -y mesa-vulkan-drivers
+          fi
+          echo "BT_SOFTWARE_GPU=1" >> "$GITHUB_ENV"
+
       - name: Tests
         run: cargo test --workspace
 
@@ -48,5 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: failure-${{ matrix.os }}
-          path: target/skips.txt
+          path: |
+            target/skips.txt
+            target/golden-diffs
           if-no-files-found: ignore

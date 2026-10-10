@@ -1,11 +1,11 @@
 # Editor core — `bt-editor`
 
-*2026-10-09. The design of the crate that is the editor without a window: what is open, how it
-changes, how it relates to the files on disk, what the user can do to it, and what the editor
-remembers between runs. The high-level design (`00-high-level-design.md`, §8) states the shape:
-an asset store, documents as views on assets, transactions that may span assets, one action
-table, intents in and effects out, no egui type anywhere. This doc says what each part holds and
-the rules it follows.*
+*2026-10-09; the M1 part as built at the end of M1, 2026-10-10 (§1.1). The design of the crate
+that is the editor without a window: what is open, how it changes, how it relates to the files
+on disk, what the user can do to it, and what the editor remembers between runs. The high-level
+design (`00-high-level-design.md`, §8) states the shape: an asset store, documents as views on
+assets, transactions that may span assets, one action table, intents in and effects out, no egui
+type anywhere. This doc says what each part holds and the rules it follows.*
 
 ## 1. Scope
 
@@ -21,6 +21,35 @@ Dependencies: `bt-core`, `bt-tmx`, `bt-edit`, `bt-automap`, `bt-project`, `bt-ut
 and `toml` for what is remembered. Not `bt-render`, `bt-terrain` (the terrain tool's choice is
 three ids), `bt-script` (the window runs scripts and hands the result in) or `bt-godot` (the
 export is an effect the window carries out).
+
+### 1.1 As built at M1
+
+M1 built the part of the editor that opens, shows, saves and remembers maps; the rest of this
+doc is the design the later milestones build. What exists, module by module:
+
+| Module | What it holds |
+|---|---|
+| `store/` | `AssetStore` of `Asset`s (`AssetId`, kind Map, Tileset or Project, canonical path, `Root`, version, `OnDisk { version, content_hash }`, load warnings); `unsaved()`, `by_path`, `tilesets_of`, `refresh_tilesets` (§3) |
+| `document/` | `Documents` (tab order, current), `Document` (asset, `Selection { current_layer, layers }`, camera `ViewState`, `History`, `ViewToggles { grid, highlight_current_layer }`) |
+| `history/` | `Transaction`, `Tx` (copy-on-write roots), `transact`, `transact_merging`, `break_merge`, gestures (`begin_gesture`, `gesture_apply`, `end_gesture`, `cancel_gesture`), `undo`, `redo`, `travel_to`; the later-changes-win rule (`EditError::Blocked`, `ChangedSince`); histories bounded by count (500 by default), not yet by bytes |
+| `actions/` | the action table (16 commands: Open, Save, Save As, Save All, Close, Quit, Undo, Redo, Zoom In, Zoom Out, Zoom Normal, Fit in View, Show Grid, Highlight Current Layer, Next and Previous Document), `Chord`, `Key`, `Modifiers`, `Keymap` with overrides from the settings |
+| `files/` | `LoadJob` (run on a worker: the map, its external tilesets and the nearest project above it, each hashed) and `Loaded`; open, save (atomic, hashed), Save As (rebasing references as a transaction), close and quit with their questions |
+| `settings/` | `Settings` (§13 as built), migration by `version`, `data_folder()` |
+| `recovery.rs`, `session.rs` | §10 as built |
+| `editor.rs`, `intent.rs`, `effect.rs`, `notice.rs`, `error.rs` | `Editor` with its builder, queries and `apply`; `Intent`, `Effect`, `Decision`, `Notice`, `EditError` |
+
+The intents built: `Run`, `Open`, `Loaded`, `FilePicked`, `Decided`, `SelectDocument`,
+`CloseDocument`, `SelectLayer`, `SetLayerVisible`, `SetLayerLocked`, `RenameLayer`, `SetCamera`,
+`Recoverable`, `Tick`. The effects: `Load(LoadJob)`, `PickFile(Open | SaveAs)`, `Ask(Decision)`,
+`Notify(Notice)`, `View(ZoomIn | ZoomOut | ZoomNormal | Fit)`, `WriteSnapshot`,
+`DeleteSnapshot`, `Quit`. Questions are `Unsaved { names, purpose: Close | Quit }` and
+`Recover { names }`, answered `Save`, `DontSave`, `Cancel`, `Recover` or `Discard`. Layer
+visibility, lock and name are transactions, so they undo.
+
+`Editor::builder().settings(..).recovery_folder(..).pid(..).mac(..).home(..).build()` fails
+only when the settings' key bindings name an unknown command or key. The crate's dependencies
+at M1 are `bt-core`, `bt-tmx`, `bt-utils`, `glam`, `log`, `serde`, `serde_json`, `thiserror`
+and `toml`.
 
 ## 2. The editor
 
@@ -331,15 +360,24 @@ be lost. The window shows one conflict at a time.
   seconds after their last change, or every thirty seconds while they keep changing. A
   snapshot is what Save would write (the result map, the tileset text, plus the map's
   `better-tiled.json` entry so the painted state of AutoMap layers survives) with a `.meta.json`
-  naming the original path and time, in `<data>/recovery/<pid>-<asset>.<ext>`. At start the
-  window hands the folder's contents in; `RecoveryPlan::orphans` keeps those whose process is
-  gone, and the editor offers to reopen them as dirty assets without `on_disk`. A clean or
-  closed asset's snapshot is deleted; a quit nobody answered keeps them.
+  naming the original path and the run, in `<data>/recovery/<pid>-<asset>.snapshot`. Each run
+  touches `<pid>.alive` there every ten seconds and removes it when it ends; a run counts as
+  alive for a minute after. At start the window hands the folder's contents in; `orphans` keeps
+  the snapshots of other runs without a live heartbeat, and the editor offers to reopen them as
+  dirty assets without `on_disk` (beside the file when the file is open too). Recovered work is
+  the document shown, whichever of it and the session's files loads last. A clean or closed
+  asset's snapshot is deleted; a quit nobody answered keeps them, and
+  `snapshots_for_unanswered_exit` gives the snapshots its latest changes still need, for the
+  window to write on its way out. At M1 maps are snapshotted; tilesets and AutoMap entries come
+  with the milestones that edit them.
 - **Session.** `Session` holds the open project, the open files with their camera and current
   layer and which is current, the view switches, the panel layout, the per-file view states
   of the last hundred files, the maps open in each project, the loaded worlds and the preferred
   save format. The window writes it (debounced, atomically) whenever it changes and restores it
-  at start when the setting is on and no files were given on the command line.
+  at start when the setting is on and no files were given on the command line. At M1 it holds
+  the open files and the current one, the twenty recent files, the camera (centre, and zoom in
+  screen points per world pixel, so it means the same on every display) and current layer of
+  the last hundred files, and the panel layout (kept, not yet used).
 
 ## 11. Locks
 
@@ -386,6 +424,12 @@ Typed, `serde`, defaults for every field, a `version` key with migration functio
   tile objects, select enclosed;
 - **theme**: base colour, selection colour, font size, custom font;
 - **keymap**: the overrides.
+
+At M1 the settings are `general` (restore the session, safe writing, recovery, history length),
+`interface` (grid colour, major grid, fade colour, object line width), `behaviour` (wheel
+zooms), `theme` (dark, selection colour, font size) and `keymap`, at version 1; every table
+refuses a key it does not know, so a misspelt setting stops the start with the file and the
+reason.
 
 Colours are plain RGBA. The data folder is `~/Library/Application Support/better-tiled` on
 macOS, `%APPDATA%\better-tiled` on Windows, `$XDG_DATA_HOME/better-tiled` else; it holds

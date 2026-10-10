@@ -1,12 +1,12 @@
 # Testing
 
-*2026-10-09. The rules every crate's tests follow and the infrastructure they share: the
-corpora and how they are found, the fixtures, the oracle and golden-file policies, randomised
-tests, the editor harness, external programs, performance checks, the gates no test can
-automate, and continuous integration. Each design doc's own tests section lists what its crate
-pins; this doc says how those tests are built and run. The high-level design
-(`00-high-level-design.md`, §14) states the levels and the principle: Tiled has almost no tests,
-so better-tiled's are its correctness argument.*
+*2026-10-09; what M0 and M1 built is as built at the end of M1, 2026-10-10. The rules every
+crate's tests follow and the infrastructure they share: the corpora and how they are found, the
+fixtures, the oracle and golden-file policies, randomised tests, the editor harness, external
+programs, performance checks, the gates no test can automate, and continuous integration. Each
+design doc's own tests section lists what its crate pins; this doc says how those tests are
+built and run. The high-level design (`00-high-level-design.md`, §14) states the levels and the
+principle: Tiled has almost no tests, so better-tiled's are its correctness argument.*
 
 ## 1. Principles
 
@@ -66,8 +66,8 @@ fails the test when it is missing unless the skip variable is set, in which case
 "skipping: … is missing" and returns `None` for the test to return early. `missing(what, hint)`
 does the same for anything else a test needs (a GPU adapter, Godot). Every skip is also
 appended to the file `BT_SKIP_LOG` names, which CI checks (§11). The crate depends on nothing
-of ours; the shared fixtures (§4) join it with M1, the first milestone whose tests need them,
-and until then each crate builds its inputs inline.
+of ours without the `fixtures` feature; the shared fixtures (§4) are behind it, so only the
+dev-dependencies that ask for them build `bt-core` into the test crate.
 
 ## 4. Fixtures
 
@@ -80,10 +80,15 @@ and until then each crate builds its inputs inline.
 - **Committed only when small and ours:** the dialect fixtures of `02-file-formats.md`, §16,
   one per legacy row; the golden images and snapshot texts; the fuzz corpora. Nothing of
   Tiled's or of a pack's is committed.
-- **Shared builders**: `Scratch` (a folder per test) is in `bt-test-data`. With M1,
-  `bt-test-data::fixtures` adds `grid` (ASCII grids to tile layers and rule maps), `atlas`
-  (drawn tilesets with Wang sets, classes and sprites) and `map` (a map with those tilesets and
-  named layers). Each crate's `tests/common` adds what only it needs.
+- **Shared builders**: `Scratch` (a folder per test) is in `bt-test-data`;
+  `Scratch::mirror(from, name)` mirrors a folder into it, copying Tiled's files and hard-linking
+  the rest, so a test can save a pack's map without ever writing the pack. With the `fixtures`
+  feature (M1), `bt-test-data::fixtures` adds `grid` (ASCII grids to tile layers: `.` empty, a
+  tile id with an optional `@slot` and the flips `h`, `v`, `d`, `x`), `atlas` (tilesets drawn
+  pixel by pixel, each tile one colour with a marker in its corner, with offsets, render sizes,
+  fill modes and animations) and `map` (`MapBuilder`: a map of any orientation with those
+  tilesets and tile, object and image layers). Rule maps, Wang sets and classes join them with
+  the milestones that need them. Each crate's `tests/common` adds what only it needs.
 
 ## 5. Oracles and goldens
 
@@ -159,6 +164,14 @@ through `BT_LIVE_DIR` and run `bt`'s command table in-process on a thread. A pic
 compares `--screenshot` of a known map with a golden within a tolerance; the editor's feel is
 checked in a window (§10.2).
 
+As built at M1, `TestWindow` (`apps/better-tiled/src/test_window.rs`) runs the app without a
+GPU in the harness, with a data folder of its own; it drops files on the window, presses keys,
+clicks labelled widgets, clicks the close button and ends the run as eframe does, and it runs
+frames until the workers are done and the layout has stopped moving (a new dialog measures
+itself a frame before it is placed, so a click right after it opens would miss). The
+`--screenshot` picture test waits for a window that can present; the development machine runs
+it by hand for now.
+
 ## 8. External programs
 
 Godot is found through `GODOT`, then the macOS application, then the path, and the version
@@ -176,6 +189,9 @@ runs Tiled.
 | a full and a region AutoMap run on the pack's sample scene | bounds asserted per run | `08-automap.md`, §13 |
 | an export on save of the pack's sample scene, checks included | 100 ms | `12-godot-export.md`, §15 |
 | the workspace test suite | 2 minutes | §1 |
+
+`scripts/budget-map.py` writes the budget map (1000×1000 cells in ten layers from Tiled's desert
+tileset) to `target/budget/budget.tmx` for `better-tiled --bench`.
 
 Timing tests measure in every build and assert only when `debug_assertions` is off, so a debug
 run reports and a release run (`cargo test --release`, or CI's test profile) enforces. The test
@@ -217,12 +233,13 @@ build cached:
    milestone of the Godot export;
 4. `cargo test --workspace` in the test profile with `BT_SKIP_MISSING_TEST_DATA=1` and
    `BT_SKIP_LOG` set. From M1, the renderer runs on the software adapter where the platform has
-   one (lavapipe on Linux, WARP on Windows) and on the runner's Metal device on macOS;
+   one (lavapipe on Linux, installed as `mesa-vulkan-drivers`; WARP on Windows; both chosen by
+   `BT_SOFTWARE_GPU=1`) and on the runner's Metal device on macOS;
 5. `check-skips` (a program of `bt-test-data`) reads the skip log and fails the job if a skip
    names something other than `assets/` (or Godot, off Linux): a skip of `reference/` means the
    fetch or a path is broken, not that the data is private;
 6. on failure, the skip log is uploaded as an artifact, and from M1 the golden difference
-   folder too.
+   folder too (`BT_GOLDEN_DIFF_DIR` is `target/golden-diffs`).
 
 A weekly workflow (`.github/workflows/fuzz.yml`) runs each fuzz target for ten minutes and
 keeps what failed; the long suites in release mode join it when they exist. The purchased

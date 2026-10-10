@@ -433,3 +433,72 @@ JSON, with five files listed that Tiled itself would rewrite.
 **Instead of:** holding only XML files to byte identity.
 **Why:** Tiled's JSON writer is as deterministic as its XML writer, and a JSON map saved
 unchanged must not show up as a change in version control.
+
+## 2026-10-10 — Far zoom draws squares of layer runs
+
+**Decided:** far out, a run of tile layers (normal blending, one parallax factor, nothing drawn
+between them) is drawn from pictures of world-aligned squares, 256 texels a side, each holding
+every layer of the run and clipped to its square; a square is kept while its run's chunks,
+attributes and tilesets are the ones it was drawn from; squares are drawn until 100,000
+instances a frame have gone into them; a view of more than 100,000 cells goes far below 16
+device pixels a cell (else below 8).
+**Instead of:** a picture per chunk of each layer (`03-rendering.md` as first designed).
+**Why:** on the budget map at a Retina view, pictures per chunk and layer need a screen of
+texture per layer (about 210 MB at 1/16 for ten layers, against 128 MB) and a walk over every
+chunk picture each frame (39,000 at 1/32): 11 to 12 ms a frame. Squares are bounded by the
+screen, not the map: the median far out is under 1 ms and the 95th percentile 6.9 ms at worst.
+Clipping each square to itself, with the parts of oversized tiles that reach into it, keeps
+Tiled's stacking across square edges, which pictures of whole chunk stacks would not.
+
+## 2026-10-10 — Quitting asks without unsafe code
+
+**Decided:** on macOS the app menu's Quit item gives its ⌘Q key equivalent to the window, so ⌘Q
+runs the Quit command and asks about unsaved work as the close button does; a quit from the app
+menu, the Dock or a logout ends the run without asking, and the window writes the snapshots the
+latest changes need and keeps them for the next start.
+**Instead of:** adding `applicationShouldTerminate:` to the application delegate at runtime
+through `objc2` (`06-application.md`, §12 as first designed).
+**Why:** that needs `unsafe`, which the workspace forbids and which goes to design review first;
+the key and the close button are the usual ways to quit, and recovery keeps the rest. The
+delegate method is the one question left for that review.
+
+## 2026-10-10 — The saved zoom is in screen points
+
+**Decided:** a document's camera keeps its zoom in screen points per world pixel (1 is 100 %).
+**Instead of:** device pixels per world pixel.
+**Why:** a session restored on another display, or a window moved to one, shows the map at the
+same size it had; device pixels are the renderer's unit, worked out each frame.
+
+## 2026-10-10 — Recovered work is the document shown
+
+**Decided:** while a restored session's files load, a document opened from recovered work stays
+the current one, whichever loads last.
+**Instead of:** the session's current file becoming current again when it finishes loading.
+**Why:** the user just chose to recover that work; the session's copy of the same file opens
+beside it, unchanged.
+
+## 2026-10-10 — Menus are the window's arrangement of the action table
+
+**Decided:** which command goes in which menu, the separators and Open Recent are declared in
+the window; `bt-editor` declares the commands, their contexts and keys, and answers whether each
+is enabled and checked.
+**Instead of:** a menu table in `bt-editor`.
+**Why:** where a command sits is presentation, and the editor core holds none; `bt` has no menus
+and needs no menu table.
+
+## 2026-10-10 — Checks leave the user's state alone
+
+**Decided:** `--screenshot` and `--bench` open only the files given, neither restore nor write
+the session, and do not offer recovery; `--screenshot` waits for loads, images and far squares
+to settle and fails with the reason after 30 s.
+**Instead of:** starting as a normal run does.
+**Why:** a scripted run must not reopen yesterday's files over its own, stop at a question, or
+change what the next real start restores.
+
+## 2026-10-10 — Pack maps are saved in mirrors
+
+**Decided:** a test that writes a pack's map works on `Scratch::mirror` of the pack: Tiled's
+files copied, images hard-linked.
+**Instead of:** saving the pack's map where it is, or copying the whole pack.
+**Why:** the purchased files must never be written; hard links make a mirror of a large pack
+instant, and the editor writes only Tiled's files.

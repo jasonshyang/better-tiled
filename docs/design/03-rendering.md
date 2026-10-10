@@ -1,10 +1,11 @@
 # Rendering — `bt-render`
 
-*2026-10-09. The design of the crate that draws a map: for the editor's canvas, for the headless
-pictures (`bt render`, Export as Image, the minimap, the tests) and for every orientation Tiled
-has. The high-level design (`00-high-level-design.md`, §6) states the goal: one drawing path,
-Tiled's draw order and placement, crisp pixel art at any zoom, one frame at 120 Hz on a large
-map at any zoom. Tiled's own sources are cited as `reference/tiled/src/...`.*
+*2026-10-09; as built at the end of M1, 2026-10-10. The design of the crate that draws a map:
+for the editor's canvas, for the headless pictures (`bt render`, Export as Image, the minimap,
+the tests) and for every orientation Tiled has. The high-level design
+(`00-high-level-design.md`, §6) states the goal: one drawing path, Tiled's draw order and
+placement, crisp pixel art at any zoom, one frame at 120 Hz on a large map at any zoom. Tiled's
+own sources are cited as `reference/tiled/src/...`.*
 
 ## 1. Scope
 
@@ -18,7 +19,9 @@ It does not decode images (`bt-image` does), decide what is shown (the caller fi
 state (every cache is inside the renderer, and the renderer is created once).
 
 Dependencies: `bt-core` (the model and `MapGeometry`), `bt-image` (decoded images and the
-"map used as an image" hook), `wgpu`, `bytemuck`, `fontdue` for text glyphs, `log`.
+"map used as an image" hook), `bt-utils`, `wgpu` (the version `egui-wgpu` uses), `bytemuck`,
+`fontdue` for text glyphs and `epaint_default_fonts` for the font (egui's own, so text on the
+canvas matches the panels), `glam`, `pollster` (the headless device), `thiserror`, `log`.
 
 ## 2. What must match Tiled
 
@@ -51,18 +54,17 @@ documented sign where Tiled 1.11 flipped it.
 ## 3. Inputs
 
 ```rust
-FrameInput {
-    map: Arc<Map>,                      // the map to draw (the rules' result when AutoMap layers are on)
-    camera: Camera { origin: DVec2, zoom: f64 },   // world pixel at the top-left; device pixels per world pixel
-    viewport_px: UVec2,
-    time_ms: u64,                       // for animations
-    layers: LayerVisibility,            // the editor's view toggles: highlight (fade below, dim above), hidden-for-view
-    previews: Arc<[PreviewTile]>,       // tiles drawn above `preview_layer` with an alpha
-    preview_layer: Option<LayerId>,
-    vectors: Arc<[VectorItem]>,         // §6: outlines, selection, grid, marks, text, each above a layer or above all
-    parallax: bool,
-    background: Option<Color>,          // the map background under the layers (blend modes blend with it)
-}
+FrameInput::new(map: Arc<Map>, camera: Camera, viewport_px: UVec2)   // the map (the rules' result when AutoMap layers are on)
+    .time_ms(u64)                       // for animations
+    .layers(LayerVisibility)            // the editor's view switches: highlight(layers, fade) (fade below, dim above), hide(layers)
+    .previews(layer, Arc<[PreviewTile]>)  // tiles drawn above `layer` with an alpha
+    .vectors(Arc<[VectorItem]>)         // §6: outlines, selection, grid, marks, text
+    .objects(ObjectStyle)               // outline width in device pixels, class colours, whether shapes are drawn
+    .parallax(bool)
+    .background(Option<Color>)          // under the layers (blend modes blend with it); none leaves the target as it is
+
+Camera { origin: DVec2, zoom: f64 }     // world pixel at the top-left; device pixels per world pixel
+    .snapped()                          // the origin on whole device pixels, so texel edges land where overlays measure them
 ```
 
 A `View` is one `FrameInput` drawn into one rectangle; a frame may hold several views (a map
@@ -83,7 +85,8 @@ register ─► pack ─► animate ─► draw list ─► upload ─► encode
    shelf packer with a two-texel gutter; an image larger than a page is split across pages by
    tile rows, so nothing is left out. Pages carry one mip level below the full one for
    minification (§5). Pages, sprites and chunk caches are evicted least-recently-used under a
-   byte budget; the renderer is never recreated to forget something.
+   byte budget (512 MiB by default: half for pages, a quarter each for impostors and chunk
+   caches); the renderer is never recreated to forget something.
 3. **Animate.** A remap table maps a sprite index to the sprite of its current frame; the CPU
    updates the entries of animated tiles and reports when the next frame is due, so the window
    repaints only then. Instances never change for an animation.
@@ -124,13 +127,34 @@ offset, and walks either that range or the layer's chunk list, whichever is smal
 ### 5.3 Far zoom: impostors
 
 Zoomed far out, a 1000×1000-cell map exposes a million cells per layer, and no instance count
-stays inside the budget. Below a threshold zoom each visible chunk of a tile layer is drawn as
-**one** instance, an impostor: a picture of the chunk at a few pixels per cell that the renderer
-itself draws into an impostor page from the chunk's instances when the chunk changes, and evicts
-under the budget. The threshold is where the impostor's resolution meets the screen's (an
-impostor of `k` pixels per cell serves zooms up to `k / tile size`), so the picture is never
-blurrier than a direct draw would be. The minimap is a view at impostor zoom. The constant `k`
-is tuned so the far-out view of the budget map stays inside the budget.
+stays inside the budget. Below 8 device pixels a cell, and below 16 when a view shows more than
+100,000 cells summed over its tile layers, tile layers are drawn from **impostors**:
+
+- A **run** is a stretch of tile layers with nothing drawn between them that composite plainly
+  (normal blending, one parallax factor): anything else drawn (an object or image layer, a
+  preview, a vector item on a layer, the highlight fade, a blend group) ends the run first, so
+  the order of everything stays Tiled's.
+- An impostor is a picture of a **world-aligned square** of a run, 256 texels a side, holding
+  every layer of the run with its offset, opacity and tint, drawn from the chunks' own instances
+  in Tiled's order and clipped to the square. Squares meet exactly, and an oversized tile stacks
+  across a square's edge as Tiled stacks it: the square above holds the part that reaches into
+  it, under that square's upper layers.
+- The resolution is the power of two (device pixels per world pixel) that meets the screen's, so
+  an impostor is never blurrier than a direct draw would be, unless the impostor pages cannot
+  hold the squares in view, when it steps down. The squares a view needs are bounded by the
+  screen, not the map.
+- A square is kept while its run's chunks, attributes and tilesets are the ones it was drawn
+  from; the run's chunks are held, so an address is never reused while it is compared. An edit
+  in a run redraws its squares in view.
+- Squares are drawn, nearest the view's centre first, until 100,000 instances a frame have gone
+  into them (the last square drawn may pass that). A square not drawn yet shows its last
+  picture, or nothing, and the frame reports it pending (`RenderStats::pending_impostors`), so
+  the window asks for another frame and a headless render prepares again until none is left.
+- Impostors are drawn at the time they were drawn: animations stand still far out.
+
+Squares live in fixed slots of 2048×2048 impostor pages (an array texture the sprite shader
+samples through impostor sprites); a slot is cleared by a sprite pipeline that replaces rather
+than blends. The minimap is a view at impostor zoom.
 
 ### 5.4 Sampling
 
@@ -147,13 +171,16 @@ Everything the editor draws that is not an image goes through the renderer too, 
 and the headless pictures are the same picture: the grid (fading out as the zoom drops, as
 Tiled's does), object outlines and fills by class colour, object names, text objects, point
 markers, selection outlines (marching ants with a dash phase), brush and tool previews, `bt`
-marks, and the map border. A `VectorItem` is a polyline, a polygon, an ellipse, a rectangle or
-a text, with a colour, a fill, a stroke width that is **cosmetic** (device pixels, independent
-of zoom) unless asked otherwise, an optional dash pattern, and the layer it sits above (or
-"above everything"). Strokes are expanded to quads on the CPU; polygons are triangulated; text is
-laid out and rasterised with `fontdue` from a font bundled in the binary into a glyph page and
-drawn as sprites. The vector pass draws after the sprite draws of the layer it belongs to, so an
-object's outline sits on its layer and the grid sits on top.
+marks, and the map border. A `VectorItem` (`polyline`, `polygon`, `rect`, `ellipse`, `text`) has
+a colour, a fill, a stroke width that is **cosmetic** (`stroke`, device pixels, independent of
+zoom) or in world pixels (`world_stroke`), an optional dash pattern, an offset in device pixels,
+and where it goes: above everything (the default), `above_layer(id)`, or `on_layer(id)`, drawn
+with that layer's offset and opacity right after its content. Strokes are expanded to quads on
+the CPU; polygons are triangulated; text (`TextItem`, which also lays out Tiled's text objects)
+is laid out and rasterised with `fontdue` from egui's own font, bundled in the binary, into the
+pages and drawn as sprites. The vector pass draws after the sprite draws of the layer it belongs
+to, so an object's outline sits on its layer and the grid sits on top. `grid_vectors` makes the
+grid of a `MapGeometry` as vector items with Tiled's fading.
 
 ## 7. Blend modes
 
@@ -170,31 +197,39 @@ silently drawn without blending.
 ```rust
 let device = HeadlessDevice::acquire()?;                 // one per process, shared by every caller
 let image = Render::of(map).scale(1.0).time_ms(0).background(color).vectors(items).run(&device)?;
+let image = Render::of(map).view(origin, size).run_with(device, queue, &mut renderer, &mut images)?;
 ```
 
 A headless render covers the map's bounding rectangle (`Map::bounding_rect`, as Tiled's Export
 as Image), on every orientation and for infinite maps, with the image's top-left at that
 rectangle's top-left and `render_origin` saying where a pixel is in the world. An image larger
 than the device's texture limit is rendered in bands and stitched, never refused. The result is
-straight-alpha RGBA8. Tests, `bt render`, Export as Image, the minimap thumbnails of world
-neighbours and the "map used as an image" hook all go through this one function; the hook is a
-`MapImageSource` the application builds from the headless device and gives to `bt-image`.
+straight-alpha RGBA8. Before reading back, a band waits for every image it asked for and
+prepares again until no impostor square is pending. Tests, `bt render`, Export as Image, the
+minimap thumbnails of world neighbours and the "map used as an image" hook all go through this
+one function; the hook is a `MapImageSource` the application builds from the headless device
+and gives to `bt-image`, and a map drawn as an image draws its own images through a
+`NestedSupply` (decoded on the spot) instead of the store's workers.
 
 ## 9. Interfaces
 
 | Function | What |
 |---|---|
-| `MapRenderer::new(device, queue, format, budget)` | once per window or process |
-| `prepare(views: &[FrameInput])` | §4 steps 1–5; returns `RenderStats` |
+| `MapRenderer::builder(device, queue, format).budget(bytes).page_side(texels).build()` | once per window or process |
+| `prepare(images: &mut dyn ImageSupply, views: &[FrameInput])` | §4 steps 1–5, the impostor squares drawn; returns `RenderStats` |
 | `encode(encoder)` | the offscreen compositing of the prepared frame |
 | `paint(pass, view_index)` | the sprite and vector draws of one view into the caller's pass |
-| `stats()` | instances, draws, pages, pending images, whether anything animates and when its next frame is due, prepare time |
-| `trim(budget)` | eviction below a byte budget, also called automatically |
+| `stats()` | instances, vector vertices, draws, pages, impostors kept and squares pending, pending images, whether anything animates and when its next frame is due, bytes uploaded, prepare time |
+| `trim()` | lets go of every chunk and tileset the last frame did not draw (a closed tab); eviction under the budget is automatic |
+| `max_texture_side()` | the largest target the device allows |
+| `image_request(&ImageRef)` | the `bt-image` request of an image of the model, for anyone else showing it (the Tiles panel) |
 
-The editor embeds it through `egui_wgpu::CallbackTrait`: `prepare` in the callback's prepare,
-`encode` with the callback's encoder, `paint` in its paint, with one `MapRenderer` in the
-callback resources. Errors are typed: `RenderError = NoAdapter | DeviceLost | TooLarge { size,
-limit } | Image(ImageError)`. A `FrameInput` that names a layer that does not exist is a
+`ImageSupply` is where decoded images come from: the `bt-image` store (its workers) or a
+`NestedSupply`. The editor embeds the renderer through `egui_wgpu::CallbackTrait`: `prepare` in
+the callback's prepare, `encode` with the callback's encoder, `paint` in its paint, with one
+`MapRenderer` in the callback resources. Errors are typed: `RenderError = NoAdapter | DeviceLost
+| TooLarge { size, limit } | NoSuchLayer(LayerId)`; an image that cannot be decoded is drawn as
+Tiled's marker, not an error. A `FrameInput` that names a layer that does not exist is a
 `RenderError::NoSuchLayer`, not an ignored field.
 
 ## 10. Module layout
@@ -202,21 +237,24 @@ limit } | Image(ImageError)`. A `FrameInput` that names a layer that does not ex
 ```
 crates/bt-render/src/
 ├── lib.rs           mod lines and pub use
-├── renderer.rs      MapRenderer: the frame's stages, resources, bind groups
-├── input.rs         FrameInput, Camera, PreviewTile, LayerVisibility
+├── renderer.rs      MapRenderer: the frame's stages, GPU resources, bind groups, the impostor pass
+├── input.rs         FrameInput, Camera, PreviewTile, LayerVisibility, ObjectStyle
 ├── pages.rs         the page texture array, the shelf packer, gutters, the half mip, eviction
 ├── sprites.rs       the sprite table, tileset ranges and generations, the animation remap
 ├── chunks.rs        per-chunk instance caches, culling, the draw-order merge
-├── impostors.rs     far-zoom chunk pictures and their page
-├── draw_list.rs     the layer walk: offsets, parallax, opacity, tint, highlight, previews, objects, image layers
+├── impostors.rs     far zoom: runs' squares, their slots, validity and drawing budget
+├── draw_list.rs     the layer walk: offsets, parallax, opacity, tint, highlight, previews, objects, image layers, runs
 ├── instance.rs      the instance format and the cell and object transforms (Tiled's CellRenderer)
+├── objects.rs       shape objects as vector items, class colours
+├── grid.rs          the tile grid as vector items
 ├── vector.rs        VectorItem, stroke expansion, triangulation, dashes
-├── text.rs          glyph rasterisation and the glyph page
+├── text.rs          TextItem, layout, glyph rasterisation
 ├── compositor.rs    blend-mode targets and passes
 ├── headless.rs      HeadlessDevice, Render, bands, readback
+├── supply.rs        ImageSupply, NestedSupply, image_request
 ├── stats.rs         RenderStats
 ├── error.rs         RenderError
-└── shaders/         sprite.wgsl, vector.wgsl, blend.wgsl, impostor.wgsl
+└── shaders/         sprite.wgsl, vector.wgsl, blend.wgsl
 ```
 
 ## 11. Budget
@@ -229,19 +267,26 @@ visible instances times their pixel area. Impostors bound the instance count at 
 chunk caches bound the per-frame CPU work at near zoom; eviction bounds memory. The editor's
 benchmark mode (`better-tiled --bench`) pans and zooms through the budget map and prints frame
 times and the renderer's stats; it runs on the development machine, not in CI.
+`scripts/budget-map.py` writes the budget map (`target/budget/budget.tmx`): 1000×1000 cells,
+the first of ten layers full and the others half full, from Tiled's desert tileset.
+
+As built, the renderer alone (prepare, encode, paint and the GPU's work, on an M4 Pro at
+2880×1800 device pixels, panning a view width a second) takes at the 95th percentile 6.9 ms at
+1/32, 5.7 ms at 1/16, 4.6 ms at 1/8, 6.6 ms at 1/4 and under 2.7 ms from 1/2 to 64; far out the
+median is under 1 ms, the cost being the squares that come into view.
 
 ## 12. Tests
 
 | Test | What it pins |
 |---|---|
-| Synthetic orientations | a one-tile marker tileset on orthogonal, isometric, staggered (both axes and indexes), hexagonal and oblique maps with odd sizes: every marker lands on the pixel `MapGeometry` predicts |
-| CPU reference | an independent CPU compositor in the tests implements Tiled's `CellRenderer` rules cell by cell in Tiled's order; Tiled's example maps rendered by the GPU match it pixel for pixel |
-| Golden images | committed PNGs of small maps covering flips (hexagonal turns included), render sizes and fill modes, tile offsets, animations at fixed times, tints, every blend mode, every render order with overlapping oversized tiles, repeated image layers, parallax, highlight, previews, markers, vector items and text |
-| Pack | packing never overlaps; images larger than a page are split; eviction keeps what is in use |
-| Headless | banded renders equal one-piece renders; the origin and size are the map's bounding rectangle; a zoom of 2 is pixel-exact |
-| Impostors | an impostor view equals the direct render downscaled within a tolerance |
-| Stats | a static map reports no next frame; an animated one reports the right due time |
-| Real maps | the purchased packs' maps against the pack's own previews (where the pack does not add sprites the map lacks), within a tolerance |
+| Synthetic orientations (`placement.rs`) | a marker tileset on orthogonal, isometric, staggered (both axes and indexes), hexagonal and oblique maps with odd sizes: every marker lands on the pixel `MapGeometry` predicts; overlapping oversized tiles stack in Tiled's order across chunk edges on every grid |
+| CPU reference (`goldens.rs`, `tests/common`) | an independent CPU compositor implements Tiled's `CellRenderer` rules cell by cell in Tiled's order; six of Tiled's example maps rendered by the GPU match it (premultiplied, within 2) |
+| Golden images (`goldens.rs`) | 17 committed PNGs of small maps covering flips (hexagonal turns included), render sizes and fill modes, tile offsets, animations at fixed times, tints, every blend mode, every render order with overlapping oversized tiles, repeated image layers, parallax, highlight, previews, markers, vector items and text |
+| Pack (unit tests) | packing never overlaps; images larger than a page are split; eviction keeps what is in use |
+| Headless (`headless.rs`) | banded renders equal one-piece renders; the origin and size are the map's bounding rectangle; a zoom of 2 is pixel-exact |
+| Impostors (`headless.rs`) | a far view equals the direct render downscaled within a tolerance, one square covering the map; a tall tile of a lower layer reaching across a square's edge stays under the upper layer |
+| Stats (`headless.rs`) | a static map reports no next frame; an animated one reports the right due time |
+| Real maps (`packs.rs`) | the Highlands biome map's chambers against the pack's previews (six identical, two under 0.1 %) |
 
 Tests need a GPU adapter; on CI they run on the platform's software adapter, and a missing
 adapter fails the test unless `BT_SKIP_MISSING_TEST_DATA=1` turns it into a skip that says so.

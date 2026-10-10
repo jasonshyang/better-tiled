@@ -15,10 +15,20 @@ line for coding agents and an export to Godot 4.
 ## Status
 
 The design is complete and the build is under way, milestone by milestone
-([`docs/design/00-high-level-design.md`](docs/design/00-high-level-design.md), §17). The first
-milestone, the foundations, is built: the data model, image decoding, and the reading and
-writing of Tiled's files, which reads every Tiled example and test map and saves the files
-Tiled saved byte for byte. There is no editor to run yet.
+([`docs/design/00-high-level-design.md`](docs/design/00-high-level-design.md), §17). Two
+milestones are built:
+
+- **Foundations:** the data model, image decoding, and the reading and writing of Tiled's
+  files, which reads every Tiled example and test map and saves the files Tiled saved byte for
+  byte.
+- **See it:** the renderer (Tiled's placement and draw order on every orientation, from one
+  tile to a million cells a layer), the editor core (assets, undoable transactions, settings,
+  the session and recovery of unsaved work), and the window: tabs, the map canvas with pan and
+  zoom, the Layers and Tiles panels, and save. Maps open and save; they cannot be painted yet.
+
+```bash
+cargo run --release -p better-tiled -- path/to/map.tmx
+```
 
 ## Documentation
 

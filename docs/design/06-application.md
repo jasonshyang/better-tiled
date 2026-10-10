@@ -1,11 +1,11 @@
 # The application — `apps/better-tiled`
 
-*2026-10-09. The design of the window: tabs, menus, panels, dialogs, tools and the canvas,
-built on `bt-editor` (`05-editor-core.md`) and `bt-render` (`03-rendering.md`) with eframe and
-egui. The high-level design (`00-high-level-design.md`, §9) states the rule: the application
-holds no map logic; if it needs no egui type, it does not live here. This doc says what the
-window is made of, how a frame runs, how keys and pointer reach the tools, and how the window
-talks to the editor core.*
+*2026-10-09; the M1 part as built at the end of M1, 2026-10-10 (§1.1). The design of the window:
+tabs, menus, panels, dialogs, tools and the canvas, built on `bt-editor` (`05-editor-core.md`)
+and `bt-render` (`03-rendering.md`) with eframe and egui. The high-level design
+(`00-high-level-design.md`, §9) states the rule: the application holds no map logic; if it needs
+no egui type, it does not live here. This doc says what the window is made of, how a frame runs,
+how keys and pointer reach the tools, and how the window talks to the editor core.*
 
 ## 1. Scope
 
@@ -18,7 +18,55 @@ the transaction.
 Dependencies: `bt-editor`, `bt-render`, `bt-image`, `bt-script` (to run the live link's
 scripts), `bt-live`, `bt-godot`, `bt-tmx`, `bt-core`, `bt-utils`; `eframe`/`egui` with the
 wgpu backend, `egui_wgpu`, `rfd` for file dialogs, `notify`-free polling for the watcher,
-`log`/`env_logger`, and on macOS `objc2`/`objc2-app-kit` for the quit guard.
+`log`/`env_logger`, and on macOS `objc2`/`objc2-app-kit` to give the quit key to the window.
+
+### 1.1 As built at M1
+
+M1 built the shell that opens, shows, pans, zooms, saves and remembers maps; tools, the other
+panels, the watcher and the live server are the later milestones'. What exists:
+
+- **Startup** (`main.rs`, `cli.rs`, `app/startup.rs`): files to open, `--screenshot OUT.png`,
+  `--bench`, `--help`, `--version`; the data folder; a settings file that does not parse or
+  names an unknown setting stops the start with its path and the reason; a session that cannot
+  be read is reported in the window and left out; eframe with the wgpu renderer, vsync and no
+  toolkit persistence. A check (`--screenshot`, `--bench`) opens only its files and neither
+  restores nor writes the session nor asks about recovery.
+- **The frame** (`app/frame.rs`, `app/effects.rs`): `logic` delivers worker results and ticks
+  the editor every frame (and every second while something is unsaved); `ui` handles a close
+  request, opens dropped files, routes the keyboard when no modal is open, draws the menu bar,
+  status bar, Layers (left) and Tiles (right) panels, the tab strip and canvas or the welcome
+  screen, then the modals, applies the frame's intents in order, carries out the effects and
+  ends the frame (session written a second after its last change, title, flash, closed tabs'
+  canvases forgotten, the check's next step).
+- **The canvas** (`canvas/`): the camera of §5 with Tiled's zoom steps for keys and wheel
+  notches (animated about the pointer), pinch and ⌘-scroll zooming at once, trackpad scroll
+  panning, middle-drag and Space-drag panning, fit at 90 %; the grid (with the major grid),
+  the map border and the hovered cell as vector items; one view drawn through the paint
+  callback, with the renderer in the callback resources and the image store shared with the
+  Tiles panel. Squares of a far view still to be drawn and the next animation frame ask for
+  repaints from the callback.
+- **Keyboard** (`focus.rs`): only text fields keep the keyboard; Tab moves nothing outside one;
+  keys go through the keymap with exact modifiers; plain keys are not shortcuts while typing,
+  nor are the keys a text field handles itself; repeats only for the commands that repeat; ⌘=
+  and ⌘- zoom the map, not the interface.
+- **Panels** (`panels/`): Layers (the tree topmost first, visibility, lock, folding, selection,
+  rename in place) and Tiles (tileset tabs, a zoom per tileset, an atlas in its own columns, a
+  collection wrapped to the panel, only the rows in view drawn, a selected tile, a line saying
+  why a tileset's image could not be read). Tile textures are uploaded once from the shared
+  store and shrunk when larger than the GPU allows.
+- **Modals** (`dialogs/`): the editor's questions and errors with details; Enter gives the
+  default answer, Escape cancels when Cancel is one.
+- **Files and workers** (`files/`, `workers.rs`): dropped files; `rfd`'s asynchronous dialogs
+  waited for on a worker; a thread per load or dialog with one result channel and a waker; one
+  writer thread for snapshots, their deletion and the session, in order, that touches the
+  heartbeat every ten seconds and is joined on exit.
+- **Quit** (`platform/quit.rs`): §12 as built.
+- **Checks** (`dev.rs`): §13 as built.
+
+The menus are the window's arrangement of `bt-editor`'s action table (File, Edit, View, with
+Open Recent), each item asking the editor whether it is enabled and checked and the keymap for
+its key. Not yet built: tools and gestures, the toolbar, the other panels, the panel layout in
+the session, the watcher, the live server, the command palette, the `BT_SCREENSHOT_*` hooks.
 
 ## 2. Startup
 
@@ -47,7 +95,7 @@ App
 ├── live: Option<LiveServer>
 ├── focus: Focus                                  §4
 ├── perf: FrameStats
-└── platform: Platform                            quit guard, menu, reveal, open-with
+└── platform: Platform                            the quit key, menu, reveal, open-with
 ```
 
 ### 3.1 A frame
@@ -61,9 +109,9 @@ eframe calls `logic` before and `ui` for every frame; the order inside is fixed:
    decision about unsaved work becomes a modal.
 3. **Input**: dropped files become `Open` intents; the keyboard is routed (§4) and shortcuts
    dispatched; a modal open means no shortcuts but the palette's own.
-4. **Chrome**: the menu bar (built from `bt-editor`'s menu table, each item asking `enabled`
-   and `checked`), the toolbar (tools of the current layer family, their options, Live, Grid,
-   Highlight, World), the status bar (§10).
+4. **Chrome**: the menu bar (the window's arrangement of `bt-editor`'s action table, each item
+   asking `enabled` and `checked`), the toolbar (tools of the current layer family, their
+   options, Live, Grid, Highlight, World), the status bar (§10).
 5. **Panels**: the left group (Layers, Objects, Project), the right group (Tiles, Terrains,
    Stamps, History, AutoMap) and the Properties panel, each drawing from queries and returning
    intents; a tileset document shows the tileset editor in the centre instead.
@@ -251,8 +299,9 @@ Godot setup sheet, the Template editor, the Edit Commands window, Go to Tile, th
 reference list, the long-text editor, About.
 
 A dialog opens because the editor returned `Effect::ShowDialog(kind, seed)`; it collects its
-values and returns an intent. File dialogs run through `rfd`'s asynchronous API on a worker,
-so a frame never blocks, and the chosen path comes back as `Intent::FilePicked`. Escape in a
+values and returns an intent. File dialogs run through `rfd`'s asynchronous API, waited for on a
+worker so a frame never blocks (on macOS `rfd` shows the panel on the main thread), and the
+chosen path comes back as `Intent::FilePicked`, one for each file chosen. Escape in a
 dialog's field leaves the field, not the dialog.
 
 ## 10. Status bar and toolbar
@@ -286,9 +335,13 @@ buttons first and clips the tools to the room left; labels drop before buttons d
 
 ## 12. Platform
 
-- **macOS quit**: the application's delegate gets `applicationShouldTerminate:` added at runtime
-  (`objc2`), so ⌘Q, the Dock and a logout ask about unsaved work like closing the window does;
-  the guard reads a flag the frame loop sets.
+- **macOS quit**: the window's close button and ⌘Q ask about unsaved work: at start the app
+  menu's Quit item gives up its ⌘Q key equivalent (safe AppKit calls through `objc2-app-kit`),
+  so the key reaches the window and runs the Quit command. Choosing Quit from the app menu, the
+  Dock or a logout still ends the run without asking: asking there needs the application
+  delegate's `applicationShouldTerminate:`, which can only be added with `unsafe` and waits for
+  a design review. Such an exit writes the snapshots the latest changes need and keeps them, so
+  the next start offers the work back.
 - **Open with the system** and **reveal in the file manager** through the platform's commands.
 - **HiDPI**: the camera and overlays work in device pixels; text and strokes are cosmetic.
 - **Theme**: the egui style is derived from the theme settings (base colour decides light or
@@ -303,26 +356,45 @@ buttons first and clips the tools to the room left; labels drop before buttons d
 before the screenshot, so a scripted run can picture any state; it is compiled in but inert
 without the variables.
 
+As built: `--screenshot OUT.png` waits until no load runs, no image is being decoded (on the
+canvas or in the Tiles panel) and no far square is pending, for three frames in a row, then
+saves the window's own picture and quits; it fails after 30 s, saying whether the window was
+not ready or its picture never came (a locked screen or a hidden window presents nothing).
+`--bench MAP` waits the same way, then pans across the map at every power-of-two zoom from
+1/32 to 64, 15 frames to settle and 240 measured at each, a view width a second, and prints
+per zoom the interval between frames (median, 95th percentile, worst), the window's own work,
+the renderer's prepare time and its counts, then the display's rate and how many frames took
+over half again the median; frames faster than any display are reported as not presented. The
+`BT_SCREENSHOT_*` hooks come with the tools.
+
 ## 14. Module layout
 
 ```
 apps/better-tiled/src/
 ├── main.rs            arguments, logging, data folder, eframe launch
-├── app/               App, the frame (logic and ui), tabs, menu bar, toolbar, status bar, title, quit
+├── cli.rs             the command line
+├── app/               App, the frame (logic and ui), effects, startup, tabs, menu bar, toolbar, status bar, title, quit
 ├── focus.rs           keyboard routing and the shortcut router
-├── canvas/            camera.rs, gesture.rs, view.rs (the paint callback and views), overlay.rs, minimap.rs
+├── canvas/            camera.rs, gesture.rs, view.rs (the canvas and its input), paint.rs (the paint callback), overlay.rs, minimap.rs
 ├── tools/             tool.rs (the trait), one file per tool, options.rs
-├── panels/            tiles.rs, terrains.rs, stamps.rs, layers.rs, objects.rs, properties.rs, project.rs,
-│                      history.rs, automap.rs, issues.rs, console.rs, layout.rs
+├── panels/            tiles.rs, tile_images.rs, terrains.rs, stamps.rs, layers.rs, objects.rs, properties.rs,
+│                      project.rs, history.rs, automap.rs, issues.rs, console.rs, layout.rs
 ├── tileset_editor/    terrain.rs, animation.rs, collision.rs, layouts.rs, patterns.rs
 ├── dialogs/           one file per dialog, modal.rs (the stack)
-├── files/             drop.rs, pick.rs (async file dialogs), watcher.rs (the timer and worker), recovery.rs
-├── workers.rs         the worker pool and its result channel
+├── files/             drop.rs, pick.rs (async file dialogs), writer.rs (snapshots, session, heartbeat), watcher.rs
+├── workers.rs         the worker threads and their result channel
 ├── live/              server.rs, jobs.rs, screenshot.rs
 ├── platform/          quit.rs (macOS), open.rs, reveal.rs
 ├── style/             theme.rs, icons.rs, fonts.rs
-└── dev.rs             --screenshot, --bench, the BT_SCREENSHOT_* hooks
+├── dev.rs             --screenshot, --bench, the BT_SCREENSHOT_* hooks
+└── test_window.rs     the window under test (tests only)
 ```
+
+At M1 the files that exist are `main.rs`, `cli.rs`, `app/` (`frame.rs`, `effects.rs`,
+`startup.rs`, `menu.rs`, `tabs.rs`, `status_bar.rs`, `tests.rs`), `focus.rs`, `canvas/`
+(`camera.rs`, `view.rs`, `paint.rs`, `overlay.rs`), `panels/` (`layers.rs`, `tiles.rs`,
+`tile_images.rs`), `dialogs/modal.rs`, `files/` (`drop.rs`, `pick.rs`, `writer.rs`),
+`workers.rs`, `platform/quit.rs`, `style/theme.rs`, `dev.rs` and `test_window.rs`.
 
 ## 15. Tests
 
@@ -340,6 +412,15 @@ window's fields.
 | Modals | unsaved prompts on close, quit and project switch; a conflict from the watcher; the image-size question; the Godot refusal; Escape in a dialog's field |
 | Live link | `bt` on a thread edits, marks, undoes, saves and opens while the window steps; an edit waits for a stroke to end; a conflict reruns |
 | Pictures | `--screenshot` of a known map matches a committed picture within a tolerance |
+
+As built at M1, `TestWindow` is the app without a GPU in an `egui_kittest` harness with a data
+folder of its own: it drops files on the window, presses keys, clicks labelled widgets, clicks
+the close button, ends the run as eframe does, and reads the editor back; it runs frames until
+the workers are done and the layout has stopped moving. The M1 flows: a dropped map (Tiled's
+desert, and a pack map mirrored into a scratch folder) opens and saves byte for byte; a layer's
+visibility toggle is an edit that undoes; shortcuts run commands; closing with unsaved work
+asks, Cancel keeps the window and Don't Save closes it; the session brings the files back with
+their cameras; an exit nobody answered leaves the work to recover at the next start.
 
 What a person checks in the real window, each release: the feel of pan and zoom at 120 Hz on
 the largest pack map, the latency of a stroke, the readability of hints and flashes, and the

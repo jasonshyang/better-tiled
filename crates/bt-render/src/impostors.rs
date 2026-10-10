@@ -11,9 +11,9 @@
 //! the squares in view, when it steps down. The squares a view shows are bounded by the screen's
 //! area, not the map's. An impostor is valid while its run's chunks, attributes and tilesets are
 //! the ones it was drawn from: the run's chunks are held, so an address is never reused while
-//! it is compared. At most [`DRAW_BUDGET`] instances a frame are drawn into impostors, the
-//! squares nearest the view's centre first; until a square is drawn it shows its last picture,
-//! or nothing, and the frame reports it pending.
+//! it is compared. Squares are drawn, nearest the view's centre first, until [`DRAW_BUDGET`]
+//! instances a frame have gone into them (the last may pass it); until a square is drawn it
+//! shows its last picture, or nothing, and the frame reports it pending.
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
@@ -43,7 +43,7 @@ const PAGE_SIDE: u32 = 2048;
 /// Impostors a page side holds.
 const SQUARES_PER_SIDE: u32 = PAGE_SIDE / SQUARE_TEXELS;
 
-/// The most instances drawn into impostors in one frame.
+/// The instances a frame draws into impostors before it leaves the rest for the next frame.
 pub(crate) const DRAW_BUDGET: usize = 100_000;
 
 /// The coarsest resolution a run steps down to: 2^-16 device pixels per world pixel.
