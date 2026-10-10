@@ -43,8 +43,11 @@ pub use intent::Intent;
 pub use notice::{Notice, Severity};
 pub use objects::{ObjectFrame, ObjectStroke, ObjectStrokeKind};
 pub use properties::{
-    Change, ListEdit, Op, Origin, PropertyError, PropertySet, Shown, Step, Target, TargetId,
-    ValueType, conversions, convert, value_types,
+    Attribute, AttributeRow, AttributeValue, Change, ListEdit, Op, Origin, PropertyError,
+    PropertySet, Shown, Step, Target, TargetId, ValueType, conversions, convert, layer_attributes,
+    map_attributes, object_attributes, set_layer_attribute, set_map_attribute,
+    set_object_attribute, set_tile_attribute, set_tileset_attribute, tile_attributes,
+    tileset_attributes, value_types,
 };
 pub use recovery::{
     Orphan, Snapshot, SnapshotMeta, delete_snapshot, orphans, remove_heartbeat, touch_heartbeat,
