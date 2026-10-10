@@ -23,5 +23,6 @@ mod schema;
 
 pub use automap::{AutoMapRecord, BindingRecord, PaintedRecord, RunRecord};
 pub use error::Error;
+pub use godot::{GodotSetup, NavigationLayerSetup, OcclusionLayerSetup, PhysicsLayerSetup};
 pub use rows::{RowCell, RowError};
 pub use schema::{Document, MapEntry, Note};

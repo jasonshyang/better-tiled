@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::automap::AutoMapRecord;
+use crate::godot::GodotSetup;
 
 /// The format version this program writes. It changes only when a key's meaning changes:
 /// adding a key never bumps it, since unknown keys are kept and defaults are explicit.
@@ -30,6 +31,9 @@ pub struct Document {
     /// The format version the file was last written with; 0 when it names none.
     #[serde(default)]
     better_tiled: u32,
+    /// How the maps the file covers go into a Godot project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    godot: Option<GodotSetup>,
     /// What the file says about each map, by key (`crate::paths::key`).
     #[serde(default)]
     maps: BTreeMap<String, MapEntry>,
@@ -145,6 +149,28 @@ impl Document {
         let removed = self.maps.get_mut(key)?.automap.take();
         self.remove_entry_if_empty(key);
         removed
+    }
+
+    /// The Godot setup of the maps the file covers.
+    pub fn godot(&self) -> Option<&GodotSetup> {
+        self.godot.as_ref()
+    }
+
+    /// Sets the Godot setup, replacing the one the file had, and changes nothing else. Keys the
+    /// replaced setup had that this version does not know stay, unless `setup` sets them itself.
+    /// An empty setup is written as `{}`.
+    pub fn set_godot(&mut self, mut setup: GodotSetup) {
+        if let Some(replaced) = self.godot.take() {
+            for (name, value) in replaced.unknown {
+                setup.unknown.entry(name).or_insert(value);
+            }
+        }
+        self.godot = Some(setup);
+    }
+
+    /// Removes the Godot setup and returns it; the file then has no `godot` section.
+    pub fn remove_godot(&mut self) -> Option<GodotSetup> {
+        self.godot.take()
     }
 
     /// Removes the entry of `key` when nothing is left in it.
