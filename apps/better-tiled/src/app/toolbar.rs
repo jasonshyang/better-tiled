@@ -64,6 +64,10 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
             }
             tool_button(ui, editor, tool, current == tool, out);
         }
+        // A tool's options show only where the tool does.
+        if !tools.contains(&current) {
+            return;
+        }
         if current == ToolKind::ShapeFill {
             ui.separator();
             let shape = editor.tools().fill_shape();
