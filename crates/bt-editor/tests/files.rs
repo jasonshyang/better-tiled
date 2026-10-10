@@ -11,10 +11,14 @@ use std::time::SystemTime;
 
 use bt_core::LayerId;
 use bt_editor::{
-    ActionId, Choice, Editor, Effect, FileRequest, Intent, Purpose, Question, Severity, orphans,
+    ActionId, Choice, Editor, Effect, FileRequest, Intent, Purpose, Question, Severity, ToolKind,
+    orphans,
 };
 use bt_test_data::Scratch;
+use bt_test_data::fixtures::MapBuilder;
+use bt_tmx::WriteRequest;
 use common::{apply, ask, editor_in, write_map};
+use glam::UVec2;
 
 #[test]
 fn opening_shares_the_stores_tileset_and_reopening_focuses_the_tab() {
@@ -39,6 +43,36 @@ fn opening_shares_the_stores_tileset_and_reopening_focuses_the_tab() {
     assert_eq!(editor.documents().len(), 2);
     assert_eq!(editor.current(), Some(first));
     assert!(!editor.has_unsaved());
+}
+
+#[test]
+fn the_tools_follow_the_tab_made_current() {
+    let scratch = Scratch::new("bt-editor-tools-follow").unwrap();
+    let tiles = write_map(scratch.path(), "tiles.tmx");
+    let objects = scratch.join("objects.tmx");
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(3, 2))
+        .tile_layer("ground", ". . .\n. . .")
+        .object_layer("things", Vec::new())
+        .build()
+        .unwrap();
+    WriteRequest::for_map(&map, &objects).write().unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(tiles));
+    assert_eq!(editor.tools().tool(), ToolKind::Brush);
+    apply(&mut editor, Intent::Open(objects));
+    assert_eq!(
+        editor.tools().tool(),
+        ToolKind::SelectObjects,
+        "it opens on its topmost layer, an object layer"
+    );
+    editor.apply(Intent::Run(ActionId::PreviousDocument));
+    assert_eq!(editor.tools().tool(), ToolKind::Brush);
+    editor.apply(Intent::Run(ActionId::NextDocument));
+    assert_eq!(editor.tools().tool(), ToolKind::SelectObjects);
+    // Closing it makes the other tab current, and its tools with it.
+    editor.apply(Intent::Run(ActionId::Close));
+    assert_eq!(editor.documents().len(), 1);
+    assert_eq!(editor.tools().tool(), ToolKind::Brush);
 }
 
 #[test]

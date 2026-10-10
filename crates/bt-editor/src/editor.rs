@@ -143,9 +143,12 @@ impl Editor {
         builder.assemble(keymap)
     }
 
-    /// Applies an intent; what the window must do in return.
+    /// Applies an intent; what the window must do in return. A document it makes current
+    /// (opened, loaded, switched to, or next in line when the current one closed) brings the
+    /// tools of what it edits, as choosing a layer does.
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
-        match intent {
+        let current_before = self.documents.current();
+        let effects = match intent {
             Intent::Run(id) => self.run(id),
             Intent::RunPalette(target) => self.run_palette(target),
             Intent::CreateMap(new) => self.create_map(&new),
@@ -173,7 +176,6 @@ impl Editor {
             Intent::Decided { decision, choice } => self.decide(decision, choice),
             Intent::SelectDocument(doc) => {
                 self.documents.set_current(doc);
-                self.follow_document(doc);
                 self.restore_current = None;
                 self.session_changed();
                 Vec::new()
@@ -303,7 +305,13 @@ impl Editor {
             Intent::Observed(observations) => self.observe(observations),
             Intent::ChangeSettings(settings) => self.change_settings(*settings),
             Intent::Tick { now_ms } => self.tick(now_ms),
+        };
+        if let Some(doc) = self.documents.current()
+            && Some(doc) != current_before
+        {
+            self.follow_document(doc);
         }
+        effects
     }
 
     /// Changes a layer as a transaction.

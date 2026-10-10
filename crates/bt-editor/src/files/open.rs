@@ -193,14 +193,12 @@ impl Editor {
             self.store.forget_disk(asset);
             effects.push(Effect::DeleteSnapshot(snapshot));
         }
-        let doc = match self.document_of_path(path) {
-            Some(doc) => {
-                self.documents.set_current(doc);
-                doc
+        match self.document_of_path(path) {
+            Some(doc) => self.documents.set_current(doc),
+            None => {
+                self.open_document(asset);
             }
-            None => self.open_document(asset),
-        };
-        self.follow_document(doc);
+        }
         self.remember_recent(path);
         self.session_changed();
         effects
