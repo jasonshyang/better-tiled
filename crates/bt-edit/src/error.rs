@@ -2,6 +2,8 @@
 
 use bt_core::{LayerId, ObjectId, TileId, TilesetSlot};
 
+use crate::objects::node::Node;
+
 /// A request an operation cannot carry out: something it names does not exist or is of the
 /// wrong kind. "Nothing to do" is not an error; it is an empty report.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -35,6 +37,27 @@ pub enum EditError {
     /// An object brought in with an id of its own collides with one already there.
     #[error("there is already an object {0}")]
     ObjectIdInUse(ObjectId),
+    /// The object has no nodes to edit: it is not a polygon or a polyline.
+    #[error("object {0} is neither a polygon nor a polyline")]
+    NotAPolygon(ObjectId),
+    /// The edit is one of a polyline's, and the object is not a polyline.
+    #[error("object {0} is not a polyline")]
+    NotAPolyline(ObjectId),
+    /// A polygon or polyline has no node at this place.
+    #[error("object {} has no node {}", .0.object, .0.index)]
+    NoSuchNode(Node),
+    /// An edit at the end of a polyline was given a node between its ends, or, to close a
+    /// polyline, the same end twice.
+    #[error(
+        "node {} of object {} is not an end this edit can use: the first or last node of a \
+         polyline, and the other one to close it",
+        .0.index,
+        .0.object
+    )]
+    NotAnEnd(Node),
+    /// A polyline has too few nodes to close into a polygon.
+    #[error("polyline {0} has too few nodes to close into a polygon")]
+    TooFewNodes(ObjectId),
     /// The layer draws its objects by where they are on screen, so their order in its list
     /// cannot raise or lower them.
     #[error("layer {0} draws its objects top-down, not in their list order")]

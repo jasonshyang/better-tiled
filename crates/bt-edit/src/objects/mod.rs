@@ -13,6 +13,8 @@ pub(crate) mod convert;
 pub(crate) mod edit;
 pub(crate) mod find;
 pub(crate) mod hit;
+pub(crate) mod node;
+pub(crate) mod nodes;
 pub(crate) mod order;
 pub(crate) mod resize;
 pub(crate) mod snap;

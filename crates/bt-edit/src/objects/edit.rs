@@ -660,7 +660,7 @@ mod tests {
         use bt_utils::rng::Rng;
 
         use crate::axis::Axis;
-        use crate::objects::{align, convert, order, resize, transform};
+        use crate::objects::{align, convert, node, nodes, order, resize, transform};
         use crate::testutil::random_object;
 
         let fuzz = Fuzz::from_env(0x0ED1_7ED5, 150);
@@ -695,7 +695,7 @@ mod tests {
                 let layer = LayerId([1, 3][rng.below(2).unwrap() as usize]);
                 let delta = DVec2::new(rng.next_f64() * 40.0 - 20.0, rng.next_f64() * 40.0 - 20.0);
                 let before = map.clone();
-                let result = match rng.below(14).unwrap() {
+                let result = match rng.below(15).unwrap() {
                     0 => duplicate_objects(&mut map, &some, delta, rng.below(2) == Some(0)),
                     1 => remove_objects(&mut map, &some),
                     2 => move_objects_to_layer(&mut map, &some, layer),
@@ -727,6 +727,20 @@ mod tests {
                             drag = drag.keeping_proportions();
                         }
                         resize::resize_objects(&mut map, &some, drag)
+                    }
+                    13 => {
+                        let named: Vec<node::Node> = some
+                            .iter()
+                            .map(|&object| node::Node {
+                                object,
+                                index: rng.below(4).unwrap() as usize,
+                            })
+                            .collect();
+                        if rng.below(2) == Some(0) {
+                            nodes::remove_nodes(&mut map, &named)
+                        } else {
+                            nodes::move_nodes(&mut map, &named, delta)
+                        }
                     }
                     _ => move_objects(&mut map, &some, delta),
                 };

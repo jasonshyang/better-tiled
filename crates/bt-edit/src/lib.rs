@@ -72,6 +72,13 @@ pub use objects::edit::{
 };
 pub use objects::find::{Found, find_object, object_index_in, object_mut, object_mut_in};
 pub use objects::hit::{RectMode, object_contains, objects_at, objects_in_quad};
+pub use objects::node::Node;
+pub use objects::nodes::{
+    connect_polylines, connect_polylines_in, delete_segment, delete_segment_in, extend_polyline,
+    extend_polyline_in, insert_node, insert_node_in, join_nodes, join_nodes_in, move_nodes,
+    move_nodes_in, node_at, nodes_anchor, nodes_anchor_in, remove_nodes, remove_nodes_in,
+    segment_at, split_segments, split_segments_in,
+};
 pub use objects::order::{
     lower_objects, lower_objects_in, lower_objects_to_bottom, lower_objects_to_bottom_in,
     move_objects_down, move_objects_down_in, move_objects_up, move_objects_up_in, raise_objects,
