@@ -7,6 +7,7 @@
 
 mod animation;
 mod collision;
+mod layouts;
 mod terrain;
 
 use std::collections::HashMap;
@@ -24,7 +25,7 @@ use crate::tools::ToolBox;
 
 use animation::AnimationEditor;
 use collision::CollisionView;
-use terrain::TerrainLabeller;
+use terrain::{TerrainFrame, TerrainLabeller};
 
 /// The zoom range of the tiles.
 const ZOOM_RANGE: std::ops::RangeInclusive<f32> = 0.25..=8.0;
@@ -128,9 +129,13 @@ impl TilesetEditorView {
             let shown = show_tiles(ui, &tileset, &mut zoom, chosen, &mut source, doc, out);
             self.remember_shown(doc, shown);
         } else if editing.mode() == TilesetMode::Terrain {
-            let shown = self
-                .terrain
-                .show(ui, &tileset, &editing, doc, &mut zoom, &mut source, out);
+            let cx = TerrainFrame {
+                editor,
+                tileset: &tileset,
+                editing: &editing,
+                doc,
+            };
+            let shown = self.terrain.show(ui, cx, &mut zoom, &mut source, out);
             self.remember_shown(doc, shown);
         } else {
             let mut shown = None;

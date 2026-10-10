@@ -588,6 +588,7 @@ dependencies = [
  "bt-automap",
  "bt-core",
  "bt-edit",
+ "bt-image",
  "bt-project",
  "bt-terrain",
  "bt-test-data",

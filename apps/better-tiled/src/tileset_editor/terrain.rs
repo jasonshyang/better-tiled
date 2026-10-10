@@ -3,15 +3,18 @@
 //! quadrant, an edge set's triangle, a mixed set's 3×3 grid, the middle doing nothing). A drag
 //! labels the lanes it passes with the chosen terrain, the right button clears them, each drag
 //! one step. Beside the tiles, the tileset's terrain sets and the chosen set's terrains: choose
-//! one to label with, and the sets' and terrains' commands.
+//! one to label with, and the sets' and terrains' commands; and the helpers, which take the
+//! tiles' clicks while they are open: Layout… (`layouts.rs`).
 
 use bt_core::{Color, TileId, Tileset, WangSet, WangSetType};
 use bt_editor::{
-    DocumentId, Intent, LabelMark, LabelStroke, LabelTerrain, TerrainSetEdit, TilesetEditing,
+    DocumentId, Editor, Intent, LabelMark, LabelStroke, LabelTerrain, TerrainSetEdit,
+    TilesetEditing,
 };
 use bt_terrain::TerrainColor;
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2};
 
+use super::layouts::LayoutsPanel;
 use super::{DrawnTiles, draw_tiles};
 use crate::panels::{ShownTiles, TileSource};
 
@@ -22,6 +25,37 @@ pub(crate) struct TerrainLabeller {
     drag: Option<LabelDrag>,
     /// A name being edited.
     renaming: Option<Renaming>,
+    /// The helper that is open, which takes the tiles' clicks.
+    helper: Option<Helper>,
+}
+
+/// A helper of the Terrain mode, open beside the sets.
+#[derive(Debug)]
+enum Helper {
+    /// Layout…: blocks of autotile layouts labelled at once.
+    Layouts(LayoutsPanel),
+}
+
+impl Helper {
+    /// The document it was opened in.
+    fn doc(&self) -> DocumentId {
+        match self {
+            Helper::Layouts(panel) => panel.doc(),
+        }
+    }
+}
+
+/// What a frame of the Terrain mode works with.
+#[derive(Copy, Clone)]
+pub(crate) struct TerrainFrame<'a> {
+    /// The editor.
+    pub(crate) editor: &'a Editor,
+    /// The tileset edited.
+    pub(crate) tileset: &'a Tileset,
+    /// Its tileset editor.
+    pub(crate) editing: &'a TilesetEditing,
+    /// The document.
+    pub(crate) doc: DocumentId,
 }
 
 /// A labelling drag: clearing (the right button) or painting, and the lane marked last.
@@ -41,24 +75,53 @@ struct Renaming {
 
 impl TerrainLabeller {
     /// Draws the Terrain mode in the rest of `ui`; where the tiles were drawn, if any were.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "a frame's pieces, passed as the other modes get them"
-    )]
     pub(crate) fn show(
         &mut self,
         ui: &mut egui::Ui,
-        tileset: &Tileset,
-        editing: &TilesetEditing,
-        doc: DocumentId,
+        cx: TerrainFrame<'_>,
         zoom: &mut f32,
         source: &mut TileSource<'_>,
         out: &mut Vec<Intent>,
     ) -> Option<ShownTiles> {
+        if self.helper.as_ref().is_some_and(|h| h.doc() != cx.doc) {
+            self.helper = None;
+        }
         egui::Panel::right("terrain-sets")
             .resizable(true)
             .default_size(260.0)
-            .show(ui, |ui| self.show_sets(ui, tileset, editing, doc, out));
+            .show(ui, |ui| self.show_sets(ui, cx, out));
+        match &mut self.helper {
+            Some(Helper::Layouts(panel)) => {
+                let open = egui::Panel::right("terrain-layouts")
+                    .resizable(true)
+                    .default_size(280.0)
+                    .show(ui, |ui| panel.show(ui, cx, out))
+                    .inner;
+                let shown = panel.show_tiles(ui, cx, zoom, source);
+                if !open {
+                    self.helper = None;
+                }
+                shown
+            }
+            None => self.show_label_tiles(ui, cx, zoom, source, out),
+        }
+    }
+
+    /// The tiles with the chosen set's labels, labelled lane by lane.
+    fn show_label_tiles(
+        &mut self,
+        ui: &mut egui::Ui,
+        cx: TerrainFrame<'_>,
+        zoom: &mut f32,
+        source: &mut TileSource<'_>,
+        out: &mut Vec<Intent>,
+    ) -> Option<ShownTiles> {
+        let TerrainFrame {
+            tileset,
+            editing,
+            doc,
+            ..
+        } = cx;
         let label = editing.label_terrain();
         let set = label.and_then(|l| tileset.wang_sets.get(l.set));
         let diamond = diamond_ratio(tileset);
@@ -157,15 +220,45 @@ impl TerrainLabeller {
         }
     }
 
+    /// The terrain sets and the chosen set's terrains, with their commands, and the helpers.
+    fn show_sets(&mut self, ui: &mut egui::Ui, cx: TerrainFrame<'_>, out: &mut Vec<Intent>) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                self.show_set_list(ui, cx, out);
+                ui.separator();
+                self.show_helper_buttons(ui, cx);
+            });
+    }
+
+    /// The buttons that open the helpers.
+    fn show_helper_buttons(&mut self, ui: &mut egui::Ui, cx: TerrainFrame<'_>) {
+        let atlas = !cx.tileset.is_collection();
+        let layouts_open = matches!(self.helper, Some(Helper::Layouts(_)));
+        let layouts = ui
+            .add_enabled(atlas, egui::Button::selectable(layouts_open, "Layout…"))
+            .on_hover_text(
+                "Label whole blocks of tiles at once, from where they sit in a common autotile \
+                 layout: blob sets, Godot and Tilesetter sheets, 3×3 islands and holes",
+            )
+            .on_disabled_hover_text("For tilesets cut from one image");
+        if layouts.clicked() {
+            self.helper = if layouts_open {
+                None
+            } else {
+                Some(Helper::Layouts(LayoutsPanel::new(cx.doc)))
+            };
+        }
+    }
+
     /// The terrain sets and the chosen set's terrains, with their commands.
-    fn show_sets(
-        &mut self,
-        ui: &mut egui::Ui,
-        tileset: &Tileset,
-        editing: &TilesetEditing,
-        doc: DocumentId,
-        out: &mut Vec<Intent>,
-    ) {
+    fn show_set_list(&mut self, ui: &mut egui::Ui, cx: TerrainFrame<'_>, out: &mut Vec<Intent>) {
+        let TerrainFrame {
+            tileset,
+            editing,
+            doc,
+            ..
+        } = cx;
         let edit = |edit: TerrainSetEdit| Intent::EditTerrainSets { doc, edit };
         let label = editing.label_terrain();
         ui.horizontal(|ui| {
@@ -369,7 +462,7 @@ struct HoveredLane {
 /// tile's middle turned 45° and flattened by the grid's height over its width), whose top point
 /// is the tile's top-left corner.
 #[derive(Copy, Clone, Debug)]
-struct TileFrame {
+pub(super) struct TileFrame {
     /// The square, or the rectangle, the lanes are laid out in before the turn.
     rect: Rect,
     /// The grid's height over its width, for an isometric tileset.
@@ -377,7 +470,8 @@ struct TileFrame {
 }
 
 impl TileFrame {
-    fn of(rect: Rect, diamond: Option<f32>) -> TileFrame {
+    /// The frame of a tile drawn in `rect`; `diamond` is [`diamond_ratio`]'s.
+    pub(super) fn of(rect: Rect, diamond: Option<f32>) -> TileFrame {
         let rect = match diamond {
             Some(_) => {
                 Rect::from_center_size(rect.center(), egui::vec2(rect.width(), rect.width()))
@@ -428,7 +522,7 @@ impl TileFrame {
 }
 
 /// The grid's height over its width when the tileset's grid is isometric.
-fn diamond_ratio(tileset: &Tileset) -> Option<f32> {
+pub(super) fn diamond_ratio(tileset: &Tileset) -> Option<f32> {
     let grid = tileset.grid?;
     (grid.orientation == bt_core::GridOrientation::Isometric && grid.size.x > 0)
         .then(|| grid.size.y as f32 / grid.size.x as f32)
@@ -471,7 +565,7 @@ fn lane_at(kind: WangSetType, x: f32, y: f32) -> Option<usize> {
 
 /// The part of a tile's rectangle that stands for a lane: a corner set's quadrant, an edge
 /// set's triangle, a mixed set's ninth.
-fn lane_region(kind: WangSetType, lane: usize, rect: Rect) -> Vec<Pos2> {
+pub(super) fn lane_region(kind: WangSetType, lane: usize, rect: Rect) -> Vec<Pos2> {
     let at = |fx: f32, fy: f32| {
         pos2(
             rect.min.x + rect.width() * fx,
@@ -519,7 +613,7 @@ fn lane_region(kind: WangSetType, lane: usize, rect: Rect) -> Vec<Pos2> {
 }
 
 /// Draws a tile's labels of `set`: each lane's region in its terrain's colour.
-fn draw_labels(painter: &egui::Painter, set: &WangSet, id: TileId, frame: TileFrame) {
+pub(super) fn draw_labels(painter: &egui::Painter, set: &WangSet, id: TileId, frame: TileFrame) {
     let Some(label) = set.tiles.get(&id) else {
         return;
     };

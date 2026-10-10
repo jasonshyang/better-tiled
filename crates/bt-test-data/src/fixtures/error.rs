@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use glam::UVec2;
+
 /// A fixture that could not be built: a mistake in the test's own input, or a file that could
 /// not be written.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -41,5 +43,13 @@ pub enum FixtureError {
         path: PathBuf,
         /// Why it failed.
         message: String,
+    },
+    /// A picture given to an atlas that is not the size its grid makes.
+    #[error("the picture is {found} pixels, not the {expected} the atlas's grid makes")]
+    PictureSize {
+        /// The size the grid makes.
+        expected: UVec2,
+        /// The picture's.
+        found: UVec2,
     },
 }

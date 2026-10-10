@@ -35,8 +35,8 @@ pub fn write_map(folder: &Path, name: &str) -> PathBuf {
     path
 }
 
-/// Applies an intent and carries out loads and reads of rules as a worker would, returning the
-/// other effects.
+/// Applies an intent and carries out loads, reads of rules and reads of tileset images as a
+/// worker would, returning the other effects.
 pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
     let mut pending = vec![intent];
     let mut out = Vec::new();
@@ -45,6 +45,9 @@ pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
             match effect {
                 Effect::Load(job) => pending.push(Intent::Loaded(Box::new(job.run()))),
                 Effect::LoadRules(job) => pending.push(Intent::RulesLoaded(Box::new(job.run()))),
+                Effect::ReadTilesetImage(job) => {
+                    pending.push(Intent::TilesetImageRead(Box::new(job.run())));
+                }
                 other => out.push(other),
             }
         }

@@ -486,7 +486,7 @@ fn terrain_index(set: &WangSet, color: TerrainColor) -> Result<usize, EditError>
 
 /// The terrain added `count`-th to a set: Tiled's colour for that place, named by its place,
 /// weight 1.
-fn new_terrain(count: usize) -> WangColor {
+pub(crate) fn new_terrain(count: usize) -> WangColor {
     WangColor {
         name: format!("Terrain {}", count + 1),
         class: String::new(),

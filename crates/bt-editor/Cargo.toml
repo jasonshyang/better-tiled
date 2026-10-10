@@ -12,6 +12,7 @@ publish = false
 bt-automap.workspace = true
 bt-core.workspace = true
 bt-edit.workspace = true
+bt-image.workspace = true
 bt-project.workspace = true
 bt-terrain.workspace = true
 bt-tmx.workspace = true

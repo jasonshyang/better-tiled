@@ -323,6 +323,32 @@ pub enum Intent {
         /// The change.
         edit: crate::terrain_sets::TerrainSetEdit,
     },
+    /// Layout…: look for the blocks of autotile layouts in the edited tileset's image, on a
+    /// worker ([`crate::Editor::layout_search`]).
+    FindLayouts {
+        /// The document.
+        doc: DocumentId,
+    },
+    /// Layout…'s Apply: label a block of an autotile layout, as one step. Its terrains past the
+    /// set's are added; a new set is made in the same step.
+    ApplyLayout {
+        /// The document.
+        doc: DocumentId,
+        /// The set labelled.
+        into: crate::terrain_helpers::LayoutTarget,
+        /// The block: the layout, where it is, and its two terrains.
+        block: bt_terrain::layouts::Block,
+    },
+    /// Layout…'s Label All: label every block found whose layout is of the set's kind, with
+    /// terrains told apart by their looks, as one step.
+    LabelAllLayouts {
+        /// The document.
+        doc: DocumentId,
+        /// The set labelled.
+        into: crate::terrain_helpers::LayoutTarget,
+    },
+    /// A read of a tileset's pixels the editor asked for finished.
+    TilesetImageRead(Box<crate::terrain_helpers::TilesetImageRead>),
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

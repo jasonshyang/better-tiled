@@ -14,6 +14,8 @@ mod startup;
 mod status_bar;
 mod tabs;
 #[cfg(test)]
+mod terrain_helpers_tests;
+#[cfg(test)]
 mod tests;
 mod toolbar;
 

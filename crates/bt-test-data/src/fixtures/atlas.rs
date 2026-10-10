@@ -3,7 +3,8 @@
 //! Every tile is filled with a colour of its own and carries a marker in its top-left corner, a
 //! bar wider than it is tall, so a test can tell from a few pixels which tile was drawn and how
 //! it was mirrored or turned. Margins and spacing are a gutter colour, so a pixel bleeding in
-//! from beside a tile shows.
+//! from beside a tile shows. A test may give a picture of its own to cut instead
+//! ([`AtlasBuilder::picture`]).
 
 use std::collections::BTreeMap;
 use std::io::Cursor;
@@ -51,6 +52,7 @@ impl Atlas {
             render_size: TileRenderSize::Tile,
             fill_mode: FillMode::Stretch,
             animations: BTreeMap::new(),
+            picture: None,
         }
     }
 
@@ -64,7 +66,8 @@ impl Atlas {
     }
 
     /// The colour of tile `id` at `local` (pixels from its top-left), as drawn: the marker or
-    /// the tile's colour. `None` outside the tile.
+    /// the tile's colour. `None` outside the tile. (An atlas cut from a picture of the test's
+    /// own is drawn as the picture says, not like this.)
     pub fn tile_pixel(&self, id: TileId, local: UVec2) -> Option<[u8; 4]> {
         let size = self.tileset.tile_size();
         if local.x >= size.x || local.y >= size.y {
@@ -92,6 +95,7 @@ pub struct AtlasBuilder {
     render_size: TileRenderSize,
     fill_mode: FillMode,
     animations: BTreeMap<TileId, Vec<Frame>>,
+    picture: Option<RgbaImage>,
 }
 
 impl AtlasBuilder {
@@ -156,9 +160,16 @@ impl AtlasBuilder {
         self
     }
 
+    /// Cuts `picture` instead of drawing the tiles: it must be the size the grid, the tile size,
+    /// the margin and the spacing make.
+    pub fn picture(mut self, picture: RgbaImage) -> AtlasBuilder {
+        self.picture = Some(picture);
+        self
+    }
+
     /// The atlas with its image embedded in the tileset as PNG bytes.
-    pub fn build_embedded(self) -> Result<Atlas, FixtureError> {
-        let image = self.draw();
+    pub fn build_embedded(mut self) -> Result<Atlas, FixtureError> {
+        let image = self.draw()?;
         let mut bytes = Cursor::new(Vec::new());
         image
             .write_to(&mut bytes, ImageFormat::Png)
@@ -174,8 +185,8 @@ impl AtlasBuilder {
     }
 
     /// The atlas with its image written to `<dir>/<name>.png`.
-    pub fn build_in(self, dir: &Path) -> Result<Atlas, FixtureError> {
-        let image = self.draw();
+    pub fn build_in(mut self, dir: &Path) -> Result<Atlas, FixtureError> {
+        let image = self.draw()?;
         let file_name = format!("{}.png", self.name);
         let path = dir.join(&file_name);
         image
@@ -197,8 +208,19 @@ impl AtlasBuilder {
         )
     }
 
-    fn draw(&self) -> RgbaImage {
+    /// The picture given, or the tiles drawn.
+    fn draw(&mut self) -> Result<RgbaImage, FixtureError> {
         let size = self.image_size();
+        if let Some(picture) = self.picture.take() {
+            let found = UVec2::new(picture.width(), picture.height());
+            if found != size {
+                return Err(FixtureError::PictureSize {
+                    expected: size,
+                    found,
+                });
+            }
+            return Ok(picture);
+        }
         let mut image = RgbaImage::from_pixel(size.x, size.y, Rgba(GUTTER));
         for row in 0..self.rows {
             for column in 0..self.columns {
@@ -218,7 +240,7 @@ impl AtlasBuilder {
                 }
             }
         }
-        image
+        Ok(image)
     }
 
     fn finished(self, image: RgbaImage, source: ImageSource) -> Atlas {
@@ -307,6 +329,29 @@ mod tests {
         let colors: std::collections::HashSet<[u8; 4]> =
             (0..300).map(|id| Atlas::tile_color(TileId(id))).collect();
         assert!(colors.len() >= 200 && !colors.contains(&MARKER) && !colors.contains(&GUTTER));
+    }
+
+    #[test]
+    fn an_atlas_cuts_a_picture_of_the_size_its_grid_makes() {
+        let picture = RgbaImage::from_pixel(32, 16, Rgba([1, 2, 3, 255]));
+        let atlas = Atlas::builder()
+            .grid(2, 1)
+            .picture(picture.clone())
+            .build_embedded()
+            .unwrap();
+        assert_eq!(atlas.image, picture);
+        assert_eq!(atlas.tileset.tile_count(), 2);
+        let wrong = Atlas::builder()
+            .grid(3, 1)
+            .picture(picture)
+            .build_embedded();
+        assert_eq!(
+            wrong.unwrap_err(),
+            FixtureError::PictureSize {
+                expected: UVec2::new(48, 16),
+                found: UVec2::new(32, 16)
+            }
+        );
     }
 
     #[test]

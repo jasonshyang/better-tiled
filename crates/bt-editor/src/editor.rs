@@ -93,6 +93,7 @@ impl EditorBuilder {
             object_stroke: None,
             terrain_stroke: None,
             label_stroke: None,
+            layout_searches: Default::default(),
             keymap,
             tools: ToolState::default(),
             palette: PaletteState::default(),
@@ -127,6 +128,8 @@ pub struct Editor {
     pub(crate) terrain_stroke: Option<TerrainStrokeState>,
     /// A labelling stroke of the tileset editor's Terrain mode under way.
     pub(crate) label_stroke: Option<crate::terrain_sets::LabelStrokeState>,
+    /// Each document's last look for autotile layouts in its tileset's image.
+    pub(crate) layout_searches: crate::terrain_helpers::LayoutSearches,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
     pub(crate) palette: PaletteState,
@@ -272,6 +275,10 @@ impl Editor {
             Intent::ChooseLabelTerrain { doc, label } => self.choose_label_terrain(doc, label),
             Intent::LabelStroke(step) => self.label_stroke(step),
             Intent::EditTerrainSets { doc, edit } => self.edit_terrain_sets(doc, edit),
+            Intent::FindLayouts { doc } => self.find_layouts(doc),
+            Intent::ApplyLayout { doc, into, block } => self.apply_layout(doc, into, block),
+            Intent::LabelAllLayouts { doc, into } => self.label_all_layouts(doc, into),
+            Intent::TilesetImageRead(read) => self.finish_reading_tileset_image(*read),
             Intent::PasteObjects { doc, at } => self.paste_copied_objects(doc, at),
             Intent::MoveObjectsToLayer { doc, layer } => self.move_selected_objects_to(doc, layer),
             Intent::Stroke(step) => self.stroke(step),

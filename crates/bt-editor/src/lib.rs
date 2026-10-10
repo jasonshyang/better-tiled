@@ -24,6 +24,7 @@ mod recovery;
 mod session;
 mod settings;
 mod store;
+mod terrain_helpers;
 mod terrain_sets;
 mod tileset_commands;
 mod tools;
@@ -82,5 +83,8 @@ pub use watch::{Found, Observation};
 pub use bt_edit::{
     Brush, BrushMode, FillShape, LayerLocation, Node, ResizeHandle, SelectionMode, TileRegion,
     rect_select_rect, shape_fill_region,
+};
+pub use terrain_helpers::{
+    FoundLayouts, LayoutSearch, LayoutTarget, TilesetImageJob, TilesetImageRead,
 };
 pub use terrain_sets::{LabelMark, LabelStroke, LabelTerrain, TerrainSetEdit};

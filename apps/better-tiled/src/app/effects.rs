@@ -119,6 +119,14 @@ impl App {
                 self.quit_allowed = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            Effect::ReadTilesetImage(job) => {
+                let spawned = self.workers.spawn("tileset image", move || {
+                    vec![Intent::TilesetImageRead(Box::new(job.run()))]
+                });
+                if let Err(problem) = spawned {
+                    self.notify(Notice::error(problem));
+                }
+            }
         }
     }
 }

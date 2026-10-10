@@ -41,6 +41,9 @@ pub enum Effect {
     Show(Dialog),
     /// Close the window: nothing unsaved is left, or the user chose to lose it.
     Quit,
+    /// Read a tileset's pixels on a worker for a labelling helper, and hand the result back as
+    /// [`crate::Intent::TilesetImageRead`].
+    ReadTilesetImage(crate::terrain_helpers::TilesetImageJob),
 }
 
 /// A dialog of the window's.
