@@ -312,3 +312,77 @@ fn objects_the_rules_place_keep_their_ids_from_one_result_to_the_next() {
     assert!(placed[1].0 > 2, "{placed:?}");
     assert!(third.result().next_object_id > placed[1].0);
 }
+
+#[test]
+fn updating_after_painting_equals_deriving_again() {
+    use bt_test_data::Fuzz;
+    use bt_utils::rng::Rng;
+    use common::random::{
+        RandomMap, below, cell_at, chance, random_edit, random_map, random_rule_map,
+        tile_layer_names,
+    };
+
+    let fuzz = Fuzz::from_env(0x1A7E_5ED1, 200);
+    let mut around = 0;
+    for case in 0..fuzz.cases {
+        let mut rng = Rng::new(fuzz.case_seed(case));
+        let rule_maps: Vec<_> = (0..1 + below(&mut rng, 3))
+            .map(|_| random_rule_map(&mut rng))
+            .collect();
+        let rules_text: Vec<String> = rule_maps.iter().map(|r| r.text.clone()).collect();
+        let rules = rules_of(rule_maps.into_iter().map(|r| r.map).collect());
+        let RandomMap {
+            map,
+            content,
+            compared,
+            text: map_text,
+            ..
+        } = random_map(&mut rng);
+        let names = LayerNames::found_in(&map, &rules.rule_layers());
+        let runs = if chance(&mut rng, 30) {
+            vec![names.clone(), names]
+        } else {
+            vec![names]
+        };
+        let setup = Setup {
+            rules: PathBuf::from("/rules/rules.txt"),
+            runs,
+            seed: rng.next_u64(),
+        };
+        let before = AutoLayers::derive(Arc::new(map.clone()), &setup, &rules);
+        let mut edited = map.clone();
+        let edit = random_edit(&mut rng, &mut edited, content);
+        let edited = Arc::new(edited);
+        let updated = before.after_painting(Arc::clone(&edited), &setup, &rules);
+        let derived = AutoLayers::derive(edited, &setup, &rules);
+        let describe = || {
+            format!(
+                "case {case} (BT_FUZZ_SEED={} BT_FUZZ_CASES={}), {} runs\n{}\n{map_text}\n{}",
+                fuzz.seed,
+                fuzz.cases,
+                setup.runs.len(),
+                rules_text.join("\n"),
+                edit.text
+            )
+        };
+        assert_eq!(
+            updated.result().layers.len(),
+            derived.result().layers.len(),
+            "{}",
+            describe()
+        );
+        for name in tile_layer_names(&[updated.result(), derived.result()]) {
+            for p in compared.points() {
+                let (got, want) = (
+                    cell_at(updated.result(), &name, p),
+                    cell_at(derived.result(), &name, p),
+                );
+                assert_eq!(got, want, "{name} at {p}: {}", describe());
+            }
+        }
+        if updated.reports().iter().all(|r| r.incremental) {
+            around += 1;
+        }
+    }
+    assert!(around > 0, "no case was updated around its edit");
+}

@@ -279,17 +279,26 @@ impl Editor {
         self.automap.saved.retain(|doc, _| on.contains(doc));
         let mut effects = Vec::new();
         for derivation in stale {
-            let previous = self
-                .automap
-                .live
-                .get(&derivation.doc)
-                .map(|live| &live.layers);
-            let layers = AutoLayers::update(
-                previous,
-                derivation.painted,
-                &derivation.setup,
-                &derivation.rules,
-            );
+            let previous = self.automap.live.get(&derivation.doc);
+            // Only what was painted changed: each run works around the change.
+            let layers = match previous {
+                Some(live)
+                    if live.setup == derivation.setup
+                        && Arc::ptr_eq(&live.rules, &derivation.rules) =>
+                {
+                    live.layers.after_painting(
+                        derivation.painted,
+                        &derivation.setup,
+                        &derivation.rules,
+                    )
+                }
+                _ => AutoLayers::update(
+                    previous.map(|live| &live.layers),
+                    derivation.painted,
+                    &derivation.setup,
+                    &derivation.rules,
+                ),
+            };
             if let Some(saved) = self.automap.saved.remove(&derivation.doc)
                 && **layers.result() != *saved
             {

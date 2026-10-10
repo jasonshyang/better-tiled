@@ -3,11 +3,13 @@
 
 use std::sync::Arc;
 
-use bt_core::Map;
+use bt_core::{LayerId, Map};
+use bt_utils::IRect;
 
+use super::change::MapChange;
 use super::object_ids::keep_object_ids;
 use super::setup::Setup;
-use crate::engine::RunRequest;
+use crate::engine::{Area, RunRequest};
 use crate::problem::Problem;
 use crate::rules::{Report, RuleSet};
 
@@ -64,6 +66,73 @@ impl AutoLayers {
         layers
     }
 
+    /// The result again after what was painted changed, with the setup and rules `self` was
+    /// made with (the caller's to know): the same when nothing the rules see changed; when
+    /// only cells changed, each run recomputes just what the change can reach, with region
+    /// runs that give there exactly what a full run gives (§7), and keeps the rest of its
+    /// stage; else, or when a run cannot work around the change, full runs that keep placed
+    /// objects' ids.
+    pub fn after_painting(&self, painted: Arc<Map>, setup: &Setup, rules: &RuleSet) -> AutoLayers {
+        match MapChange::between(&self.painted, &painted) {
+            MapChange::Nothing => AutoLayers {
+                painted,
+                after: self.after.clone(),
+                reports: self.reports.clone(),
+            },
+            MapChange::Cells(changed) => self
+                .around(Arc::clone(&painted), setup, rules, changed)
+                .unwrap_or_else(|| AutoLayers::update(Some(self), painted, setup, rules)),
+            MapChange::Everything => AutoLayers::update(Some(self), painted, setup, rules),
+        }
+    }
+
+    /// Each run recomputed around `changed`, the cells of what was painted that changed: a
+    /// region run on the new stage before it, whose result inside the area it may change goes
+    /// over the run's old stage. `None` when a run cannot work so (object outputs, a region run
+    /// that falls back to a full run, layers that differ).
+    fn around(
+        &self,
+        painted: Arc<Map>,
+        setup: &Setup,
+        rules: &RuleSet,
+        changed: IRect,
+    ) -> Option<AutoLayers> {
+        let places_objects = rules
+            .rule_maps()
+            .iter()
+            .any(|rule_map| !rule_map.object_outputs().is_empty());
+        if places_objects || self.after.len() != setup.runs.len() {
+            return None;
+        }
+        let mut after: Vec<Arc<Map>> = Vec::with_capacity(setup.runs.len());
+        let mut reports = Vec::with_capacity(setup.runs.len());
+        let mut region = changed;
+        for (run, names) in setup.runs.iter().enumerate() {
+            let input = Arc::clone(after.last().unwrap_or(&painted));
+            let old = self.after.get(run)?;
+            let affected = rules.affected_area(&input, region)?.union(region);
+            let mut window = Map::clone(&input);
+            let request = RunRequest::builder(setup.run_seed(run))
+                .area(Area::Edit(region))
+                .layer_names(names.clone())
+                .build();
+            let report = rules.run(&mut window, &request);
+            if !report.incremental {
+                return None;
+            }
+            let mut stage = Map::clone(old);
+            copy_cells(&window, &mut stage, affected)?;
+            reports.push(report);
+            after.push(Arc::new(stage));
+            region = affected;
+        }
+        Some(AutoLayers {
+            painted,
+            after,
+            reports,
+        })
+    }
+
     /// The painted map with no run made: its result is what was painted (rules that could not
     /// be read run nothing).
     pub fn painted_only(painted: Arc<Map>) -> AutoLayers {
@@ -105,4 +174,32 @@ impl AutoLayers {
     pub fn problems(&self) -> impl Iterator<Item = &Problem> {
         self.reports.iter().flat_map(|report| &report.problems)
     }
+}
+
+/// Copies the cells of every tile layer of `from` inside `area` into the same layer of `into`;
+/// `None` when the two maps' layers differ.
+fn copy_cells(from: &Map, into: &mut Map, area: IRect) -> Option<()> {
+    if layer_ids(from) != layer_ids(into) {
+        return None;
+    }
+    let mut copied = true;
+    into.for_each_layer_mut(|layer| {
+        let source = from.layer(layer.id).and_then(|l| l.as_tile_layer());
+        let (Some(target), Some(source)) = (layer.as_tile_layer_mut(), source) else {
+            return;
+        };
+        for p in area.points() {
+            if target.contains(p) && target.set_cell(p, source.cell(p)).is_err() {
+                copied = false;
+            }
+        }
+    });
+    copied.then_some(())
+}
+
+/// The ids of a map's layers, depth first.
+fn layer_ids(map: &Map) -> Vec<LayerId> {
+    let mut ids = Vec::new();
+    map.for_each_layer(|layer, _| ids.push(layer.id));
+    ids
 }
