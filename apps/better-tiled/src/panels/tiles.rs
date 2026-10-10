@@ -1,17 +1,18 @@
 //! The Tiles panel: the map's tilesets as tabs, and the current one's tiles at the panel's zoom
 //! (an atlas in its own columns, a collection wrapped to the panel). Only the rows in view are
 //! drawn. Clicking a tile, or dragging over a rectangle of them, makes them the brush, laid out
-//! as they are in the tileset.
+//! as they are in the tileset. Edit Tileset opens the tileset editor in place of the map.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use bt_core::{Cell, Map, PlacedCell, TileId, Tileset, TilesetImage, TilesetRef, TilesetSlot};
+use bt_core::{Cell, Map, PlacedCell, Tileset, TilesetImage, TilesetRef, TilesetSlot};
 use bt_editor::{DocumentId, Editor, Intent};
 use bt_image::ImageStore;
-use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Pos2, Sense, Stroke, StrokeKind, vec2};
 
-use super::tile_images::{TileImages, TileTexture, Uploaded};
+use super::tile_grid::{TileGrid, TileSource, cell_size, paint_tile};
+use super::tile_images::{TileImages, TileTexture};
 
 /// The zoom range of the panel.
 const ZOOM_RANGE: std::ops::RangeInclusive<f32> = 0.25..=4.0;
@@ -64,47 +65,6 @@ struct PickedPlace {
     row: usize,
 }
 
-/// Where a tileset's tiles go in the panel.
-#[derive(Copy, Clone, Debug, PartialEq)]
-struct TileGrid {
-    origin: Pos2,
-    cell: Vec2,
-    columns: usize,
-    count: usize,
-}
-
-impl TileGrid {
-    fn rect(&self, index: usize) -> Rect {
-        let column = index % self.columns;
-        let row = index / self.columns;
-        Rect::from_min_size(
-            self.origin + vec2(column as f32 * self.cell.x, row as f32 * self.cell.y),
-            self.cell,
-        )
-    }
-
-    fn index_at(&self, at: Pos2) -> Option<usize> {
-        let offset = at - self.origin;
-        if offset.x < 0.0 || offset.y < 0.0 {
-            return None;
-        }
-        let column = (offset.x / self.cell.x) as usize;
-        let row = (offset.y / self.cell.y) as usize;
-        let index = row * self.columns + column;
-        (column < self.columns && index < self.count).then_some(index)
-    }
-
-    fn rows(&self) -> usize {
-        self.count.div_ceil(self.columns)
-    }
-}
-
-/// What the panel draws a tileset with.
-struct TileSource<'a> {
-    images: &'a mut TileImages,
-    store: &'a Mutex<ImageStore>,
-}
-
 impl TilesPanel {
     /// Shows the tilesets of `doc`'s map; tiles picked become the brush through `out`.
     pub(crate) fn show(
@@ -131,11 +91,23 @@ impl TilesPanel {
         };
         let key = tileset_key(doc, reference);
         let mut zoom = self.zoom.get(&key).copied().unwrap_or(1.0);
-        ui.add(
-            egui::Slider::new(&mut zoom, ZOOM_RANGE)
-                .logarithmic(true)
-                .text("Zoom"),
-        );
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::Slider::new(&mut zoom, ZOOM_RANGE)
+                    .logarithmic(true)
+                    .text("Zoom"),
+            );
+            if let Some(slot) = TilesetSlot::new(current)
+                && ui
+                    .button("Edit Tileset")
+                    .on_hover_text(
+                        "Its tiles' collision shapes and animations, in place of the map",
+                    )
+                    .clicked()
+            {
+                out.push(Intent::EditTileset { doc, slot });
+            }
+        });
         self.zoom.insert(key.clone(), zoom);
         ui.separator();
         let mut source = TileSource { images, store };
@@ -289,70 +261,6 @@ impl TilesPanel {
     }
 }
 
-/// The size of a tile's cell in the panel at zoom 1: the tile size of an atlas, the largest
-/// image of a collection.
-fn cell_size(tileset: &Tileset, ids: &[TileId]) -> Vec2 {
-    let size = match tileset.image {
-        TilesetImage::Atlas { .. } => tileset.tile_size(),
-        TilesetImage::Collection => ids
-            .iter()
-            .map(|id| tileset.tile_pixel_size(*id))
-            .fold(glam::UVec2::ZERO, glam::UVec2::max),
-    };
-    vec2(size.x.max(1) as f32, size.y.max(1) as f32)
-}
-
-fn paint_tile(
-    ui: &egui::Ui,
-    tileset: &Tileset,
-    id: TileId,
-    cell: Rect,
-    source: &mut TileSource<'_>,
-) {
-    let Some(image) = tileset.tile_image(id) else {
-        return;
-    };
-    match source.images.texture(ui.ctx(), source.store, image.image) {
-        TileTexture::Ready(uploaded) => {
-            let size = vec2(image.rect.w as f32, image.rect.h as f32);
-            let scale = (cell.width() / size.x.max(1.0)).min(cell.height() / size.y.max(1.0));
-            let rect = Rect::from_center_size(cell.center(), size * scale);
-            ui.painter().image(
-                uploaded.texture.id(),
-                rect,
-                uv_of(uploaded, image.rect),
-                Color32::WHITE,
-            );
-        }
-        TileTexture::Pending => {
-            ui.painter()
-                .rect_filled(cell.shrink(1.0), 0.0, ui.visuals().faint_bg_color);
-            ui.ctx().request_repaint();
-        }
-        TileTexture::Failed(_) => {
-            let stroke = Stroke::new(1.0, ui.visuals().error_fg_color);
-            let rect = cell.shrink(2.0);
-            ui.painter()
-                .line_segment([rect.left_top(), rect.right_bottom()], stroke);
-            ui.painter()
-                .line_segment([rect.right_top(), rect.left_bottom()], stroke);
-        }
-    }
-}
-
-/// A tile's rectangle in its image, as texture coordinates.
-fn uv_of(uploaded: &Uploaded, rect: bt_utils::IRect) -> Rect {
-    let width = uploaded.image_size.x.max(1) as f32;
-    let height = uploaded.image_size.y.max(1) as f32;
-    Rect::from_min_max(
-        pos2(rect.x as f32 / width, rect.y as f32 / height),
-        pos2(
-            (rect.x + rect.w) as f32 / width,
-            (rect.y + rect.h) as f32 / height,
-        ),
-    )
-}
-
 /// What a tileset tab shows.
 fn tileset_name(reference: &TilesetRef) -> String {
     if !reference.tileset.name.is_empty() {
@@ -376,27 +284,6 @@ fn tileset_key(doc: DocumentId, reference: &TilesetRef) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn grids_find_tiles_under_the_pointer() {
-        let grid = TileGrid {
-            origin: pos2(10.0, 10.0),
-            cell: vec2(16.0, 8.0),
-            columns: 3,
-            count: 7,
-        };
-        assert_eq!(grid.rows(), 3);
-        assert_eq!(grid.index_at(pos2(10.0, 10.0)), Some(0));
-        assert_eq!(grid.index_at(pos2(43.0, 19.0)), Some(5));
-        assert_eq!(grid.index_at(pos2(30.0, 27.0)), None, "past the last tile");
-        assert_eq!(
-            grid.index_at(pos2(60.0, 10.0)),
-            None,
-            "past the last column"
-        );
-        assert_eq!(grid.index_at(pos2(5.0, 12.0)), None);
-        assert_eq!(grid.rect(4).min, pos2(26.0, 18.0));
-    }
 
     #[test]
     fn a_dragged_pick_is_a_rectangle_whatever_its_corners() {

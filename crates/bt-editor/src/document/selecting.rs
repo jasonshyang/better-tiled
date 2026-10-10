@@ -18,7 +18,7 @@ impl Editor {
         if let Some(document) = self.documents.get_mut(doc) {
             document.selection = document.selection.with_current_layer(layer);
         }
-        let family = self.current_family(doc);
+        let family = self.tool_family(doc);
         self.tools.follow_layer(family);
         self.session_changed();
     }
@@ -46,7 +46,7 @@ impl Editor {
 
     /// The family of tools `doc` takes: the object tools for a tileset editor's collision
     /// shapes, none for its other modes, else the current layer's.
-    pub(crate) fn current_family(&self, doc: DocumentId) -> Option<ToolFamily> {
+    pub fn tool_family(&self, doc: DocumentId) -> Option<ToolFamily> {
         if let Some(editing) = self.documents.get(doc)?.tileset_editing() {
             return (editing.mode() == crate::document::TilesetMode::Collision)
                 .then_some(ToolFamily::Object);

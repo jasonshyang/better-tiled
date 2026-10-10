@@ -761,3 +761,102 @@ fn new_objects_follow_the_pointer_and_command_toggles_snapping() {
         ]
     );
 }
+
+#[test]
+fn a_tilesets_collision_shapes_and_animations_are_edited_in_place_of_the_map() {
+    use bt_core::{Frame, TileId};
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::{DVec2, UVec2};
+
+    let scratch = Scratch::new("window-tileset-editor").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(4, 3))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", "1 1 1 1\n1 1 1 1\n1 1 1 1")
+        .build()
+        .unwrap();
+    let path = scratch.join("edit-tileset.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let tile = |window: &TestWindow| {
+        window
+            .editor()
+            .edited_tileset(doc)
+            .and_then(|tileset| tileset.tile(TileId(3)).cloned())
+    };
+
+    window.click("Edit Tileset");
+    assert!(window.editor().edited_tileset(doc).is_some());
+    let at = window.tileset_tile(3);
+    window.click_on_screen(at, PointerButton::Primary, Modifiers::NONE);
+    let editing = window
+        .editor()
+        .document(doc)
+        .unwrap()
+        .tileset_editing()
+        .cloned()
+        .unwrap();
+    assert_eq!(editing.current_tile(), Some(TileId(3)));
+
+    // Collision: R draws a rectangle on the tile.
+    window.click("Collision");
+    window.press(Modifiers::NONE, Key::R);
+    let from = window.collision_point(DVec2::new(2.0, 2.0));
+    let to = window.collision_point(DVec2::new(10.0, 10.0));
+    window.drag_on_screen(from, to, Modifiers::NONE);
+    let shapes = tile(&window).and_then(|data| data.collision).unwrap();
+    let rect = &shapes.layer.objects[0];
+    assert!(
+        (rect.pos - DVec2::new(2.0, 2.0)).length() < 0.01,
+        "{}",
+        rect.pos
+    );
+    assert!(
+        (rect.size - DVec2::new(8.0, 8.0)).length() < 0.01,
+        "{}",
+        rect.size
+    );
+    assert_eq!(
+        window.editor().map_of(doc).unwrap().layers.len(),
+        1,
+        "the map behind is untouched"
+    );
+
+    // Animation: tiles clicked in the palette become frames.
+    window.click("Animation");
+    for frame in [0, 1] {
+        let at = window.palette_tile(frame);
+        window.click_on_screen(at, PointerButton::Primary, Modifiers::NONE);
+    }
+    let frames: Vec<u32> = tile(&window)
+        .unwrap()
+        .animation
+        .iter()
+        .map(|f: &Frame| f.tile.0)
+        .collect();
+    assert_eq!(frames, [0, 1]);
+
+    // Back to the map, which holds the changes, unsaved.
+    window.click("◀ Map");
+    assert!(
+        window
+            .editor()
+            .document(doc)
+            .unwrap()
+            .tileset_editing()
+            .is_none()
+    );
+    assert!(window.editor().has_unsaved());
+    let reference = &window.editor().map_of(doc).unwrap().tilesets[0];
+    assert_eq!(
+        reference.tileset.tile(TileId(3)).unwrap().animation.len(),
+        2
+    );
+}

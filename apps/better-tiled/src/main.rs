@@ -14,6 +14,7 @@ mod platform;
 mod style;
 #[cfg(test)]
 mod test_window;
+mod tileset_editor;
 mod tools;
 mod workers;
 

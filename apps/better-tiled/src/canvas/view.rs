@@ -120,6 +120,18 @@ pub(crate) struct CanvasFrame<'a> {
     pub(crate) dialog_open: bool,
     /// The editor, which the tools read.
     pub(crate) editor: &'a Editor,
+    /// What the canvas shows.
+    pub(crate) role: CanvasRole,
+}
+
+/// What a canvas shows.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CanvasRole {
+    /// A document's map: its selected cells and the hovered cell are drawn, and the camera is
+    /// remembered with the document.
+    Map,
+    /// The tileset editor's collision view of a tile: objects only, with a camera of its own.
+    Collision,
 }
 
 impl Canvas {
@@ -180,7 +192,7 @@ impl Canvas {
                 .add(gpu.callback(view.rect, input, time_ms, ui.ctx().clone()));
         }
         let state = self.camera.view_state();
-        if self.framed && self.told != Some(state) {
+        if frame.role == CanvasRole::Map && self.framed && self.told != Some(state) {
             self.told = Some(state);
             out.push(Intent::SetCamera {
                 doc: frame.doc,
@@ -362,7 +374,12 @@ impl Canvas {
         time_ms: u64,
     ) -> FrameInput {
         let pixels_per_point = view.pixels_per_point as f32;
-        let selection = self.selection_polygons(frame).to_vec();
+        let cells = frame.role == CanvasRole::Map;
+        let selection = if cells {
+            self.selection_polygons(frame).to_vec()
+        } else {
+            Vec::new()
+        };
         let objects = self.object_polygons(frame).to_vec();
         let overlays = overlay_vectors(&OverlayInput {
             map: frame.map,
@@ -370,15 +387,16 @@ impl Canvas {
             zoom_px: view.zoom_px,
             pixels_per_point,
             grid: frame.toggles.grid,
-            hover: self.hover.map(|hover| hover.cell),
+            hover: self.hover.filter(|_| cells).map(|hover| hover.cell),
             settings: frame.settings,
             selection: &selection,
             layer_offset: self.layer_offset,
             objects: &objects,
-            carrying: frame
-                .editor
-                .document(frame.doc)
-                .is_some_and(|d| d.selection().carries_tiles()),
+            carrying: cells
+                && frame
+                    .editor
+                    .document(frame.doc)
+                    .is_some_and(|d| d.selection().carries_tiles()),
             tool: &self.tool_overlay.vectors,
         });
         let layers = if frame.toggles.highlight_current_layer {

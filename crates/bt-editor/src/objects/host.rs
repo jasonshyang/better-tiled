@@ -7,8 +7,12 @@
 
 use std::sync::Arc;
 
-use bt_core::{ObjectLayer, TileId, Tileset};
+use bt_core::{
+    Cell, Layer, LayerId, LayerKind, Map, ObjectLayer, TileId, TileLayer, Tileset, TilesetRef,
+    TilesetSlot,
+};
 use bt_edit::ObjectSpace;
+use glam::{IVec2, UVec2};
 
 use crate::document::{DocumentId, TilesetMode};
 use crate::editor::Editor;
@@ -66,6 +70,43 @@ impl Editor {
                 Some(ObjectHost::Map(document.asset()))
             }
         }
+    }
+
+    /// What the tileset editor's collision view draws for `doc` in Collision mode: a one-cell
+    /// map of the current tile's grid (the grid its shapes live in) holding the tile and its
+    /// shapes, as Tiled's collision editor builds one; `None` otherwise.
+    pub fn collision_view(&self, doc: DocumentId) -> Option<Map> {
+        let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) else {
+            return None;
+        };
+        let shapes = self.tile_shapes(home, tile)?;
+        let geometry = *shapes.space().geometry();
+        let slot = TilesetSlot::new(0)?;
+        let mut cells = TileLayer::finite(UVec2::ONE);
+        cells.set_cell(IVec2::ZERO, Cell::new(slot, tile)).ok()?;
+        let next_object_id = shapes
+            .shapes
+            .objects
+            .iter()
+            .map(|o| o.id.0)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
+        Some(Map {
+            orientation: geometry.orientation,
+            width: 1,
+            height: 1,
+            tile_width: u32::try_from(geometry.tile_width).ok()?,
+            tile_height: u32::try_from(geometry.tile_height).ok()?,
+            tilesets: vec![TilesetRef::embedded(Arc::clone(&shapes.tileset))],
+            layers: vec![
+                Layer::new(LayerId(1), "Tile", LayerKind::Tile(cells)),
+                Layer::new(LayerId(2), "Collision", LayerKind::Object(shapes.shapes)),
+            ],
+            next_layer_id: 3,
+            next_object_id,
+            ..Map::default()
+        })
     }
 
     /// A tile's collision shapes.

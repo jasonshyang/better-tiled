@@ -119,7 +119,13 @@ impl TestWindow {
         self.drag_on_screen(start, end, modifiers);
     }
 
-    fn drag_on_screen(&mut self, start: egui::Pos2, end: egui::Pos2, modifiers: egui::Modifiers) {
+    /// Drags with the primary button from one screen point to another, holding `modifiers`.
+    pub(crate) fn drag_on_screen(
+        &mut self,
+        start: egui::Pos2,
+        end: egui::Pos2,
+        modifiers: egui::Modifiers,
+    ) {
         self.pointer(egui::Event::PointerMoved(start));
         self.pointer(egui::Event::PointerButton {
             pos: start,
@@ -163,7 +169,8 @@ impl TestWindow {
         self.click_on_screen(at, button, modifiers);
     }
 
-    fn click_on_screen(
+    /// Clicks a screen point with `button`, holding `modifiers`.
+    pub(crate) fn click_on_screen(
         &mut self,
         at: egui::Pos2,
         button: egui::PointerButton,
@@ -186,6 +193,41 @@ impl TestWindow {
         self.harness.run_steps(1);
         let Some(at) = self.harness.state().cell_on_screen(cell) else {
             panic!("no map is shown, so cell {cell} is nowhere");
+        };
+        at
+    }
+
+    /// Where the middle of a tile of the tileset editor is on screen.
+    pub(crate) fn tileset_tile(&mut self, tile: u32) -> egui::Pos2 {
+        self.harness.run_steps(1);
+        let Some(at) = self
+            .harness
+            .state()
+            .tileset_tile_on_screen(bt_core::TileId(tile))
+        else {
+            panic!("the tileset editor shows no tile {tile}");
+        };
+        at
+    }
+
+    /// Where a point of the collision view is on screen.
+    pub(crate) fn collision_point(&mut self, world: glam::DVec2) -> egui::Pos2 {
+        self.harness.run_steps(1);
+        let Some(at) = self.harness.state().collision_world_on_screen(world) else {
+            panic!("no collision view is shown");
+        };
+        at
+    }
+
+    /// Where the middle of a tile of the animation editor's palette is on screen.
+    pub(crate) fn palette_tile(&mut self, tile: u32) -> egui::Pos2 {
+        self.harness.run_steps(1);
+        let Some(at) = self
+            .harness
+            .state()
+            .palette_tile_on_screen(bt_core::TileId(tile))
+        else {
+            panic!("the animation editor shows no tile {tile}");
         };
         at
     }

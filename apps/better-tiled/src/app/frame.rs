@@ -17,7 +17,7 @@ use super::startup::{RunOutcome, Startup};
 use super::status_bar::{StatusInput, status_bar};
 use super::tabs::tab_strip;
 use super::toolbar::toolbar;
-use crate::canvas::{Canvas, CanvasFrame, CanvasGpu};
+use crate::canvas::{Canvas, CanvasFrame, CanvasGpu, CanvasRole};
 use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun};
 use crate::dialogs::{DialogRequest, Modals};
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
@@ -25,6 +25,7 @@ use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{LayersPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::apply_theme;
+use crate::tileset_editor::{TilesetEditorView, TilesetFrame};
 use crate::tools::ToolBox;
 use crate::workers::Workers;
 
@@ -45,6 +46,8 @@ pub(crate) struct App {
     /// The canvas's tools.
     toolbox: ToolBox,
     tiles_panel: TilesPanel,
+    /// The tileset editor, shown in place of a map or in a tileset's tab.
+    pub(super) tileset_editor: TilesetEditorView,
     pub(super) tile_images: TileImages,
     pub(super) modals: Modals,
     pub(super) workers: Workers,
@@ -161,6 +164,29 @@ impl App {
         Some(self.canvases.get(&doc)?.last_view()?.world_to_screen(world))
     }
 
+    /// Where the middle of a tile of the current document's tileset editor is on screen (for
+    /// the window's tests).
+    #[cfg(test)]
+    pub(crate) fn tileset_tile_on_screen(&self, tile: bt_core::TileId) -> Option<egui::Pos2> {
+        self.tileset_editor
+            .tile_on_screen(self.editor.current()?, tile)
+    }
+
+    /// Where a point of the current document's collision view is on screen (for the window's
+    /// tests).
+    #[cfg(test)]
+    pub(crate) fn collision_world_on_screen(&self, world: glam::DVec2) -> Option<egui::Pos2> {
+        self.tileset_editor
+            .collision_world_on_screen(self.editor.current()?, world)
+    }
+
+    /// Where the middle of a tile of the animation editor's palette is on screen (for the
+    /// window's tests).
+    #[cfg(test)]
+    pub(crate) fn palette_tile_on_screen(&self, tile: bt_core::TileId) -> Option<egui::Pos2> {
+        self.tileset_editor.palette_tile_on_screen(tile)
+    }
+
     /// Delivers intents as a worker would (for the window's tests: a file dialog's answer).
     #[cfg(test)]
     pub(crate) fn inject_worker_result(&mut self, intents: Vec<Intent>) {
@@ -210,6 +236,7 @@ impl App {
             layers_panel: LayersPanel::default(),
             toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
+            tileset_editor: TilesetEditorView::default(),
             tile_images: TileImages::default(),
             modals: Modals::default(),
             workers: Workers::new(ctx.clone()),
@@ -362,6 +389,7 @@ impl App {
         egui::CentralPanel::default().show(ui, |ui| {
             tab_strip(ui, &self.editor, &mut self.intents);
             match self.editor.current() {
+                Some(doc) if self.shows_tileset_editor(doc) => self.show_tileset_editor(ui, doc),
                 Some(doc) => self.show_canvas(ui, doc),
                 None => self.show_welcome(ui),
             }
@@ -386,9 +414,41 @@ impl App {
             typing: is_typing(ui.ctx()),
             dialog_open: self.modals.is_open(),
             editor: &self.editor,
+            role: CanvasRole::Map,
         };
         let canvas = self.canvases.entry(doc).or_default();
         canvas.show(ui, &frame, &mut self.toolbox, &mut self.intents);
+    }
+
+    /// Whether `doc` shows its tileset editor in place of a map.
+    fn shows_tileset_editor(&self, doc: DocumentId) -> bool {
+        self.editor
+            .document(doc)
+            .is_some_and(|d| d.tileset_editing().is_some())
+    }
+
+    fn show_tileset_editor(&mut self, ui: &mut egui::Ui, doc: DocumentId) {
+        let frame = TilesetFrame {
+            editor: &self.editor,
+            doc,
+            images: &mut self.tile_images,
+            store: &self.images,
+            gpu: self.gpu.as_ref(),
+            typing: is_typing(ui.ctx()),
+            dialog_open: self.modals.is_open(),
+        };
+        self.tileset_editor
+            .show(ui, frame, &mut self.toolbox, &mut self.intents);
+    }
+
+    /// The canvas the current document shows: its map's, or its collision view's.
+    fn shown_canvas(&self) -> Option<&Canvas> {
+        let doc = self.editor.current()?;
+        if self.shows_tileset_editor(doc) {
+            self.tileset_editor.collision_canvas(doc)
+        } else {
+            self.canvases.get(&doc)
+        }
     }
 
     fn show_welcome(&mut self, ui: &mut egui::Ui) {
@@ -417,7 +477,7 @@ impl App {
 
     fn show_status_bar(&mut self, ui: &mut egui::Ui) {
         let current = self.editor.current();
-        let canvas = current.and_then(|doc| self.canvases.get(&doc));
+        let canvas = self.shown_canvas();
         let input = StatusInput {
             flash: self.flash.as_ref().map(|flash| &flash.notice),
             hover: canvas.and_then(Canvas::hover),
@@ -434,6 +494,10 @@ impl App {
         let Some(doc) = self.editor.current() else {
             return;
         };
+        if self.editor.map_of(doc).is_none() {
+            // A tileset's tab: the tileset editor is all there is.
+            return;
+        }
         egui::Panel::left("layers")
             .resizable(true)
             .default_size(220.0)
@@ -475,6 +539,8 @@ impl App {
         let editor = &self.editor;
         self.canvases
             .retain(|doc, _| editor.document(*doc).is_some());
+        let open: Vec<DocumentId> = editor.documents().in_order().map(|d| d.id()).collect();
+        self.tileset_editor.retain_documents(&open);
         self.step_dev_run(ctx);
     }
 

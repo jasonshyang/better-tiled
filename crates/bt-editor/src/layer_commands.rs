@@ -240,7 +240,7 @@ impl Editor {
             tx.selection = selection;
             Ok::<_, EditError>(())
         });
-        let family = self.current_family(doc);
+        let family = self.tool_family(doc);
         self.tools.follow_layer(family);
         result.err().map(warn).into_iter().collect()
     }

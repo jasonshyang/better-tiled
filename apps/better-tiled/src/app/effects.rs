@@ -61,11 +61,18 @@ impl App {
                 .modals
                 .push(Modal::ChooseLayer(ChooseLayerDialog::new(doc))),
             Effect::PasteAtPointer(doc) => {
-                let at = self
-                    .canvases
-                    .get(&doc)
-                    .and_then(crate::canvas::Canvas::hover)
-                    .map(|hover| hover.pixel);
+                let in_tileset = self
+                    .editor
+                    .document(doc)
+                    .is_some_and(|d| d.tileset_editing().is_some());
+                let at = if in_tileset {
+                    self.tileset_editor.collision_pointer(doc)
+                } else {
+                    self.canvases
+                        .get(&doc)
+                        .and_then(crate::canvas::Canvas::hover)
+                        .map(|hover| hover.pixel)
+                };
                 self.intents.push(Intent::PasteObjects { doc, at });
             }
             Effect::Show(Dialog::Preferences) => {

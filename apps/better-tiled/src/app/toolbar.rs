@@ -45,14 +45,23 @@ const MODES: [(SelectionMode, &str); 4] = [
 /// Draws the toolbar; a chosen tool or option goes to `out`.
 pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>) {
     let current = editor.tools().tool();
-    let family = current_family(editor);
+    let doc = editor.current();
+    let family = doc.and_then(|doc| editor.tool_family(doc));
+    let in_tileset = doc
+        .and_then(|doc| editor.document(doc))
+        .is_some_and(|d| d.tileset_editing().is_some());
     ui.horizontal(|ui| {
         let tools: &[ToolKind] = match family {
             Some(ToolFamily::Tile) => &TILE_TOOLS,
             Some(ToolFamily::Object) => &OBJECT_TOOLS,
             Some(ToolFamily::Any) | None => &[],
         };
-        for &tool in tools.iter().chain([&ToolKind::OffsetLayers]) {
+        let map_tools = (!in_tileset).then_some(&ToolKind::OffsetLayers);
+        for &tool in tools.iter().chain(map_tools) {
+            // The collision editor's shapes are never tiles or text, as in Tiled.
+            if in_tileset && matches!(tool, ToolKind::InsertTile | ToolKind::InsertText) {
+                continue;
+            }
             tool_button(ui, editor, tool, current == tool, out);
         }
         if current == ToolKind::ShapeFill {
@@ -115,16 +124,4 @@ fn tool_button(
     if response.clicked() {
         out.push(Intent::Run(id));
     }
-}
-
-/// The family of the current layer of the current document.
-fn current_family(editor: &Editor) -> Option<ToolFamily> {
-    let doc = editor.current()?;
-    let id = editor.document(doc)?.selection().current_layer?;
-    let layer = editor.map_of(doc)?.layer(id)?;
-    Some(match layer.kind {
-        bt_core::LayerKind::Tile(_) => ToolFamily::Tile,
-        bt_core::LayerKind::Object(_) => ToolFamily::Object,
-        bt_core::LayerKind::Image(_) | bt_core::LayerKind::Group(_) => ToolFamily::Any,
-    })
 }

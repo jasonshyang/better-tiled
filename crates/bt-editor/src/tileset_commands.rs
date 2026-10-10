@@ -127,7 +127,7 @@ impl Editor {
     /// Makes the tools follow what a document edits: the object tools for collision shapes, the
     /// current layer's family on a map.
     pub(crate) fn follow_document(&mut self, doc: DocumentId) {
-        let family = self.current_family(doc);
+        let family = self.tool_family(doc);
         self.tools.follow_layer(family);
     }
 }

@@ -147,6 +147,12 @@ impl Editor {
             ActionId::MoveObjectsToLayer if editing_tileset => {
                 Enabled::Disabled(Some("Collision shapes stay with their tile".to_owned()))
             }
+            ActionId::InsertTileTool | ActionId::InsertTextTool if editing_tileset => {
+                Enabled::Disabled(Some(
+                    "Collision shapes are rectangles, ellipses, capsules, points and polygons"
+                        .to_owned(),
+                ))
+            }
             ActionId::RaiseObjects
             | ActionId::LowerObjects
             | ActionId::RaiseObjectsToTop
