@@ -275,3 +275,33 @@ tileset version.
 | Auto-label and patterns | labels from one tile on a known sheet; needed patterns for a blob, for a desert with islands, for terrains that never meet |
 | RPG Maker | an A2 sheet expands to the tiles and labels of a known blob set; the other sheet kinds warn |
 | Performance | a dab under a millisecond, in release builds |
+
+## 15. As built at M3 (the solver, the brush, diagnostics and feedback)
+
+Built on 2026-10-10 as §3–§8 design it, in the modules `color` (`TerrainColor`, the typed
+terrain), `wangid`, `topology`, `terrain` (`Terrain::new`, `from_tileset`), `request`,
+`filler`, `paint` (`paint`, `fill`, `preview_paint`, `preview_fill`, and `write_preview`,
+which places a preview already computed so a caller previews once), `diagnose`, `brush`
+(`hit_test`, `Stroke`, `line_targets`), `feedback` and `error`. What differs:
+
+- `PaintRequest::mirror` takes a flag; symmetry asked for on an infinite map is a typed error,
+  since such a map has no centre. `line_targets(from, to, full_tile, kind)` takes the two
+  targets.
+- A cell left unfilled and filled later in the same run (a correction queued twice) is not
+  reported; Tiled's invalid region keeps it red.
+- `missing_text` groups lacks by the sentence said of them, so cells with one plain reason
+  count once. `pushed_back(terrain, before, preview, colour)` reports a terrain where a lane of
+  it went to a third terrain, anywhere in the preview (the painted tiles first of all); the
+  tile that would have kept it has the painted terrain where the stroke put it and the old
+  terrain elsewhere. `pushed_back_text`, `replaced_sets` and `replaced_text` say the rest.
+- The editor prepares a set per query instead of keeping it per tileset version: about 20 µs
+  on the largest pack set, a small share of a frame.
+- Tests: `tests/solver.rs` (the brush's corners, edges and whole tiles, previews that are the
+  paint, seeds, fills with and without a terrain, finite edges and infinite layers, symmetry,
+  each `Cause`, the feedback sentences); `tests/packs.rs` (every terrain set of the packs fills
+  an empty layer with each terrain and is painted over with the others, the tiles placed
+  together agreeing and every need naming a missing pattern; a dab previews in about 8 µs,
+  asserted under 1 ms in optimised builds); and, as unit tests (`oracle_tests.rs`, with a
+  decision trace the solver keeps in tests only), Tiled's seven sample sets checked with code
+  of their own for every decision of fills and brush targets of every kind and four seeds.
+
