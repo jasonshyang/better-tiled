@@ -36,7 +36,7 @@ impl Histogram {
     }
 
     /// How many pixels were counted.
-    pub fn pixel_count(&self) -> u64 {
+    pub(crate) fn pixel_count(&self) -> u64 {
         self.counts.values().map(|&n| u64::from(n)).sum()
     }
 

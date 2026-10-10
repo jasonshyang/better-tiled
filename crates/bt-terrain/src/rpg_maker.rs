@@ -216,7 +216,10 @@ pub fn tileset(expansion: &Expansion, name: &str) -> Tileset {
 /// The mean colour of the opaque pixels of tile `id` of an image `columns` tiles wide; grey
 /// when it has none.
 fn tile_color(image: &DecodedImage, columns: u32, tile: u32, id: TileId) -> Color {
-    let origin = UVec2::new(id.0 % columns, id.0 / columns) * tile;
+    let (Some(column), Some(row)) = (id.0.checked_rem(columns), id.0.checked_div(columns)) else {
+        return Color::GRAY;
+    };
+    let origin = UVec2::new(column, row) * tile;
     let mut sum = [0_u64; 3];
     let mut count = 0_u64;
     for y in 0..tile {
@@ -236,4 +239,40 @@ fn tile_color(image: &DecodedImage, columns: u32, tile: u32, id: TileId) -> Colo
     }
     let [r, g, b] = sum.map(|total| u8::try_from(total / count).unwrap_or(u8::MAX));
     Color::rgb(r, g, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_terrain_takes_the_mean_colour_of_its_full_tile() {
+        // Two 2×2 tiles: the first red, blue and see-through white, whose colour is left out;
+        // the second see-through.
+        let mut rgba = vec![0_u8; 4 * 2 * 4];
+        let mut put = |x: usize, y: usize, pixel: [u8; 4]| {
+            let i = (y * 4 + x) * 4;
+            rgba[i..i + 4].copy_from_slice(&pixel);
+        };
+        put(0, 0, [200, 0, 0, 255]);
+        put(1, 0, [0, 0, 100, 255]);
+        put(0, 1, [200, 0, 0, 255]);
+        put(1, 1, [255, 255, 255, 20]);
+        let image = DecodedImage {
+            width: 4,
+            height: 2,
+            rgba,
+        };
+        assert_eq!(
+            tile_color(&image, 2, 2, TileId(0)),
+            Color::rgb(133, 0, 33),
+            "the opaque pixels' mean"
+        );
+        assert_eq!(tile_color(&image, 2, 2, TileId(1)), Color::GRAY);
+        assert_eq!(
+            tile_color(&image, 0, 2, TileId(0)),
+            Color::GRAY,
+            "no columns"
+        );
+    }
 }
