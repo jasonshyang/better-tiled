@@ -333,3 +333,97 @@ as a failure, not as a slower editor.
 | The pack | the Highlands rules reproduce the pack's sample scene; incremental runs equal full runs; timings under their bounds |
 | Layers | chained rule maps (sewers) with no intermediate layer; bindings on other layer names; a layer bound twice refused; stable object ids across runs; a record written and restored round-trips the painted map; a changed checksum counts as painted |
 | Files | discovery order, filters and includes, reload keeping an unreadable rule map's rules, class-given `MatchType`s, paths through symbolic links |
+
+## 15. As built at M3 (core)
+
+The core of the crate: compiling and running rule maps with Tiled's results, the observer and
+the run parameters later phases build on, the files, and the part of the analysis that needs no
+run. `region`, `explain`, the post-run analysis and `layers` come later.
+
+| Module | As built |
+|---|---|
+| `rulemap/` | `RuleMap` (path, source map, options, rules, inputs and outputs by name, problems, `is_used`) compiled once: layer roles (`layers`), options with Qt's conversions (`options`), `MatchType` from a tile's property or its class (`match_type`), 8-connected components (`extract`), input sets as Tiled's `compileInputSet` (`inputs`), output sets (`outputs`), `Rule`, and the `TilesetTable` |
+| `rules/` | `RuleSet` (the rule maps in run order, the table, `rules_file`, `tileset(index)`, set-level problems) built by `RuleSet::builder()` from maps in memory; `Report` and `LockedOutput` |
+| `engine/` | `RunRequest` (seed, `Area::{Whole, Selection, Edit}`, `LayerNames`), tileset and layer binding, grids, anchors, matching, applying, `DeleteTiles`, objects, write-back; `RuleSet::{apply, apply_to, run, run_observed}` |
+| `observer` | `Observer` (with `ACTIVE`, `tries_every_position`, `attempt`, `check`, `write`), `NoObserver`, `Attempt`, `Outcome`, `Check`, `Condition`, `Write`, `Writer` |
+| `files` | `find_rules`, `load`, `reload`; `RuleSet::{tileset_files, classes_changed}` |
+| `analysis` | `RuleSet::{tileset_copies, missing_layers}` with `TilesetCopy` and `MissingLayer` |
+| `problem`, `error` | `Problem { kind, text }` with `ProblemKind` and `Severity`; `Error::{RulesFile, MissingRuleMap}` |
+| `rng`, `bx`, `cell_set`, `object_cells`, `rule_ref` | the seeded draws; inclusive boxes; sets of cells as row runs visited in `QRegion`'s band order; Tiled's `objectTileRect` and `QRect`'s handling of zero and negative sizes; `RuleRef` |
+
+**Grids.** A run binds the names the rules use (output layers of every rule map first, in rule
+map order, as Tiled prepares them; inputs when their rule map runs) and copies each bound layer
+into a grid: a dense copy over the area of interest (a finite map whole; on an infinite map the
+region's box grown by the farthest any rule reaches), the layer itself behind it for reads
+outside, and a sparse overflow for writes outside. Above 16 million cells a grid keeps no dense
+copy. Each grid marks what was written; the write-back compares only those cells.
+
+**Anchors.** Each input set's candidate anchors are its "any of" conditions on a layer the map
+has that do not accept the empty cell. When a rule map starts, the engine indexes every
+candidate's tiles in one pass per grid (a bitset per grid and tileset over tile ids rejects the
+other cells) and gives each set the candidate whose tiles are in the fewest cells. A rule is
+tried where one of its sets' anchors is, in Tiled's scan order (the region's band rectangles,
+each row by row); with `MatchInOrder` the index and the rule's pending positions follow its
+writes. A rule with a set that has no anchor scans its lattice, as do rules an observer asks to
+see everywhere. With `OverflowBorder` or `WrapBorder`, positions whose box leaves the map are
+tried too, since cells there read others. On the Highlands pack (24 rule maps, 1850 rules)
+loading takes 5 ms, a full run of the sample scene's platforms 1.7 ms and of the same repeated
+on a 480×480 map 16 ms (release, development machine).
+
+Where the build differs from the sections above:
+
+- `apply(map, Some(rect), seed)` runs on the whole map with a `FullRunFallback` note and
+  `incremental: false` until region runs exist; `apply_to(map, rects, seed)` is Tiled's
+  selection run (`incremental: true`). A run's `Report` has `tilesets_added: Vec<TilesetSlot>`
+  and `objects_added: Vec<ObjectId>`; a `LockedOutput` counts the times a lock kept a rule map
+  out of a layer (a `DeleteTiles` pass counts once).
+- There is no separate `RuleMapInfo`: `RuleMap` answers what §9 lists, its errors, warnings and
+  notes being its problems by severity.
+- Bindings are `LayerNames` (tile and object names bound to layer ids, the rest looked up by
+  name or written to temporary layers dropped after the run); a binding to a missing layer, a
+  layer of the wrong kind or a layer bound twice refuses the run with a `BindingRefused`
+  problem. `find_rules` takes the setup's rules file as a path until the setup type exists, and
+  gives `None` when no file is found.
+- Similar tilesets are unified when a run binds the table, in Tiled's order (the map's tilesets
+  first, then those the run adds); the table merges only the same value or file. The tiles of a
+  tileset the map lacks get slots after the map's and the tilesets used are added in table
+  order at the end.
+- `MatchType` is read when a rule map is compiled, from its own tileset; Tiled reads it at run
+  time after unification, so a rule map embedding a copy of a map tileset whose tiles have other
+  properties would read the map's. A `MatchType` that is a custom enum's value counts by its
+  name (Tiled reads such a value as empty text, an ordinary tile), and one that is none of
+  Tiled's names is a warning.
+- Option values: text read as a yes or no follows Qt (anything but empty, `0` and `false` is
+  true) with an `OddOptionValue` warning when it is not `true`/`false`/`1`/`0`; a modulus of 0
+  is read as 1 with that warning; an output layer's `Probability` that cannot be read is a
+  warning and is not merged into the target (Tiled merges it as a property).
+- Fixed on purpose besides §12: `NoOverlappingOutput` keys an object output's footprint by its
+  object layer (Tiled keys it under the tile layer of that name, usually none, so all object
+  outputs share one footprint); references in list values are rewired with the rest; `DeleteTiles`
+  honours locks, a group's included, unless the rule map sets `IgnoreLock` (Tiled ignores them
+  there entirely).
+- Kept from Tiled: every rule map a rules file lists must exist, filtered or not; a rule map
+  that cannot be read is left out with a problem (kept from before on `reload`); points and
+  polygons cover cells as Tiled's `objectTileRect` gives them; the region grows by a match's
+  whole output region even where locks kept it out.
+- Rules whose boxes share a top-left (one wrapped around the other's corner) are ordered by
+  their first cell; Tiled's sort leaves them in any order.
+- Write-back prunes the chunks it empties, as `bt-edit` does, so an infinite layer's chunk
+  bounds can shrink where Tiled's keep their size.
+- The engine reports `Applied`, `SkippedByProbability`, `Overlapping` and `NoMatch`; the other
+  outcomes are for `explain` to give positions the engine never tries. Cells in checks and
+  writes are in the run's numbering (the map's slots, then the tilesets it would add); rule
+  tiles are `MatchCell`s in the table's (`RuleSet::tileset`).
+- Not yet: nested rules files are not listed for watching (`bt-tmx` does not return them), and
+  include cycles are skipped without a problem; region runs, the fuzz tests and the timed region
+  run of §13 wait for `region`.
+- Shared helpers: Tiled's similar-tileset rule is `bt-core`'s `Tileset::is_similar_to` (with
+  `TilesetRef::is_same_tileset_as`), which `bt-edit` uses too; `bt-test-data`'s grids name the
+  rule tiles by letter (`X` Negate, `I` Ignore, `N` NonEmpty, `E` Empty, `O` Other) and
+  `rule_tiles()` draws the rule tileset.
+
+Tests: all 19 directories of Tiled's automapping tests are covered, the 14 with an expected
+result equal to it and the 5 without checked for what they show; the options, files and pack
+suites of §14 (fuzz, explain and layers wait for their phases); the Highlands rules give back
+the sample scene's platforms, each tile the scene's or another variation of the same tile, and
+exactly its base tiles without the variation rule maps.
