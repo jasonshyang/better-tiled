@@ -789,3 +789,26 @@ needs a third state per cell the row format does not have.
 **Why:** one binding type means explanations and runs speak the same names; undo restores what
 the user saw; a layer the user cannot select is a layer they cannot fix; the painted layers of
 outputs are mostly empty, so keeping them whole costs little and restores without the result.
+
+## 2026-10-10 — AutoMap's region runs, explanations and analysis as built
+
+**Decided:** a region run falls back to a full run, with the reason in its report, in more
+cases than the design names: on an infinite map, for the first rule map with rules that match
+empty cells too (an edit can move the chunk bounds its region is made of), for any
+`MatchInOrder` rule map, for a negative `AutomappingRadius`, and for a later rule map where two
+matches of one rule can write different tiles into one cell; on a finite map, for
+`OverflowBorder` when a tile layer is not the map's size. Two tilesets a run may unify count
+every write of their tiles as one that can change a condition. In a region run, objects are
+placed for matches whose footprint meets the affected area, `DeleteTiles` removes the objects
+meeting the cells it erases there, a new output layer is made only when a tile lands in the
+area, and the report counts the windows' matches. Explanations are owned values, take the run's
+layer names through `_with` variants, and count wrapped positions under `WrapBorder`. A rule map
+that matched nothing is said to read an empty layer only when that is certain; otherwise no
+rule matched. A rules file reading itself is a note naming both files. The touched-layers skip
+of AutoMap while drawing is not built: it is exact only on a map that already holds the rules'
+result, which AutoMap layers know and a region run does not.
+**Instead of:** the design's three fallbacks; a cheaper analysis that can be wrong when tilesets
+unify; Tiled's skip of rule maps that do not use the layer drawn on.
+**Why:** each fallback is a case where the region a full run tries depends on more than the
+edit's neighbourhood, and a region run must equal a full run there (a fuzz test holds it); a
+wrong "empty" would send a person to the wrong layer.
