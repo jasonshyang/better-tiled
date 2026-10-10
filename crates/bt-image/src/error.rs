@@ -45,12 +45,34 @@ pub enum Error {
     /// The worker threads are gone (the store is shutting down).
     #[error("the image workers stopped")]
     Stopped,
+    /// A file is already where a new image was to be written, and is never replaced.
+    #[error("{} already exists and is not replaced", path.display())]
+    Exists {
+        /// The file.
+        path: PathBuf,
+    },
+    /// An image could not be encoded or written.
+    #[error("couldn't write {}: {message}", path.display())]
+    Write {
+        /// The file.
+        path: PathBuf,
+        /// What went wrong.
+        message: String,
+    },
 }
 
 impl Error {
     /// The error for a file the system could not read.
     pub(crate) fn from_io(path: impl Into<PathBuf>, error: &std::io::Error) -> Error {
         Error::Io {
+            path: path.into(),
+            message: error.to_string(),
+        }
+    }
+
+    /// The error for a file the system could not write.
+    pub(crate) fn from_write(path: impl Into<PathBuf>, error: &std::io::Error) -> Error {
+        Error::Write {
             path: path.into(),
             message: error.to_string(),
         }
