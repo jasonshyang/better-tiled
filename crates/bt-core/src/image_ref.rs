@@ -55,4 +55,13 @@ impl ImageRef {
             ImageSource::Embedded(_) => None,
         }
     }
+
+    /// Whether both show the same image: the same file, or the same embedded bytes.
+    pub fn is_same_image_as(&self, other: &ImageRef) -> bool {
+        match (&self.source, &other.source) {
+            (ImageSource::File(x), ImageSource::File(y)) => x.path == y.path,
+            (ImageSource::Embedded(x), ImageSource::Embedded(y)) => x == y,
+            _ => false,
+        }
+    }
 }

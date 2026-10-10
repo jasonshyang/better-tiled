@@ -110,6 +110,17 @@ impl TilesetRef {
             tileset,
         }
     }
+
+    /// Whether both refer to the same tileset: the same value, or the same file.
+    pub fn is_same_tileset_as(&self, other: &TilesetRef) -> bool {
+        if Arc::ptr_eq(&self.tileset, &other.tileset) {
+            return true;
+        }
+        match (&self.file, &other.file) {
+            (Some(x), Some(y)) => x.path == y.path,
+            _ => false,
+        }
+    }
 }
 
 /// The shape of a map's grid.

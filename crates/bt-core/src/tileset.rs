@@ -379,6 +379,39 @@ impl Tileset {
         self.set_tile_order(order);
         true
     }
+
+    /// Whether `other` can stand in for this tileset by Tiled's rule for tilesets embedded in a
+    /// map (libtiled's `Tileset::findSimilarTileset`): the same tile count, image, tile size,
+    /// spacing, margin and tile offset, and for a collection the same image for every tile.
+    pub fn is_similar_to(&self, other: &Tileset) -> bool {
+        let same_images = match (&self.image, &other.image) {
+            (TilesetImage::Atlas { image: x, .. }, TilesetImage::Atlas { image: y, .. }) => {
+                x.is_same_image_as(y)
+            }
+            (TilesetImage::Collection, TilesetImage::Collection) => {
+                self.tiles.len() == other.tiles.len()
+                    && self
+                        .tiles
+                        .iter()
+                        .zip(&other.tiles)
+                        .all(|((id_a, x), (id_b, y))| {
+                            id_a == id_b
+                                && match (&x.image, &y.image) {
+                                    (Some(x), Some(y)) => x.is_same_image_as(y),
+                                    (None, None) => true,
+                                    _ => false,
+                                }
+                        })
+            }
+            _ => false,
+        };
+        same_images
+            && self.tile_count() == other.tile_count()
+            && self.tile_size() == other.tile_size()
+            && self.spacing == other.spacing
+            && self.margin == other.margin
+            && self.tile_offset == other.tile_offset
+    }
 }
 
 /// How many cells of `cell` pixels with `spacing` between them and `margin` around them fit in
@@ -396,6 +429,7 @@ fn cells_along(length: u32, cell: u32, spacing: u32, margin: u32) -> u32 {
 mod tests {
     use super::*;
     use crate::file_ref::FileRef;
+    use crate::image_ref::ImageSource;
     use crate::tile::Frame;
 
     fn collection(ids: &[u32]) -> Tileset {
@@ -420,6 +454,23 @@ mod tests {
             },
             ..Tileset::default()
         }
+    }
+
+    #[test]
+    fn similar_tilesets_share_their_image_and_grid() {
+        let tileset = atlas(3, 6);
+        assert!(tileset.is_similar_to(&atlas(3, 6)));
+        assert!(!tileset.is_similar_to(&atlas(3, 5)), "another tile count");
+        let mut offset = atlas(3, 6);
+        offset.tile_offset = IVec2::new(0, 4);
+        assert!(!tileset.is_similar_to(&offset));
+        let mut moved = atlas(3, 6);
+        if let TilesetImage::Atlas { image, .. } = &mut moved.image {
+            image.source = ImageSource::File(FileRef::new("other.png", "/other.png"));
+        }
+        assert!(!tileset.is_similar_to(&moved), "another image");
+        assert!(!tileset.is_similar_to(&Tileset::default()));
+        assert!(Tileset::default().is_similar_to(&Tileset::default()));
     }
 
     #[test]

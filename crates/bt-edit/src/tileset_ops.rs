@@ -5,10 +5,7 @@
 
 use std::sync::Arc;
 
-use bt_core::{
-    Cell, ImageRef, ImageSource, LayerKind, Map, ObjectId, Tileset, TilesetImage, TilesetRef,
-    TilesetSlot,
-};
+use bt_core::{Cell, LayerKind, Map, ObjectId, TilesetRef, TilesetSlot};
 
 use crate::error::EditError;
 use crate::report::RemovedTileset;
@@ -31,55 +28,6 @@ pub struct TilesetUsage {
     pub objects: Vec<ObjectId>,
 }
 
-/// Whether two references are the same tileset: the same value, or the same file.
-fn same_tileset(a: &TilesetRef, b: &TilesetRef) -> bool {
-    if Arc::ptr_eq(&a.tileset, &b.tileset) {
-        return true;
-    }
-    match (&a.file, &b.file) {
-        (Some(x), Some(y)) => x.path == y.path,
-        _ => false,
-    }
-}
-
-/// Whether two images are the same: the same file, or the same embedded bytes.
-fn same_image(a: &ImageRef, b: &ImageRef) -> bool {
-    match (&a.source, &b.source) {
-        (ImageSource::File(x), ImageSource::File(y)) => x.path == y.path,
-        (ImageSource::Embedded(x), ImageSource::Embedded(y)) => x == y,
-        _ => false,
-    }
-}
-
-/// Tiled's rule for an embedded tileset that can stand in for another: the same tile count,
-/// image, tile size, spacing, margin and tile offset, and for a collection the same image for
-/// every tile.
-fn similar(a: &Tileset, b: &Tileset) -> bool {
-    let same_images = match (&a.image, &b.image) {
-        (TilesetImage::Atlas { image: x, .. }, TilesetImage::Atlas { image: y, .. }) => {
-            same_image(x, y)
-        }
-        (TilesetImage::Collection, TilesetImage::Collection) => {
-            a.tiles.len() == b.tiles.len()
-                && a.tiles.iter().zip(&b.tiles).all(|((id_a, x), (id_b, y))| {
-                    id_a == id_b
-                        && match (&x.image, &y.image) {
-                            (Some(x), Some(y)) => same_image(x, y),
-                            (None, None) => true,
-                            _ => false,
-                        }
-                })
-        }
-        _ => false,
-    };
-    same_images
-        && a.tile_count() == b.tile_count()
-        && a.tile_size() == b.tile_size()
-        && a.spacing == b.spacing
-        && a.margin == b.margin
-        && a.tile_offset == b.tile_offset
-}
-
 /// The slot of a tileset of `map` that can stand in for `tileset`: the same tileset, the same
 /// file, or for an embedded tileset one similar by Tiled's rules. A tileset with a file of its
 /// own stands only for itself, as in Tiled (which never loads a file twice).
@@ -87,14 +35,14 @@ pub fn find_tileset(map: &Map, tileset: &TilesetRef) -> Option<TilesetSlot> {
     let index = map
         .tilesets
         .iter()
-        .position(|r| same_tileset(r, tileset))
+        .position(|r| r.is_same_tileset_as(tileset))
         .or_else(|| {
             if tileset.file.is_some() {
                 return None;
             }
             map.tilesets
                 .iter()
-                .position(|r| r.file.is_none() && similar(&r.tileset, &tileset.tileset))
+                .position(|r| r.file.is_none() && r.tileset.is_similar_to(&tileset.tileset))
         })?;
     TilesetSlot::new(index)
 }
@@ -111,7 +59,11 @@ pub fn unify_tileset(map: &mut Map, tileset: &TilesetRef) -> Result<Unified, Edi
 /// Adds a tileset at the end of the list, unless the map has it already (the same tileset or
 /// file), and returns its slot.
 pub fn add_tileset(map: &mut Map, tileset: TilesetRef) -> Result<Unified, EditError> {
-    if let Some(index) = map.tilesets.iter().position(|r| same_tileset(r, &tileset)) {
+    if let Some(index) = map
+        .tilesets
+        .iter()
+        .position(|r| r.is_same_tileset_as(&tileset))
+    {
         let slot = TilesetSlot::new(index).ok_or(EditError::TooManyTilesets)?;
         return Ok(Unified { slot, added: false });
     }
@@ -142,7 +94,7 @@ pub fn replace_tileset(
         .tilesets
         .iter()
         .enumerate()
-        .find(|(index, r)| *index != slot.index() && same_tileset(r, &tileset))
+        .find(|(index, r)| *index != slot.index() && r.is_same_tileset_as(&tileset))
         .map(|(index, _)| index);
     match elsewhere.and_then(TilesetSlot::new) {
         Some(existing) => {
@@ -336,7 +288,7 @@ pub(crate) fn rewrite_object_tiles(map: &mut Map, rewrite: impl Fn(Cell) -> Cell
 
 #[cfg(test)]
 mod tests {
-    use bt_core::{FileRef, MapObject, TileId};
+    use bt_core::{FileRef, MapObject, TileId, Tileset};
     use bt_test_data::fixtures::{Atlas, MapBuilder};
     use bt_utils::IRect;
     use glam::{DVec2, UVec2};
