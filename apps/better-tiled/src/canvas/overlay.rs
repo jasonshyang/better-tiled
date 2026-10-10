@@ -32,9 +32,14 @@ pub(crate) struct OverlayInput<'a> {
     pub(crate) layer_offset: DVec2,
     /// The selected objects' frames, in the map's screen space (their layers' offsets in).
     pub(crate) objects: &'a [Vec<DVec2>],
+    /// The selected cells carry their tiles: their ants are amber.
+    pub(crate) carrying: bool,
     /// What the current tool draws.
     pub(crate) tool: &'a [VectorItem],
 }
+
+/// The colour of the ants of a selection that carries its tiles.
+const CARRY_COLOR: Color = Color::rgba(255, 176, 32, 255);
 
 /// The dashes of the selection's outline, in device pixels.
 const ANTS: Dash = Dash {
@@ -74,12 +79,20 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
         }
     }
     let selection = input.settings.theme.selection_color.0;
+    let cell_ants = if input.carrying {
+        CARRY_COLOR
+    } else {
+        with_alpha(selection, 255)
+    };
     let cells = input
         .selection
         .iter()
-        .map(|outline| (outline, input.layer_offset));
-    let objects = input.objects.iter().map(|frame| (frame, DVec2::ZERO));
-    for (outline, offset) in cells.chain(objects) {
+        .map(|outline| (outline, input.layer_offset, cell_ants));
+    let objects = input
+        .objects
+        .iter()
+        .map(|frame| (frame, DVec2::ZERO, with_alpha(selection, 255)));
+    for (outline, offset, ants) in cells.chain(objects) {
         // Ants: dark dashes over a light line, visible on any tiles.
         items.push(
             VectorItem::polygon(outline.clone())
@@ -88,7 +101,7 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
         );
         items.push(
             VectorItem::polygon(outline.clone())
-                .stroke(with_alpha(selection, 255), line)
+                .stroke(ants, line)
                 .dashed(ANTS)
                 .translated(offset),
         );
@@ -130,6 +143,7 @@ mod tests {
             selection: &[],
             layer_offset: DVec2::ZERO,
             objects: &[],
+            carrying: false,
             tool: &[],
         }
     }
@@ -162,6 +176,18 @@ mod tests {
             overlay_vectors(&selected).len(),
             4,
             "a selection is a light line under dark dashes"
+        );
+        let carrying = OverlayInput {
+            selection: &outline,
+            carrying: true,
+            ..input(&map, &settings, false)
+        };
+        assert_eq!(
+            overlay_vectors(&carrying)[2],
+            VectorItem::polygon(outline[0].clone())
+                .stroke(CARRY_COLOR, 2.0)
+                .dashed(ANTS),
+            "amber ants while the selection carries its tiles"
         );
         let frames = vec![vec![DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y]];
         let objects = OverlayInput {

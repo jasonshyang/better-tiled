@@ -61,8 +61,10 @@ impl Editor {
             .clone();
         let mut tx = Tx::new(&self.store, selection);
         let result = f(&mut tx)?;
-        let after_selection = tx.selection.clone();
+        let mut after_selection = tx.selection.clone();
+        let keeps_carry = tx.keeps_carry;
         let changed = self.changed_roots(tx.working);
+        super::apply::settle_carry(&mut after_selection, keeps_carry || changed.is_empty());
         for id in changed.keys() {
             let Some(asset) = self.store.get(*id) else {
                 continue;

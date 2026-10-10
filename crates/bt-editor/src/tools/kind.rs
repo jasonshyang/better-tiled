@@ -76,4 +76,13 @@ impl ToolKind {
             | ToolKind::EditPolygons => ToolFamily::Object,
         }
     }
+
+    /// Whether it selects tiles (Rectangular Select, the Magic Wand, Select Same Tile): with it,
+    /// dragging inside the selection, X, Y and Z move, mirror and turn the selected tiles.
+    pub fn selects_tiles(self) -> bool {
+        matches!(
+            self,
+            ToolKind::RectSelect | ToolKind::MagicWand | ToolKind::SameTile
+        )
+    }
 }

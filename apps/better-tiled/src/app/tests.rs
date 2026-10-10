@@ -633,3 +633,76 @@ fn tools_measure_from_the_current_layers_offset() {
     );
     assert!(ground.cell(IVec2::new(3, 3)).is_empty());
 }
+
+#[test]
+fn a_selection_drags_mirrors_and_lets_go_of_its_tiles() {
+    use bt_core::Flip;
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Key, Modifiers};
+    use glam::UVec2;
+
+    let scratch = Scratch::new("window-carry").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(6, 4))
+        .tileset(atlas.tileset.clone())
+        .tile_layer(
+            "ground",
+            "1 2 3 4 5 6\n7 8 9 10 11 12\n1 2 3 4 5 6\n7 8 9 10 11 12",
+        )
+        .build()
+        .unwrap();
+    let path = scratch.join("carry.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let at = |window: &TestWindow, x: i32, y: i32| {
+        window.editor().map_of(doc).unwrap().layers[0]
+            .as_tile_layer()
+            .unwrap()
+            .cell(IVec2::new(x, y))
+    };
+    let first = at(&window, 0, 0);
+    let second = at(&window, 1, 0);
+    let carries = |window: &TestWindow| {
+        window
+            .editor()
+            .document(doc)
+            .unwrap()
+            .selection()
+            .carries_tiles()
+    };
+
+    // R, then a drag selects the first two cells; a drag from inside them moves their tiles.
+    window.press(Modifiers::NONE, Key::R);
+    window.drag_cells(IVec2::new(0, 0), IVec2::new(1, 0), Modifiers::NONE);
+    window.drag_cells(IVec2::new(0, 0), IVec2::new(2, 2), Modifiers::NONE);
+    assert_eq!((at(&window, 2, 2), at(&window, 3, 2)), (first, second));
+    assert!(at(&window, 0, 0).is_empty() && at(&window, 1, 0).is_empty());
+    assert!(carries(&window));
+
+    // X mirrors the carried tiles in place; one undo takes the mirror back.
+    window.press(Modifiers::NONE, Key::X);
+    assert_eq!(at(&window, 2, 2), second.with_flip(Flip::H));
+    window.press(command(), Key::Z);
+    assert_eq!(at(&window, 2, 2), first);
+    assert!(carries(&window), "undo brings the carry back");
+
+    // Escape lets the tiles go where they are, the selection with them.
+    window.press(Modifiers::NONE, Key::Escape);
+    assert!(!carries(&window));
+    assert!(
+        window
+            .editor()
+            .document(doc)
+            .unwrap()
+            .selection()
+            .tiles
+            .is_empty()
+    );
+    assert_eq!(at(&window, 2, 2), first);
+}

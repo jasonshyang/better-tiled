@@ -1,14 +1,16 @@
 //! The Magic Wand (W) and Select Same Tile (S): the cells like the one under the pointer,
 //! connected to it (the wand) or anywhere on the layer (same tile), previewed as the pointer
 //! moves. Dragging adds the kinds of tile it passes over; the release selects. Modifiers at the
-//! press choose how it combines with the selection, as for every selection tool.
+//! press choose how it combines with the selection, as for every selection tool. Dragging
+//! inside the selection moves its tiles instead (`carry_drag`).
 
 use bt_core::Cell;
 use bt_editor::{Intent, SelectionMode, TileRegion, ToolKind};
 use egui::PointerButton;
 use glam::IVec2;
 
-use super::selecting::{mode_at_press, region_preview, selection_hint};
+use super::carry_drag::CarryDrag;
+use super::selecting::{carry_hint, let_go, mode_at_press, region_preview, selection_hint};
 use super::tool::{Overlay, Tool, ToolContext};
 use crate::canvas::Gesture;
 
@@ -31,6 +33,8 @@ pub(crate) struct LikeTiles {
     press: Option<LikePress>,
     /// The cells the preview shows, and what they were worked out from.
     preview: Option<LikePreview>,
+    /// A press inside the selection, which moves its tiles if it drags.
+    carry: Option<CarryDrag>,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +75,7 @@ impl LikeTiles {
             at: None,
             press: None,
             preview: None,
+            carry: None,
         }
     }
 
@@ -112,6 +117,7 @@ impl Tool for LikeTiles {
             Gesture::Hover(at) => self.update_preview(cx, at.cell),
             Gesture::Press(press) if press.button == PointerButton::Primary => {
                 let default = cx.editor.tools().selection_mode();
+                self.carry = CarryDrag::at_press(press, cx);
                 self.press = Some(LikePress {
                     mode: mode_at_press(press.modifiers, default),
                     kinds: Vec::new(),
@@ -131,6 +137,13 @@ impl Tool for LikeTiles {
                     mode: SelectionMode::Replace,
                 });
             }
+            Gesture::Drag(drag)
+                if drag.button == PointerButton::Primary && self.carry.is_some() =>
+            {
+                if let Some(carry) = &mut self.carry {
+                    carry.follow(drag, cx);
+                }
+            }
             Gesture::Drag(drag) if drag.button == PointerButton::Primary => {
                 // The kind under the pointer joins the kinds selected.
                 if let (Some(press), Some(layer)) = (&mut self.press, cx.tile_layer())
@@ -148,6 +161,10 @@ impl Tool for LikeTiles {
                 let Some(press) = self.press.take() else {
                     return;
                 };
+                if self.carry.take().is_some_and(|carry| carry.finish(cx.out)) {
+                    self.preview = None;
+                    return;
+                }
                 let region = self
                     .preview
                     .as_ref()
@@ -161,7 +178,14 @@ impl Tool for LikeTiles {
                 self.preview = None;
                 self.update_preview(cx, release.at.cell);
             }
-            Gesture::Cancel => self.press = None,
+            Gesture::Cancel => {
+                let pressed = self.press.take().is_some();
+                match self.carry.take() {
+                    Some(carry) => carry.cancel(cx.out),
+                    None if !pressed => let_go(cx),
+                    None => {}
+                }
+            }
             Gesture::Leave => {
                 self.at = None;
                 self.preview = None;
@@ -179,6 +203,9 @@ impl Tool for LikeTiles {
     }
 
     fn hint(&self, cx: &ToolContext<'_>) -> String {
+        if let Some(hint) = carry_hint(self.carry, cx) {
+            return hint;
+        }
         let what = match self.reach {
             Reach::Connected => "Click to select the connected tiles like this one",
             Reach::Layer => "Click to select every tile like this one",
@@ -191,9 +218,12 @@ impl Tool for LikeTiles {
         )
     }
 
-    fn reset(&mut self, _out: &mut Vec<Intent>) {
+    fn reset(&mut self, out: &mut Vec<Intent>) {
         self.press = None;
         self.preview = None;
         self.at = None;
+        if let Some(carry) = self.carry.take() {
+            carry.finish(out);
+        }
     }
 }

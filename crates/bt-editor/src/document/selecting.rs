@@ -120,10 +120,12 @@ impl Editor {
         Vec::new()
     }
 
-    /// Changes a document's selection outside any transaction.
+    /// Changes a document's selection outside any transaction; carried tiles are let go when
+    /// the selected cells are no longer theirs.
     fn change_selection(&mut self, doc: DocumentId, change: impl FnOnce(&mut Selection)) {
         if let Some(document) = self.documents.get_mut(doc) {
             change(&mut document.selection);
+            document.selection.drop_stale_carry();
         }
     }
 

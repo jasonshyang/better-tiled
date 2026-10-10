@@ -2,6 +2,7 @@
 //! previews through overlays and edits by sending intents (`06-application.md`, §6).
 
 mod brush;
+mod carry_drag;
 mod eraser;
 mod fills;
 mod insert_objects;

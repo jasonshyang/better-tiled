@@ -113,7 +113,9 @@ impl Editor {
             | ActionId::FlipVertical
             | ActionId::RotateLeft
             | ActionId::RotateRight
-                if !(on_tiles && self.tools.brush().is_some() || on_objects && has_objects) =>
+                if !(on_tiles && self.tools.brush().is_some()
+                    || on_tiles && has_tiles && self.tools.tool().selects_tiles()
+                    || on_objects && has_objects) =>
             {
                 Enabled::Disabled(None)
             }

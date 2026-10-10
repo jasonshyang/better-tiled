@@ -1,13 +1,15 @@
 //! Rectangular Select (R): drag a rectangle of cells; a click without dragging clears the
 //! selection, as in Tiled. The modifiers at the press choose how it combines with the
 //! selection (Shift adds, Command subtracts, both intersect); while dragging, pressing Shift
-//! makes it square and pressing Command grows it from the start in every direction.
+//! makes it square and pressing Command grows it from the start in every direction. Dragging
+//! inside the selection moves its tiles (`carry_drag`).
 
 use bt_editor::{Intent, SelectionMode, TileRegion, ToolKind, rect_select_rect};
 use egui::{Modifiers, PointerButton};
 use glam::IVec2;
 
-use super::selecting::{mode_at_press, region_preview, selection_hint};
+use super::carry_drag::CarryDrag;
+use super::selecting::{carry_hint, let_go, mode_at_press, region_preview, selection_hint};
 use super::tool::{Overlay, Tool, ToolContext};
 use crate::canvas::Gesture;
 
@@ -15,6 +17,8 @@ use crate::canvas::Gesture;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RectSelect {
     drag: Option<RectDrag>,
+    /// A press inside the selection, which moves its tiles if it drags.
+    carry: Option<CarryDrag>,
 }
 
 /// A rectangle being dragged.
@@ -51,6 +55,7 @@ impl Tool for RectSelect {
         match gesture {
             Gesture::Press(press) if press.button == PointerButton::Primary => {
                 let default = cx.editor.tools().selection_mode();
+                self.carry = CarryDrag::at_press(press, cx);
                 self.drag = Some(RectDrag {
                     start: press.at.cell,
                     end: press.at.cell,
@@ -72,7 +77,9 @@ impl Tool for RectSelect {
                 }
             }
             Gesture::Drag(drag) if drag.button == PointerButton::Primary => {
-                if let Some(state) = &mut self.drag {
+                if let Some(carry) = &mut self.carry {
+                    carry.follow(drag, cx);
+                } else if let Some(state) = &mut self.drag {
                     state.end = drag.at.cell;
                     state.selecting |= drag.moved;
                 }
@@ -92,6 +99,9 @@ impl Tool for RectSelect {
                 let Some(state) = self.drag.take() else {
                     return;
                 };
+                if self.carry.take().is_some_and(|carry| carry.finish(cx.out)) {
+                    return;
+                }
                 let (region, mode) = if state.selecting {
                     (state.region(), state.mode)
                 } else {
@@ -103,7 +113,14 @@ impl Tool for RectSelect {
                     mode,
                 });
             }
-            Gesture::Cancel => self.drag = None,
+            Gesture::Cancel => {
+                let pressed = self.drag.take().is_some();
+                match self.carry.take() {
+                    Some(carry) => carry.cancel(cx.out),
+                    None if !pressed => let_go(cx),
+                    None => {}
+                }
+            }
             _ => {}
         }
     }
@@ -117,6 +134,9 @@ impl Tool for RectSelect {
     }
 
     fn hint(&self, cx: &ToolContext<'_>) -> String {
+        if let Some(hint) = carry_hint(self.carry, cx) {
+            return hint;
+        }
         match self.drag.filter(|d| d.selecting) {
             Some(drag) => {
                 let size = rect_select_rect(drag.start, drag.end, drag.square, drag.from_center);
@@ -131,7 +151,10 @@ impl Tool for RectSelect {
         }
     }
 
-    fn reset(&mut self, _out: &mut Vec<Intent>) {
+    fn reset(&mut self, out: &mut Vec<Intent>) {
         self.drag = None;
+        if let Some(carry) = self.carry.take() {
+            carry.finish(out);
+        }
     }
 }

@@ -13,7 +13,7 @@ use bt_utils::rng::Rng;
 use glam::IVec2;
 
 use super::kind::ToolKind;
-use crate::document::{DocumentId, Selection};
+use crate::document::{CarryStart, DocumentId, Selection, carry_start, movable_layers};
 use crate::editor::{Editor, warn};
 use crate::effect::Effect;
 use crate::error::EditError;
@@ -44,6 +44,12 @@ pub enum Stroke {
         /// Every shown, unlocked tile layer rather than the selected ones.
         all_layers: bool,
     },
+    /// The selected tiles are `delta` cells from where they were when the stroke began (a
+    /// stroke of the kind `Move`).
+    Move {
+        /// How far.
+        delta: IVec2,
+    },
     /// The stroke is done: one step of the history.
     End,
     /// The stroke is dropped: the map goes back to where it started.
@@ -57,6 +63,8 @@ pub enum StrokeKind {
     Paint,
     /// Erases.
     Erase,
+    /// Moves the selected tiles, lifting them first when the selection does not carry them yet.
+    Move,
 }
 
 /// A stroke under way.
@@ -71,6 +79,8 @@ pub(crate) struct StrokeState {
     skipped: Vec<LayerId>,
     /// The last cell painted.
     last: Option<IVec2>,
+    /// The tiles a move carries, as they were when it began.
+    carry: Option<CarryStart>,
 }
 
 /// Bucket Fill's area and what it paints there.
@@ -142,6 +152,14 @@ impl Editor {
     pub(crate) fn stroke(&mut self, step: Stroke) -> Vec<Effect> {
         match step {
             Stroke::Begin { doc, kind } => {
+                let carry = if kind == StrokeKind::Move {
+                    match self.move_start(doc) {
+                        Ok(start) => Some(start),
+                        Err(effects) => return effects,
+                    }
+                } else {
+                    None
+                };
                 if let Err(error) = self.begin_gesture(doc, kind.label()) {
                     return vec![warn(error)];
                 }
@@ -149,13 +167,15 @@ impl Editor {
                     doc,
                     kind,
                     rng: Rng::new(self.tools.seed),
-                    skipped: Vec::new(),
+                    skipped: carry.as_ref().map(|c| c.locked.clone()).unwrap_or_default(),
                     last: None,
+                    carry,
                 });
                 Vec::new()
             }
             Stroke::Paint { points, line } => self.paint_points(&points, line),
             Stroke::Erase { points, all_layers } => self.erase_points(&points, all_layers),
+            Stroke::Move { delta } => self.move_carried(delta),
             Stroke::End => {
                 let Some(stroke) = self.stroke.take() else {
                     return Vec::new();
@@ -179,6 +199,50 @@ impl Editor {
                 }
             }
         }
+    }
+
+    /// What a move of the selected tiles starts from; the notice to show instead when no
+    /// selected layer can let its tiles go.
+    fn move_start(&self, doc: DocumentId) -> Result<CarryStart, Vec<Effect>> {
+        let (Some(map), Some(selection)) = (
+            self.map_of(doc).cloned(),
+            self.documents.get(doc).map(|d| d.selection().clone()),
+        ) else {
+            return Err(Vec::new());
+        };
+        if selection.carried.is_none() && movable_layers(&map, &selection).is_empty() {
+            return Err(self
+                .locked_notice(doc, &crate::clipboard::clip_layers(&map, &selection))
+                .into_iter()
+                .collect());
+        }
+        carry_start(&map, &selection).map_err(|error| vec![warn(error)])
+    }
+
+    /// Puts the carried tiles `delta` cells from where the move began.
+    fn move_carried(&mut self, delta: IVec2) -> Vec<Effect> {
+        let Some(stroke) = &self.stroke else {
+            return Vec::new();
+        };
+        let (Some(start), Some(asset)) = (
+            stroke.carry.clone(),
+            self.documents.get(stroke.doc).map(|d| d.asset()),
+        ) else {
+            return Vec::new();
+        };
+        let carried = start.carried.with_tiles(start.carried.tiles.moved(delta));
+        let result = self.gesture_apply(|tx| {
+            *tx.map_mut(asset)? = carried.placed()?;
+            if start.lifted && carried.tiles.at_rest() {
+                // Back where they were lifted: the map is as it was, and nothing is carried.
+                tx.selection.tiles = carried.tiles.region();
+                tx.selection.carried = None;
+            } else {
+                tx.carry(carried);
+            }
+            Ok::<_, EditError>(())
+        });
+        result.err().map(warn).into_iter().collect()
     }
 
     fn paint_points(&mut self, points: &[IVec2], line: bool) -> Vec<Effect> {
@@ -392,7 +456,7 @@ impl Editor {
     }
 
     /// What to say about locked layers an edit left alone, if any.
-    fn locked_notice(&self, doc: DocumentId, skipped: &[LayerId]) -> Option<Effect> {
+    pub(crate) fn locked_notice(&self, doc: DocumentId, skipped: &[LayerId]) -> Option<Effect> {
         let map = self.map_of(doc)?;
         let mut names: Vec<String> = Vec::new();
         for id in skipped {
@@ -421,6 +485,7 @@ impl StrokeKind {
         match self {
             StrokeKind::Paint => "Paint",
             StrokeKind::Erase => "Erase",
+            StrokeKind::Move => "Move Tiles",
         }
     }
 }

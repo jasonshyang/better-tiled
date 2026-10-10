@@ -18,6 +18,8 @@ pub struct Tx<'s> {
     pub(crate) working: BTreeMap<AssetId, Root>,
     /// The document's selection; the closure may change it.
     pub selection: Selection,
+    /// The closure changed the carried tiles: the carry goes on. Any other change lets them go.
+    pub(crate) keeps_carry: bool,
 }
 
 impl<'s> Tx<'s> {
@@ -26,7 +28,16 @@ impl<'s> Tx<'s> {
             store,
             working: BTreeMap::new(),
             selection,
+            keeps_carry: false,
         }
+    }
+
+    /// The selection carries `carried` from now on: its cells are where the tiles are, and the
+    /// transaction keeps the carry going.
+    pub(crate) fn carry(&mut self, carried: crate::document::Carried) {
+        self.selection.tiles = carried.tiles.region();
+        self.selection.carried = Some(carried);
+        self.keeps_carry = true;
     }
 
     /// A map as it is in this transaction so far.

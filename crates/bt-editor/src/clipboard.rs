@@ -21,13 +21,18 @@ pub(crate) struct Clipboard {
 }
 
 impl Editor {
-    /// Copy: the selected tiles of the selected tile layers.
+    /// Copy: the selected tiles of the selected tile layers, or the tiles the selection carries
+    /// (those off a finite map included).
     pub(crate) fn copy_tiles(&mut self, doc: DocumentId) -> Vec<Effect> {
         let (Some(map), selection) = (self.map_of(doc).cloned(), self.selection_or_default(doc))
         else {
             return Vec::new();
         };
-        match copy(&map, &clip_layers(&map, &selection), &selection.tiles) {
+        let copied = match &selection.carried {
+            Some(carried) => carried.tiles.clip(&map),
+            None => copy(&map, &clip_layers(&map, &selection), &selection.tiles),
+        };
+        match copied {
             Ok(clip) => {
                 self.clipboard.tiles = Some(clip);
                 Vec::new()
@@ -36,12 +41,20 @@ impl Editor {
         }
     }
 
-    /// Cut: Copy, and the tiles are erased from the unlocked layers, as one step.
+    /// Cut: Copy, and the tiles are erased from the unlocked layers, as one step. Carried tiles
+    /// go, and what they covered shows again.
     pub(crate) fn cut_tiles(&mut self, doc: DocumentId) -> Vec<Effect> {
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return Vec::new();
         };
         let selection = self.selection_or_default(doc);
+        if selection.carried.is_some() {
+            let mut effects = self.copy_tiles(doc);
+            if let Err(error) = self.drop_carried_tiles(doc, "Cut") {
+                effects.push(warn(error));
+            }
+            return effects;
+        }
         let result = self.transact(doc, "Cut", |tx| {
             let map = tx.map_mut(asset)?;
             let layers = clip_layers(map, &selection);
@@ -57,10 +70,16 @@ impl Editor {
     }
 
     /// Delete: the selected tiles of the selected unlocked tile layers are erased, as one step.
+    /// Carried tiles go, and what they covered shows again.
     pub(crate) fn delete_tiles(&mut self, doc: DocumentId) -> Vec<Effect> {
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return Vec::new();
         };
+        match self.drop_carried_tiles(doc, "Delete") {
+            Ok(true) => return Vec::new(),
+            Ok(false) => {}
+            Err(error) => return vec![warn(error)],
+        }
         let selection = self.selection_or_default(doc);
         let result = self.transact(doc, "Delete", |tx| {
             let map = tx.map_mut(asset)?;
@@ -140,7 +159,7 @@ impl Editor {
 
 /// The layers Copy, Cut and Delete take tiles from: the selected tile layers, or the current
 /// layer when no tile layer is selected (as in Tiled).
-fn clip_layers(map: &Map, selection: &Selection) -> Vec<LayerId> {
+pub(crate) fn clip_layers(map: &Map, selection: &Selection) -> Vec<LayerId> {
     let selected: Vec<LayerId> = selection
         .layers
         .iter()

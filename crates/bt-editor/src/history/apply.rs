@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::document::DocumentId;
+use crate::document::{DocumentId, Selection};
 use crate::editor::Editor;
 use crate::error::EditError;
 use crate::history::{AssetChange, MergeKey, SelectionChange, Transaction, Tx};
@@ -60,8 +60,10 @@ impl Editor {
             .clone();
         let mut tx = Tx::new(&self.store, before_selection.clone());
         let result = f(&mut tx)?;
-        let after_selection = tx.selection.clone();
+        let mut after_selection = tx.selection.clone();
+        let keeps_carry = tx.keeps_carry;
         let changed = self.changed_roots(tx.working);
+        settle_carry(&mut after_selection, keeps_carry || changed.is_empty());
         if let Some(document) = self.documents.get_mut(doc) {
             document.selection = after_selection.clone();
         }
@@ -305,4 +307,13 @@ impl Editor {
 enum Side {
     Before,
     After,
+}
+
+/// Lets the carried tiles go unless the transaction kept them (or changed nothing), or when the
+/// selected cells or layers are no longer theirs.
+pub(crate) fn settle_carry(selection: &mut Selection, kept: bool) {
+    if !kept {
+        selection.carried = None;
+    }
+    selection.drop_stale_carry();
 }

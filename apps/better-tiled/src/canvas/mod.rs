@@ -9,6 +9,6 @@ mod paint;
 mod view;
 
 pub(crate) use camera::{MAX_ZOOM, MIN_ZOOM, ViewTransform};
-pub(crate) use gesture::{Gesture, Pointer};
+pub(crate) use gesture::{Gesture, Pointer, PointerDrag, PointerPress};
 pub(crate) use paint::CanvasGpu;
 pub(crate) use view::{Canvas, CanvasFrame, Hover};

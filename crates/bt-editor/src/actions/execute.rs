@@ -6,7 +6,7 @@ use bt_edit::{Axis, Brush, LayerType, RotateDirection};
 
 use super::enabled::Enabled;
 use super::table::{ActionId, ActionKind};
-use crate::document::DocumentId;
+use crate::document::{DocumentId, Reorient};
 use crate::editor::{Editor, warn};
 use crate::effect::{Dialog, Effect, FileRequest, ViewRequest};
 use crate::notice::Notice;
@@ -35,6 +35,16 @@ impl Editor {
         if let Some(brush) = &self.tools.brush {
             self.tools.brush = Some(transform(brush, &geometry));
         }
+    }
+
+    /// Whether X, Y and Z mirror and turn the selected tiles rather than the brush: a tool that
+    /// selects tiles is current and tiles are selected.
+    fn reorients_tiles(&self) -> bool {
+        self.tools.tool().selects_tiles()
+            && self
+                .situation()
+                .document
+                .is_some_and(|d| !d.selection().tiles.is_empty())
     }
 
     /// Chooses where objects snap; the preference is kept.
@@ -185,6 +195,11 @@ impl Editor {
                         editor.flip_selected_objects(doc, axis)
                     });
                 }
+                if self.reorients_tiles() {
+                    return on_document(self, &|editor, doc| {
+                        editor.reorient_selected_tiles(doc, Reorient::Flip(axis))
+                    });
+                }
                 self.transform_brush(|brush, geometry| brush.flipped(axis, geometry));
                 Vec::new()
             }
@@ -201,6 +216,11 @@ impl Editor {
                 } else {
                     RotateDirection::CounterClockwise
                 };
+                if self.reorients_tiles() {
+                    return on_document(self, &|editor, doc| {
+                        editor.reorient_selected_tiles(doc, Reorient::Rotate(direction))
+                    });
+                }
                 self.transform_brush(|brush, geometry| brush.rotated(direction, geometry));
                 Vec::new()
             }

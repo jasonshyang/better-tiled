@@ -2,11 +2,12 @@
 //! of cells is drawn as a preview.
 
 use bt_core::{Color, MapGeometry};
-use bt_editor::{SelectionMode, TileRegion};
+use bt_editor::{ActionId, Intent, SelectionMode, TileRegion};
 use bt_render::VectorItem;
 use egui::Modifiers;
 use glam::DVec2;
 
+use super::carry_drag::CarryDrag;
 use super::tool::ToolContext;
 
 /// The mode a press with `modifiers` selects in, as in Tiled: Shift adds, Command subtracts,
@@ -59,8 +60,27 @@ pub(crate) fn region_preview(
 /// The hint the selection tools share before a press.
 pub(crate) fn selection_hint(what: &str, command: &str) -> String {
     format!(
-        "{what} · Shift adds, {command} subtracts, both intersect · right-click clears the selection"
+        "{what} · Shift adds, {command} subtracts, both intersect · drag the selection to move its tiles, X and Y mirror them, Z turns them · right-click clears the selection"
     )
+}
+
+/// What the status bar says while the selected tiles are dragged or carried; `None` otherwise.
+pub(crate) fn carry_hint(carry: Option<CarryDrag>, cx: &ToolContext<'_>) -> Option<String> {
+    if carry.is_some_and(|c| c.is_moving()) {
+        return Some("Moving the selected tiles · Escape puts them back".to_owned());
+    }
+    let carrying = cx.selection().is_some_and(|s| s.carries_tiles());
+    carrying.then(|| {
+        "The selection carries its tiles: drag to move them on, X and Y mirror, Z turns · what they cover comes back as they move · Escape lets them go where they are".to_owned()
+    })
+}
+
+/// Escape with nothing under way: carried tiles are let go where they are, and the selection
+/// with them.
+pub(crate) fn let_go(cx: &mut ToolContext<'_>) {
+    if cx.selection().is_some_and(|s| s.carries_tiles()) {
+        cx.out.push(Intent::Run(ActionId::SelectNone));
+    }
 }
 
 #[cfg(test)]

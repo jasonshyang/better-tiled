@@ -375,6 +375,10 @@ impl Canvas {
             selection: &selection,
             layer_offset: self.layer_offset,
             objects: &objects,
+            carrying: frame
+                .editor
+                .document(frame.doc)
+                .is_some_and(|d| d.selection().carries_tiles()),
             tool: &self.tool_overlay.vectors,
         });
         let layers = if frame.toggles.highlight_current_layer {
