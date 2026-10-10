@@ -26,9 +26,13 @@ use crate::cell_set::CellSet;
 use crate::object_cells::object_tile_rect;
 use crate::problem::{Problem, ProblemKind};
 
+pub(crate) use inputs::InputSet;
+pub use inputs::MatchCell;
 pub(crate) use match_type::MatchTypeCache;
-pub(crate) use options::MapOptions;
+pub(crate) use options::{MapOptions, RuleOptions};
+pub(crate) use outputs::OutputSet;
 pub(crate) use rule::{Alternative, Rule};
+pub use tilesets::TableTile;
 pub(crate) use tilesets::{TableEntry, TilesetTable};
 
 use extract::components;

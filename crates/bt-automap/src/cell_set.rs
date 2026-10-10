@@ -106,6 +106,39 @@ impl CellSet {
         })
     }
 
+    /// The cells outside `rect`.
+    pub(crate) fn difference_with_rect(&self, rect: IRect) -> CellSet {
+        let Some(b) = Bx::from_rect(rect) else {
+            return self.clone();
+        };
+        let mut result = CellSet::new();
+        for (&y, row) in &self.rows {
+            let mut spans = Vec::new();
+            for &s in row {
+                if y < b.min.y || y > b.max.y || s.end < b.min.x || s.start > b.max.x {
+                    spans.push(s);
+                    continue;
+                }
+                if s.start < b.min.x {
+                    spans.push(Span {
+                        start: s.start,
+                        end: b.min.x - 1,
+                    });
+                }
+                if s.end > b.max.x {
+                    spans.push(Span {
+                        start: b.max.x + 1,
+                        end: s.end,
+                    });
+                }
+            }
+            if !spans.is_empty() {
+                result.rows.insert(y, spans);
+            }
+        }
+        result
+    }
+
     /// The cells also inside `rect`.
     pub(crate) fn intersection_with_rect(&self, rect: IRect) -> CellSet {
         let Some(b) = Bx::from_rect(rect) else {
@@ -265,14 +298,20 @@ mod tests {
         assert_eq!(set.len(), 10);
         assert_eq!(
             set.bounding(),
-            Some(Bx::spanning(IVec2::new(0, 0), IVec2::new(6, 2)))
+            Some(Bx {
+                min: IVec2::new(0, 0),
+                max: IVec2::new(6, 2)
+            })
         );
     }
 
     #[test]
     fn dilation_is_the_minkowski_sum() {
         let set = CellSet::from_cells([IVec2::new(5, 5)]);
-        let grown = set.dilated(Bx::spanning(IVec2::new(-2, -1), IVec2::ZERO));
+        let grown = set.dilated(Bx {
+            min: IVec2::new(-2, -1),
+            max: IVec2::ZERO,
+        });
         assert_eq!(grown.rects(), [rect(3, 4, 3, 2)]);
         let moved = grown.translated(IVec2::new(1, 1));
         assert_eq!(moved.rects(), [rect(4, 5, 3, 2)]);
@@ -289,6 +328,17 @@ mod tests {
         set.insert_rect(rect(20, 0, 2, 2));
         let clipped = set.intersection_with_rect(rect(5, 1, 20, 5));
         assert_eq!(clipped.rects(), [rect(5, 1, 5, 1), rect(20, 1, 2, 1)]);
+        let outside = set.difference_with_rect(rect(2, 1, 3, 9));
+        assert_eq!(
+            outside.rects(),
+            [
+                rect(0, 0, 10, 1),
+                rect(20, 0, 2, 1),
+                rect(0, 1, 2, 1),
+                rect(5, 1, 5, 1),
+                rect(20, 1, 2, 1)
+            ]
+        );
         assert!(set.intersection_with_rect(rect(0, 5, 3, 3)).is_empty());
         let cells: Vec<IVec2> = clipped.cells().take(2).collect();
         assert_eq!(cells, [IVec2::new(5, 1), IVec2::new(6, 1)]);

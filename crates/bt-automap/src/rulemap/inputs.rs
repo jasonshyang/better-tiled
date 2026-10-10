@@ -13,22 +13,22 @@ use crate::rulemap::tilesets::TableTile;
 
 /// What a condition asks of a cell: a tile, compared on the flips in `mask`, or the empty cell.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct MatchCell {
+pub struct MatchCell {
     /// The tile; `None` for the empty cell.
-    pub(crate) tile: Option<TableTile>,
+    pub tile: Option<TableTile>,
     /// The flips that must agree.
-    pub(crate) mask: Flip,
+    pub mask: Flip,
 }
 
 impl MatchCell {
     /// The empty cell, as Tiled's `MatchCell()`.
-    pub(crate) const EMPTY: MatchCell = MatchCell {
+    pub const EMPTY: MatchCell = MatchCell {
         tile: None,
         mask: Flip::all(),
     };
 
     /// Whether it asks for the empty cell.
-    pub(crate) fn is_empty(self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.tile.is_none()
     }
 

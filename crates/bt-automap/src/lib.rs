@@ -9,39 +9,23 @@
 //! version 3 or later. `docs/design/08-automap.md` is the design; its "As built" section lists
 //! every way the crate departs from Tiled and why.
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the engine, which comes next, uses the boxes")
-)]
 mod bx;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the engine, which comes next, uses the sets of cells"
-    )
-)]
 mod cell_set;
+mod engine;
 mod object_cells;
+mod observer;
 mod problem;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the engine, which comes next, draws its random numbers here"
-    )
-)]
 mod rng;
 mod rule_ref;
-#[expect(dead_code, reason = "the engine, which comes next, uses the rules")]
 mod rulemap;
-#[expect(
-    dead_code,
-    reason = "the engine and the files, which come next, use the table and the problems"
-)]
+#[expect(dead_code, reason = "the files, which come next, use the problems")]
 mod rules;
 
+pub use engine::{
+    Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
+};
+pub use observer::{Attempt, Check, Condition, NoObserver, Observer, Outcome, Write, Writer};
 pub use problem::{Problem, ProblemKind, Severity};
 pub use rule_ref::RuleRef;
-pub use rulemap::RuleMap;
+pub use rulemap::{MatchCell, RuleMap, TableTile};
 pub use rules::{LockedOutput, Report, RuleSet, RuleSetBuilder};

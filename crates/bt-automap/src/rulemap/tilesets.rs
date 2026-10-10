@@ -26,13 +26,13 @@ impl TableEntry {
 
 /// A tile in the rule set's numbering of tilesets.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct TableTile {
-    /// The tileset's index in the table.
-    pub(crate) tileset: usize,
+pub struct TableTile {
+    /// The tileset's index in the rule set ([`RuleSet::tileset`](crate::RuleSet::tileset)).
+    pub tileset: usize,
     /// The tile.
-    pub(crate) tile: TileId,
+    pub tile: TileId,
     /// The flips, as the rule map has them.
-    pub(crate) flip: Flip,
+    pub flip: Flip,
 }
 
 /// The tilesets of a rule set, in the order rule maps first use them.
