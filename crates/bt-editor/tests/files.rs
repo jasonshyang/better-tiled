@@ -440,3 +440,78 @@ fn an_unanswered_exit_keeps_the_latest_work_and_recovery_wins_over_the_session()
     let current = editor.current().unwrap();
     assert_eq!(editor.map_of(current).unwrap().layers[0].name, "unsaved");
 }
+
+#[test]
+fn unsaved_tileset_files_are_snapshotted_and_recovered_too() {
+    use bt_core::{Frame, TileId};
+    use bt_test_data::fixtures::Atlas;
+    use bt_tmx::WriteRequest;
+
+    let scratch = Scratch::new("bt-editor-tileset-recovery").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let path = scratch.join("tiles.tsx");
+    WriteRequest::for_tileset(&atlas.tileset, &path)
+        .write()
+        .unwrap();
+    let mut crashed = editor_in(&scratch);
+    apply(&mut crashed, Intent::Open(path.clone()));
+    let doc = crashed.current().unwrap();
+    let frames = vec![
+        Frame {
+            tile: TileId(0),
+            duration_ms: 100,
+        },
+        Frame {
+            tile: TileId(1),
+            duration_ms: 100,
+        },
+    ];
+    apply(
+        &mut crashed,
+        Intent::SetTileAnimation {
+            doc,
+            tile: TileId(0),
+            frames: frames.clone(),
+        },
+    );
+    assert!(apply(&mut crashed, Intent::Tick { now_ms: 1_000 }).is_empty());
+    let effects = apply(&mut crashed, Intent::Tick { now_ms: 3_500 });
+    let [Effect::WriteSnapshot(snapshot)] = effects.as_slice() else {
+        panic!("one snapshot: {effects:?}");
+    };
+    snapshot.write().unwrap();
+    drop(crashed);
+
+    let found = orphans(&scratch.join("recovery"), 2000, SystemTime::now());
+    assert_eq!(found.len(), 1);
+    let mut editor = Editor::builder()
+        .recovery_folder(scratch.join("recovery"))
+        .pid(2000)
+        .build()
+        .unwrap();
+    let effects = apply(&mut editor, Intent::Recoverable(found));
+    let question = ask(&effects).clone();
+    apply(
+        &mut editor,
+        Intent::Decided {
+            decision: question.id,
+            choice: Choice::Recover,
+        },
+    );
+    let doc = editor.current().expect("the tileset's tab is back");
+    let tileset = editor.edited_tileset(doc).unwrap();
+    assert_eq!(tileset.tile(TileId(0)).unwrap().animation, frames);
+    assert!(editor.has_unsaved(), "recovered work is unsaved");
+
+    // Saving writes it and lets the snapshot go.
+    let effects = apply(&mut editor, Intent::Run(bt_editor::ActionId::Save));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::DeleteSnapshot(_)))
+    );
+    assert!(!editor.has_unsaved());
+}

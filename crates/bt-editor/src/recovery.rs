@@ -1,8 +1,9 @@
-//! Recovery. While a map has unsaved changes, a snapshot of what Save would write is kept in
-//! `<data>/recovery/<pid>-<asset>.snapshot`, described by a `.meta.json` beside it: two seconds
-//! after its last change, or every thirty seconds while it keeps changing. A saved or closed
-//! map's snapshot is deleted. Each run touches `<pid>.alive` in the same folder every few
-//! seconds; at start, snapshots of runs whose heartbeat stopped are offered back.
+//! Recovery. While a map or a tileset file has unsaved changes, a snapshot of what Save would
+//! write is kept in `<data>/recovery/<pid>-<asset>.snapshot`, described by a `.meta.json` beside
+//! it: two seconds after its last change, or every thirty seconds while it keeps changing. A
+//! saved or closed asset's snapshot is deleted. Each run touches `<pid>.alive` in the same folder
+//! every few seconds; at start, snapshots of runs whose heartbeat stopped are offered back (a
+//! tileset's snapshot is told apart by its file's extension).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,7 +21,7 @@ const OVERDUE_MS: u64 = 30_000;
 /// How long a heartbeat counts as a live run.
 const HEARTBEAT_LIFE: Duration = Duration::from_secs(60);
 
-/// Which unsaved maps need a snapshot, and when they last changed.
+/// Which unsaved maps and tilesets need a snapshot, and when they last changed.
 #[derive(Clone, Debug)]
 pub(crate) struct RecoveryPlan {
     folder: PathBuf,
@@ -28,7 +29,7 @@ pub(crate) struct RecoveryPlan {
     tracked: HashMap<AssetId, Tracked>,
 }
 
-/// What the plan knows of an unsaved map.
+/// What the plan knows of an unsaved asset.
 #[derive(Copy, Clone, Debug)]
 struct Tracked {
     seen_version: u64,
@@ -38,8 +39,8 @@ struct Tracked {
     since_ms: u64,
 }
 
-/// An unsaved map and its version.
-struct UnsavedMap {
+/// An unsaved asset and its version.
+struct UnsavedAsset {
     id: AssetId,
     version: u64,
 }
@@ -47,9 +48,9 @@ struct UnsavedMap {
 /// What the schedule asks for.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Due {
-    /// Maps to snapshot now.
+    /// Assets to snapshot now.
     pub(crate) snapshot: Vec<AssetId>,
-    /// Maps no longer unsaved (or gone) whose snapshots go.
+    /// Assets no longer unsaved (or gone) whose snapshots go.
     pub(crate) delete: Vec<AssetId>,
 }
 
@@ -65,18 +66,18 @@ impl RecoveryPlan {
     /// The snapshots due at `now_ms`.
     pub(crate) fn due(&mut self, store: &AssetStore, now_ms: u64) -> Due {
         let mut due = Due::default();
-        let unsaved = unsaved_maps(store);
+        let unsaved = unsaved_assets(store);
         let gone: Vec<AssetId> = self
             .tracked
             .keys()
-            .filter(|id| !unsaved.iter().any(|map| map.id == **id))
+            .filter(|id| !unsaved.iter().any(|asset| asset.id == **id))
             .copied()
             .collect();
         for id in gone {
             self.tracked.remove(&id);
             due.delete.push(id);
         }
-        for UnsavedMap { id, version } in unsaved {
+        for UnsavedAsset { id, version } in unsaved {
             let entry = self.tracked.entry(id).or_insert(Tracked {
                 seen_version: version,
                 changed_at_ms: now_ms,
@@ -103,11 +104,11 @@ impl RecoveryPlan {
         due
     }
 
-    /// Every unsaved map whose latest version has no snapshot, now counted as snapshotted (the
-    /// run is ending and writes them at once).
+    /// Every unsaved asset whose latest version has no snapshot, now counted as snapshotted
+    /// (the run is ending and writes them at once).
     pub(crate) fn take_unsnapshotted(&mut self, store: &AssetStore) -> Vec<AssetId> {
         let mut ids = Vec::new();
-        for UnsavedMap { id, version } in unsaved_maps(store) {
+        for UnsavedAsset { id, version } in unsaved_assets(store) {
             let entry = self.tracked.entry(id).or_insert(Tracked {
                 seen_version: version,
                 changed_at_ms: 0,
@@ -150,12 +151,20 @@ impl RecoveryPlan {
     }
 }
 
-/// The unsaved maps of the store and their versions.
-fn unsaved_maps(store: &AssetStore) -> Vec<UnsavedMap> {
+/// The unsaved maps of the store, and its unsaved tilesets that have files, with their
+/// versions.
+fn unsaved_assets(store: &AssetStore) -> Vec<UnsavedAsset> {
     store
         .assets()
-        .filter(|asset| asset.kind() == AssetKind::Map && asset.is_dirty())
-        .map(|asset| UnsavedMap {
+        .filter(|asset| {
+            let snapshotted = match asset.kind() {
+                AssetKind::Map => true,
+                AssetKind::Tileset => asset.path().is_some(),
+                AssetKind::Project => false,
+            };
+            snapshotted && asset.is_dirty()
+        })
+        .map(|asset| UnsavedAsset {
             id: asset.id(),
             version: asset.version(),
         })

@@ -31,10 +31,13 @@ impl Editor {
         };
         if self.store.tileset(asset).is_some() {
             return match self.write_tileset(asset) {
-                Ok(()) => vec![Effect::Notify(Notice::info(format!(
-                    "Saved {}",
-                    bt_utils::paths::display_name(&path)
-                )))],
+                Ok(()) => vec![
+                    Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)),
+                    Effect::Notify(Notice::info(format!(
+                        "Saved {}",
+                        bt_utils::paths::display_name(&path)
+                    ))),
+                ],
                 Err(notice) => vec![Effect::Notify(notice)],
             };
         }
@@ -101,10 +104,14 @@ impl Editor {
             .map(|map| self.store.tilesets_of(map))
             .unwrap_or_default();
         for tileset in tilesets {
-            if self.store.get(tileset).is_some_and(|t| t.is_dirty())
-                && let Err(notice) = self.write_tileset(tileset)
-            {
-                effects.push(Effect::Notify(notice));
+            if !self.store.get(tileset).is_some_and(|t| t.is_dirty()) {
+                continue;
+            }
+            match self.write_tileset(tileset) {
+                Ok(()) => {
+                    effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(tileset)))
+                }
+                Err(notice) => effects.push(Effect::Notify(notice)),
             }
         }
         match self.write_map(asset, path) {
@@ -169,7 +176,7 @@ impl Editor {
         Ok(())
     }
 
-    /// Writes a tileset asset to its file and marks it saved.
+    /// Writes a tileset asset to its file and marks it saved; its snapshot is no longer kept.
     fn write_tileset(&mut self, asset: AssetId) -> Result<(), Notice> {
         let tileset = self
             .store
@@ -187,6 +194,7 @@ impl Editor {
             .text;
         self.write_bytes(&path, text.as_bytes())?;
         self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
+        self.recovery.forget(asset);
         Ok(())
     }
 

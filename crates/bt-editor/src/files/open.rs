@@ -105,12 +105,13 @@ impl Editor {
         let map = match files.content {
             LoadedContent::Map(map) => map,
             LoadedContent::Tileset(tileset) => {
-                return self.open_tileset_document(
-                    &path,
+                let read = ReadTileset {
                     tileset,
-                    files.content_hash,
-                    files.warnings,
-                );
+                    content_hash: files.content_hash,
+                    warnings: files.warnings,
+                    recovered_from: loaded.recovered_from,
+                };
+                return self.open_tileset_document(&path, read);
             }
         };
         if loaded.recovered_from.is_none()
@@ -169,32 +170,40 @@ impl Editor {
     }
 
     /// Shows a tileset file in a tab of its own: the store's asset when a map uses it already
-    /// (its unsaved changes kept), else the tileset read.
-    fn open_tileset_document(
-        &mut self,
-        path: &Path,
-        tileset: Arc<bt_core::Tileset>,
-        content_hash: Option<u64>,
-        warnings: Vec<bt_tmx::Warning>,
-    ) -> Vec<Effect> {
-        if let Some(doc) = self.document_of_path(path) {
-            self.documents.set_current(doc);
-            return Vec::new();
-        }
-        let asset = match self.store.by_path(path) {
-            Some(asset) => asset,
-            None => self.store.insert(NewAsset {
-                root: Root::Tileset(tileset),
+    /// (its unsaved changes kept), else the tileset read. A recovered tileset becomes the
+    /// asset's content, unsaved, whatever the store held.
+    fn open_tileset_document(&mut self, path: &Path, read: ReadTileset) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        let asset = match (self.store.by_path(path), &read.recovered_from) {
+            (Some(asset), None) => asset,
+            (Some(asset), Some(_)) => {
+                let version = self.store.next_version(asset);
+                self.store
+                    .set_root(asset, Root::Tileset(read.tileset), version);
+                asset
+            }
+            (None, _) => self.store.insert(NewAsset {
+                root: Root::Tileset(read.tileset),
                 path: Some(path.to_path_buf()),
-                content_hash,
-                warnings,
+                content_hash: read.content_hash,
+                warnings: read.warnings,
             }),
         };
-        let doc = self.open_document(asset);
+        if let Some(snapshot) = read.recovered_from {
+            self.store.forget_disk(asset);
+            effects.push(Effect::DeleteSnapshot(snapshot));
+        }
+        let doc = match self.document_of_path(path) {
+            Some(doc) => {
+                self.documents.set_current(doc);
+                doc
+            }
+            None => self.open_document(asset),
+        };
         self.follow_document(doc);
         self.remember_recent(path);
         self.session_changed();
-        Vec::new()
+        effects
     }
 
     /// Puts the external tilesets a load read into the store, unless it has their files.
@@ -311,4 +320,12 @@ impl Editor {
             self.store.remove(id);
         }
     }
+}
+
+/// A tileset file a load read, and the snapshot it came from when it was recovered.
+struct ReadTileset {
+    tileset: Arc<bt_core::Tileset>,
+    content_hash: Option<u64>,
+    warnings: Vec<bt_tmx::Warning>,
+    recovered_from: Option<std::path::PathBuf>,
 }

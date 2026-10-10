@@ -156,13 +156,26 @@ impl LoadJob {
         };
         let mut loader = Loader::builder().custom_types(custom_types).build();
         if self.kind == LoadKind::Tileset {
-            let loaded = loader
-                .load_tileset(&self.path)
-                .map_err(|error| error.to_string())?;
+            let (loaded, content_hash) = match &self.source {
+                LoadSource::File => (
+                    loader
+                        .load_tileset(&self.path)
+                        .map_err(|error| error.to_string())?,
+                    Some(hash_file(&self.path)?),
+                ),
+                LoadSource::Snapshot(snapshot) => {
+                    let text = std::fs::read_to_string(snapshot)
+                        .map_err(|error| format!("cannot read {}: {error}", snapshot.display()))?;
+                    let loaded = loader
+                        .parse_tileset(&text, &self.path)
+                        .map_err(|error| error.to_string())?;
+                    (loaded, None)
+                }
+            };
             return Ok(LoadedFiles {
                 content: LoadedContent::Tileset(loaded.value),
                 warnings: loaded.warnings,
-                content_hash: Some(hash_file(&self.path)?),
+                content_hash,
                 tilesets: Vec::new(),
                 project,
                 loader,

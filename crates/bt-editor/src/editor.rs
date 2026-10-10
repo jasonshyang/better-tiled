@@ -339,11 +339,28 @@ impl Editor {
             .collect()
     }
 
-    /// A snapshot of what Save would write for a map.
+    /// A snapshot of what Save would write for a map or a tileset file.
     fn snapshot_of(&self, id: AssetId) -> Option<Snapshot> {
         let asset = self.store.get(id)?;
-        let map = self.store.map(id)?;
         let original = asset.path().map(Path::to_path_buf);
+        if let Some(tileset) = self.store.tileset(id) {
+            let path = original.clone()?;
+            return match WriteRequest::for_tileset(tileset, &path).render() {
+                Ok(rendered) => Some(Snapshot {
+                    path: self.recovery.snapshot_path(id),
+                    text: rendered.text,
+                    meta: SnapshotMeta {
+                        original,
+                        pid: self.recovery.pid(),
+                    },
+                }),
+                Err(error) => {
+                    log::warn!("no recovery snapshot of {}: {error}", asset.display_name());
+                    None
+                }
+            };
+        }
+        let map = self.store.map(id)?;
         let path_for_references = original
             .clone()
             .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
