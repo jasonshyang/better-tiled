@@ -28,7 +28,7 @@ mod rule_ref;
 mod rulemap;
 mod rules;
 
-pub use analysis::{MissingLayer, TilesetCopy};
+pub use analysis::{IdleRuleMap, MissingLayer, TilesetCopy};
 pub use engine::{
     Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
 };

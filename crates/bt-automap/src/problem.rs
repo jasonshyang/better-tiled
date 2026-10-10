@@ -116,8 +116,15 @@ pub enum ProblemKind {
     /// A tileset the rules use is a copy of one of the map's (the same image through another
     /// file), so rules naming its tiles never match the map's tiles.
     TilesetCopy,
+    /// A rule map matched nothing in a run, and it reads a layer the map does not have (which
+    /// no earlier rule map writes), so that layer read as empty.
+    IdleMissingLayer,
 
     // Notes.
+    /// A rule map matched nothing in a run, and a layer it reads held no tile when it ran.
+    IdleEmptyLayer,
+    /// A rule map matched nothing in a run though its input layers held tiles.
+    IdleNoMatch,
     /// Input tiles that touch no output tiles, so they make no rule.
     OrphanInput,
     /// Output tiles or objects that touch no input tiles, so they make no rule.
@@ -160,9 +167,10 @@ impl ProblemKind {
             | LockedOutput
             | TooManyTilesets
             | BindingRefused
-            | TilesetCopy => Severity::Warning,
-            OrphanInput | OrphanOutput | NoRules | RuleNeverMatches | FullRunFallback
-            | PaintedNotRestored => Severity::Note,
+            | TilesetCopy
+            | IdleMissingLayer => Severity::Warning,
+            IdleEmptyLayer | IdleNoMatch | OrphanInput | OrphanOutput | NoRules
+            | RuleNeverMatches | FullRunFallback | PaintedNotRestored => Severity::Note,
         }
     }
 }

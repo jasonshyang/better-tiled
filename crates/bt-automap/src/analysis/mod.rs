@@ -1,7 +1,10 @@
-//! What is wrong or odd in a rule set against a map before it runs (§9 of the design): tilesets
-//! the rules use that are copies of the map's, so rules naming their tiles never match its
-//! tiles (Tiled says nothing and the rules silently do nothing), and layers the rules read that
-//! the map lacks.
+//! What is wrong or odd in a rule set against a map (§9 of the design). Before it runs:
+//! tilesets the rules use that are copies of the map's, so rules naming their tiles never match
+//! its tiles (Tiled says nothing and the rules silently do nothing), and layers the rules read
+//! that the map lacks. After a run (`idle`): the rule maps that matched nothing, with what their
+//! inputs say about why.
+
+mod idle;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -11,6 +14,8 @@ use bt_core::{Map, TilesetSlot};
 use crate::engine::{TilesetBinding, find_layer, is_tiles};
 use crate::problem::{Problem, ProblemKind};
 use crate::rules::RuleSet;
+
+pub use idle::IdleRuleMap;
 
 /// A tileset the rules use that copies one of the map's: the same image and grid through
 /// another file, or an alike collection. Tiled unifies only tilesets a rule map embeds, so the

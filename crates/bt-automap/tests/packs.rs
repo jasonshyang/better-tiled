@@ -420,6 +420,38 @@ fn highlands_explanations_tell_what_made_a_platform_tile() {
     );
 }
 
+/// After a run on one family's platforms, the other families' rule maps matched nothing: each
+/// says its input held tiles but no rule matched them.
+#[test]
+fn highlands_rule_maps_of_other_families_match_nothing_and_say_so() {
+    let Some(pack) = highlands() else {
+        return;
+    };
+    let map = pack.scene_with_walls(&FAMILIES[0]);
+    let request = bt_automap::RunRequest::builder(1).build();
+    let mut ran = map.clone();
+    let report = pack.rules.run(&mut ran, &request);
+    let idle = pack.rules.idle_rule_maps(&map, &request, &report);
+    let unmatched: Vec<usize> = (0..report.rule_map_matches.len())
+        .filter(|&i| report.rule_map_matches[i] == 0)
+        .collect();
+    assert_eq!(
+        idle.iter().map(|i| i.rule_map).collect::<Vec<_>>(),
+        unmatched
+    );
+    assert!(idle.len() >= 18, "{} idle rule maps", idle.len());
+    for rule_map in &idle {
+        let problems = rule_map.problems(&pack.rules);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(
+            problems[0].kind,
+            ProblemKind::IdleNoMatch,
+            "{}",
+            problems[0]
+        );
+    }
+}
+
 /// `map` with its `walls` repeated `times`×`times` over a map that many times larger.
 fn repeated(map: &Map, times: u32) -> Map {
     let mut large = map.clone();
