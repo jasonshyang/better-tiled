@@ -11,6 +11,8 @@ publish = false
 
 [dependencies]
 bt-core.workspace = true
+# The project file's AutoMap record, which the layers module produces and restores.
+bt-project.workspace = true
 # Rule maps and rule lists are read through it, in the `files` module only.
 bt-tmx.workspace = true
 bt-utils.workspace = true

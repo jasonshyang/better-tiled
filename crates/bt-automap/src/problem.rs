@@ -129,6 +129,9 @@ pub enum ProblemKind {
     RuleNeverMatches,
     /// A run asked for a region was run on the whole map, with the reason.
     FullRunFallback,
+    /// What was painted on a layer the rules write could not be rebuilt from the project file
+    /// (the layer changed elsewhere, or is gone): all of the layer counts as painted.
+    PaintedNotRestored,
 }
 
 impl ProblemKind {
@@ -158,9 +161,8 @@ impl ProblemKind {
             | TooManyTilesets
             | BindingRefused
             | TilesetCopy => Severity::Warning,
-            OrphanInput | OrphanOutput | NoRules | RuleNeverMatches | FullRunFallback => {
-                Severity::Note
-            }
+            OrphanInput | OrphanOutput | NoRules | RuleNeverMatches | FullRunFallback
+            | PaintedNotRestored => Severity::Note,
         }
     }
 }

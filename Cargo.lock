@@ -552,6 +552,7 @@ name = "bt-automap"
 version = "0.1.0"
 dependencies = [
  "bt-core",
+ "bt-project",
  "bt-test-data",
  "bt-tmx",
  "bt-utils",

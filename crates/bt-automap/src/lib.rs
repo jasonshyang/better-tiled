@@ -17,6 +17,7 @@ mod bx;
 mod cell_set;
 mod engine;
 pub mod files;
+pub mod layers;
 mod object_cells;
 mod observer;
 mod problem;
