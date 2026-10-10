@@ -1,0 +1,206 @@
+//! Saving: a map's unsaved external tilesets first (a tileset that cannot be written keeps its
+//! changes and the map is saved anyway), then the map; Save As moves the map's file properties
+//! to the new folder as a transaction first. Writes are atomic unless safe writing is off, and
+//! the bytes written are hashed so the watcher can tell our writes from others'.
+
+use std::path::{Path, PathBuf};
+
+use bt_tmx::WriteRequest;
+use bt_utils::atomic_write::{WriteMode, write_file};
+use bt_utils::hash::fnv1a_64;
+
+use crate::document::DocumentId;
+use crate::editor::Editor;
+use crate::effect::{Effect, FileRequest};
+use crate::error::EditError;
+use crate::notice::Notice;
+use crate::store::{AssetId, Root};
+
+impl Editor {
+    /// Saves a document: its asset's file, or a file to pick when it has none.
+    pub(crate) fn save(&mut self, doc: DocumentId) -> Vec<Effect> {
+        let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
+            return Vec::new();
+        };
+        let Some(path) = self
+            .store
+            .get(asset)
+            .and_then(|a| a.path().map(Path::to_path_buf))
+        else {
+            return vec![self.save_as_request(doc)];
+        };
+        self.save_map_to(asset, &path)
+    }
+
+    /// The file request of Save As for a document.
+    pub(crate) fn save_as_request(&self, doc: DocumentId) -> Effect {
+        let suggested = self
+            .path_of(doc)
+            .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
+        Effect::PickFile(FileRequest::SaveAs { doc, suggested })
+    }
+
+    /// Saves a document to a new file: its file properties are rebased to the new folder as a
+    /// transaction, the asset moves there, and it is written.
+    pub(crate) fn save_as(&mut self, doc: DocumentId, path: &Path) -> Vec<Effect> {
+        let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
+            return Vec::new();
+        };
+        let path = match bt_utils::paths::absolute_path(path) {
+            Ok(path) => path,
+            Err(error) => {
+                return vec![Effect::Notify(Notice::error(format!(
+                    "Cannot save to {}: {error}",
+                    path.display()
+                )))];
+            }
+        };
+        let old_folder = self
+            .store
+            .get(asset)
+            .and_then(|a| a.path())
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
+        if let Some(from) = old_folder
+            && let Some(to) = path.parent()
+            && from != to
+        {
+            let rebased = self.transact(doc, "Save As", |tx| {
+                bt_tmx::rebase_file_references(tx.map_mut(asset)?, &from, to);
+                Ok::<_, EditError>(())
+            });
+            if let Err(error) = rebased {
+                return vec![Effect::Notify(Notice::error(format!(
+                    "Cannot save to {}: {error}",
+                    path.display()
+                )))];
+            }
+        }
+        self.store.retarget(asset, path.clone());
+        let effects = self.save_map_to(asset, &path);
+        self.remember_recent(&path);
+        self.session_changed();
+        effects
+    }
+
+    /// Writes a map's unsaved external tilesets, then the map.
+    fn save_map_to(&mut self, asset: AssetId, path: &Path) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        let tilesets = self
+            .store
+            .map(asset)
+            .map(|map| self.store.tilesets_of(map))
+            .unwrap_or_default();
+        for tileset in tilesets {
+            if self.store.get(tileset).is_some_and(|t| t.is_dirty())
+                && let Err(notice) = self.write_tileset(tileset)
+            {
+                effects.push(Effect::Notify(notice));
+            }
+        }
+        match self.write_map(asset, path) {
+            Ok(()) => {
+                self.recovery.forget(asset);
+                effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)));
+                effects.push(Effect::Notify(Notice::info(format!(
+                    "Saved {}",
+                    bt_utils::paths::display_name(path)
+                ))));
+            }
+            Err(notice) => effects.push(Effect::Notify(notice)),
+        }
+        effects
+    }
+
+    /// Writes every unsaved asset that has a file; the notices of those that failed.
+    pub(crate) fn save_all(&mut self) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for id in self.store.unsaved() {
+            let Some(asset) = self.store.get(id) else {
+                continue;
+            };
+            let Some(path) = asset.path().map(Path::to_path_buf) else {
+                continue;
+            };
+            let written = match asset.root() {
+                Root::Map(_) => self.write_map(id, &path),
+                Root::Tileset(_) => self.write_tileset(id),
+                Root::Project(_) => continue,
+            };
+            match written {
+                Ok(()) => {
+                    self.recovery.forget(id);
+                    effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(id)));
+                }
+                Err(notice) => effects.push(Effect::Notify(notice)),
+            }
+        }
+        effects
+    }
+
+    /// Writes a map asset to `path` and marks it saved.
+    fn write_map(&mut self, asset: AssetId, path: &Path) -> Result<(), Notice> {
+        let map = self
+            .store
+            .map(asset)
+            .cloned()
+            .ok_or_else(|| Notice::error(format!("{asset} is not a map")))?;
+        let text = {
+            let mut request = WriteRequest::for_map(&map, path);
+            if let Some(loader) = self.files.loaders.get(&asset) {
+                request = request.loader(loader);
+            }
+            request
+                .render()
+                .map_err(|error| cannot_save(path, &error.to_string()))?
+                .text
+        };
+        self.write_bytes(path, text.as_bytes())?;
+        self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
+        Ok(())
+    }
+
+    /// Writes a tileset asset to its file and marks it saved.
+    fn write_tileset(&mut self, asset: AssetId) -> Result<(), Notice> {
+        let tileset = self
+            .store
+            .tileset(asset)
+            .cloned()
+            .ok_or_else(|| Notice::error(format!("{asset} is not a tileset")))?;
+        let path = self
+            .store
+            .get(asset)
+            .and_then(|a| a.path().map(Path::to_path_buf))
+            .ok_or_else(|| Notice::error(format!("{asset} has no file")))?;
+        let text = WriteRequest::for_tileset(&tileset, &path)
+            .render()
+            .map_err(|error| cannot_save(&path, &error.to_string()))?
+            .text;
+        self.write_bytes(&path, text.as_bytes())?;
+        self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
+        Ok(())
+    }
+
+    fn write_bytes(&self, path: &Path, bytes: &[u8]) -> Result<(), Notice> {
+        let mode = if self.settings.general.safe_writing {
+            WriteMode::Atomic
+        } else {
+            WriteMode::InPlace
+        };
+        write_file(path, bytes, mode).map_err(|error| match error.refused() {
+            Some(reason) => cannot_save(
+                path,
+                &format!("{reason}; make it writable, or Save As elsewhere"),
+            ),
+            None => cannot_save(path, &error.to_string()),
+        })
+    }
+}
+
+fn cannot_save(path: &Path, why: &str) -> Notice {
+    Notice::error(format!(
+        "Cannot save {}",
+        bt_utils::paths::display_name(path)
+    ))
+    .with_detail(why.to_owned())
+}
