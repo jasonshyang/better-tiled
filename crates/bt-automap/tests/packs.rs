@@ -293,7 +293,7 @@ fn highlands_full_run_stays_under_its_time_bound() {
         assert!(full < Duration::from_millis(10), "full run {full:?}");
         assert!(load < Duration::from_millis(100), "loading {load:?}");
         assert!(
-            large_run < Duration::from_millis(400),
+            large_run < Duration::from_millis(100),
             "large run {large_run:?}"
         );
     }
