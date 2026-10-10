@@ -16,6 +16,7 @@ mod layer_commands;
 mod map_commands;
 mod notice;
 mod objects;
+mod properties;
 mod recovery;
 mod session;
 mod settings;
@@ -41,6 +42,10 @@ pub use history::{
 pub use intent::Intent;
 pub use notice::{Notice, Severity};
 pub use objects::{ObjectFrame, ObjectStroke, ObjectStrokeKind};
+pub use properties::{
+    Change, ListEdit, Op, Origin, PropertyError, PropertySet, Shown, Step, Target, TargetId,
+    ValueType, conversions, convert, value_types,
+};
 pub use recovery::{
     Orphan, Snapshot, SnapshotMeta, delete_snapshot, orphans, remove_heartbeat, touch_heartbeat,
 };
