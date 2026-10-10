@@ -10,6 +10,8 @@ use bt_utils::atomic_write::{WriteMode, write_file};
 use bt_utils::hash::fnv1a_64;
 use serde::{Deserialize, Serialize};
 
+use crate::report::{Line, Outcome, Report};
+
 /// How many versions are kept per map.
 pub const KEPT_PER_MAP: usize = 50;
 
@@ -224,6 +226,87 @@ fn remove_edit(folder: &Path, number: u64) -> Result<(), HistoryError> {
         }
     }
     Ok(())
+}
+
+/// What `bt undo` did.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UndoOutcome {
+    /// The map.
+    pub map: PathBuf,
+    /// What happened.
+    pub undone: Undone,
+}
+
+/// What `bt undo` did, or why not.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Undone {
+    /// The file got back what it held before the edit.
+    File {
+        /// The edit's label.
+        label: String,
+        /// How many earlier edits can still be taken back.
+        earlier: usize,
+        /// Whether the file had been saved since the edit (`--force`).
+        forced: bool,
+    },
+    /// The editor took the edit back, as one of its own undo steps.
+    InEditor {
+        /// The edit's label.
+        label: String,
+        /// How many earlier edits of this run the editor can still take back.
+        earlier: usize,
+    },
+    /// Refused: the file was saved since the edit, and the edit would take that away.
+    SavedSince {
+        /// The edit's label.
+        label: String,
+    },
+    /// Nothing to take back.
+    Nothing,
+}
+
+impl Outcome for UndoOutcome {
+    const SCHEMA: &'static str = "bt.undo/1";
+
+    fn report(&self) -> Report {
+        let mut report = Report::new();
+        let map = bt_utils::paths::display_name(&self.map);
+        let earlier = |n: usize| match n {
+            0 => "no earlier bt edit is left to take back".to_owned(),
+            1 => "1 earlier bt edit can be taken back".to_owned(),
+            n => format!("{n} earlier bt edits can be taken back"),
+        };
+        match &self.undone {
+            Undone::File {
+                label,
+                earlier: n,
+                forced,
+            } => {
+                if *forced {
+                    report.add_line(Line::note(format!(
+                        "{map} was saved since “{label}”: what was saved since is gone too"
+                    )));
+                }
+                report.add_line(Line::fact(format!(
+                    "took back “{label}” in {map}; {}",
+                    earlier(*n)
+                )));
+            }
+            Undone::InEditor { label, earlier: n } => report.add_line(Line::fact(format!(
+                "took back “{label}” in the editor, as an undo step there; {}",
+                earlier(*n)
+            ))),
+            Undone::SavedSince { label } => report.add_line(Line::problem(format!(
+                "{map} was saved since “{label}”: bt undo would take away what was saved since; \
+                 --force takes the edit back anyway"
+            ))),
+            Undone::Nothing => {
+                report.add_line(Line::fact(format!("no bt edit of {map} to take back")));
+            }
+        }
+        report
+    }
 }
 
 #[cfg(test)]

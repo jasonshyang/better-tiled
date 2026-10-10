@@ -560,6 +560,7 @@ dependencies = [
  "anyhow",
  "bt-automap",
  "bt-core",
+ "bt-project",
  "bt-script",
  "bt-test-data",
  "bt-tmx",

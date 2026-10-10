@@ -2,3 +2,4 @@
 //! (`10-agents.md`, §3).
 
 pub(crate) mod export;
+pub(crate) mod undo;
