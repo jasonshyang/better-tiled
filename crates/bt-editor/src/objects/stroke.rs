@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use bt_core::{LayerId, Map, ObjectId};
 use bt_edit::{
-    Pivot, Resize, ResizeHandle, SnapMode, drag_angle, move_anchor, move_anchor_in, move_objects,
-    move_objects_in, resize_objects, resize_objects_in, rotate_objects, rotate_objects_in, snap,
-    snap_delta,
+    Node, Pivot, Resize, ResizeHandle, SnapMode, drag_angle, move_anchor, move_anchor_in,
+    move_nodes, move_nodes_in, move_objects, move_objects_in, nodes_anchor, nodes_anchor_in,
+    resize_objects, resize_objects_in, rotate_objects, rotate_objects_in, snap, snap_delta,
 };
 use glam::DVec2;
 
@@ -64,6 +64,14 @@ pub enum ObjectStroke {
         /// The proportions stay.
         keep_proportions: bool,
     },
+    /// The selected nodes are `delta` (the map's screen space) from where they started, the
+    /// node nearest the top-left snapped as the preference, changed by `snap`, says.
+    MoveNodes {
+        /// How far.
+        delta: DVec2,
+        /// How the modifiers held change snapping.
+        snap: SnapToggle,
+    },
     /// The drag is done: one step of the history.
     End,
     /// The drag is dropped: the objects go back.
@@ -79,6 +87,8 @@ pub enum ObjectStrokeKind {
     Rotate,
     /// Resizes them.
     Resize,
+    /// Moves the selected nodes of polygons and polylines.
+    MoveNodes,
 }
 
 /// A drag of objects under way.
@@ -95,6 +105,8 @@ pub(crate) struct ObjectStrokeState {
     space: SelectionSpace,
     /// The middle of the handles when the drag began, in the objects' pixels.
     centre: DVec2,
+    /// The nodes that move: the selected ones of objects on unlocked layers.
+    nodes: Vec<Node>,
 }
 
 /// What a drag of objects starts from.
@@ -120,6 +132,8 @@ enum StrokeChange {
     Rotate { degrees: f64, center: DVec2 },
     /// Resized by a handle.
     Resize(Resize),
+    /// The nodes moved by a pixel delta, snapped as `snapping` says.
+    MoveNodes { delta: DVec2, snapping: SnapMode },
 }
 
 impl Editor {
@@ -156,6 +170,7 @@ impl Editor {
                     ObjectStrokeKind::Move => "Move Objects",
                     ObjectStrokeKind::Rotate => "Rotate Objects",
                     ObjectStrokeKind::Resize => "Resize Objects",
+                    ObjectStrokeKind::MoveNodes => "Move Nodes",
                 };
                 let Some(space) = self.selection_space(doc) else {
                     return Vec::new();
@@ -166,6 +181,14 @@ impl Editor {
                 if let Err(error) = self.begin_gesture(doc, label) {
                     return vec![warn(error)];
                 }
+                let nodes = self
+                    .documents
+                    .get(doc)
+                    .map(|d| d.selection().nodes.clone())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|node| split.unlocked.contains(&node.object))
+                    .collect();
                 self.object_stroke = Some(ObjectStrokeState {
                     doc,
                     start,
@@ -173,6 +196,7 @@ impl Editor {
                     locked: split.locked_layers,
                     space,
                     centre,
+                    nodes,
                 });
                 Vec::new()
             }
@@ -219,6 +243,10 @@ impl Editor {
                 }
                 self.reapply(StrokeChange::Resize(resize))
             }
+            ObjectStroke::MoveNodes { delta, snap } => {
+                let snapping = self.snap_mode(snap);
+                self.reapply(StrokeChange::MoveNodes { delta, snapping })
+            }
             ObjectStroke::End => {
                 let Some(stroke) = self.object_stroke.take() else {
                     return Vec::new();
@@ -249,6 +277,7 @@ impl Editor {
             return Vec::new();
         };
         let ids = &stroke.ids;
+        let nodes = &stroke.nodes;
         let result = self.gesture_apply(|tx| match &stroke.start {
             StrokeStart::Map(start) => {
                 let map = tx.map_mut(asset)?;
@@ -267,6 +296,13 @@ impl Editor {
                     }
                     StrokeChange::Resize(resize) => {
                         resize_objects(map, ids, resize)?;
+                    }
+                    StrokeChange::MoveNodes { delta, snapping } => {
+                        let pixel_delta =
+                            geometry.screen_to_pixel(delta) - geometry.screen_to_pixel(DVec2::ZERO);
+                        let anchor = nodes_anchor(map, nodes)?.unwrap_or(DVec2::ZERO);
+                        let snapped = snap_delta(&geometry, anchor, pixel_delta, snapping);
+                        move_nodes(map, nodes, snapped)?;
                     }
                 }
                 Ok::<_, EditError>(())
@@ -288,6 +324,14 @@ impl Editor {
                         }
                         StrokeChange::Resize(resize) => {
                             resize_objects_in(objects, space, ids, resize)?;
+                        }
+                        StrokeChange::MoveNodes { delta, snapping } => {
+                            let pixel_delta = geometry.screen_to_pixel(delta)
+                                - geometry.screen_to_pixel(DVec2::ZERO);
+                            let anchor =
+                                nodes_anchor_in(objects, space, nodes)?.unwrap_or(DVec2::ZERO);
+                            let snapped = snap_delta(geometry, anchor, pixel_delta, snapping);
+                            move_nodes_in(objects, space, nodes, snapped)?;
                         }
                     }
                     Ok(())

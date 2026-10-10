@@ -2,7 +2,7 @@
 //! the selected tiles (and the tiles they carry) and the selected objects.
 
 use bt_core::{LayerId, ObjectId};
-use bt_edit::TileRegion;
+use bt_edit::{Node, TileRegion};
 
 use super::carried::Carried;
 
@@ -17,6 +17,8 @@ pub struct Selection {
     pub tiles: TileRegion,
     /// The selected objects.
     pub objects: Vec<ObjectId>,
+    /// The nodes Edit Polygons selected, of selected polygons and polylines.
+    pub nodes: Vec<Node>,
     /// The tiles the selected cells carry, lifted off the map and moved, mirrored or turned
     /// with them; their cells are `tiles`.
     pub(crate) carried: Option<Carried>,

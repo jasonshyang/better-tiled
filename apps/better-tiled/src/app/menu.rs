@@ -124,6 +124,8 @@ const MENUS: [Menu; 7] = [
         title: "Objects",
         entries: &[
             Action(ActionId::DuplicateObjects),
+            Action(ActionId::JoinNodes),
+            Action(ActionId::SplitSegments),
             Separator,
             Action(ActionId::RaiseObjects),
             Action(ActionId::LowerObjects),

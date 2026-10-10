@@ -45,7 +45,7 @@ pub use history::{
 pub use intent::Intent;
 pub use notice::{Notice, Severity};
 pub use objects::{
-    HandleFrame, ObjectFrame, ObjectRow, ObjectStroke, ObjectStrokeKind, SnapToggle,
+    HandleFrame, NodeHandle, ObjectFrame, ObjectRow, ObjectStroke, ObjectStrokeKind, SnapToggle,
 };
 pub use properties::{
     Attribute, AttributeRow, AttributeValue, Change, ListEdit, Op, Origin, PropertyError,
@@ -69,6 +69,6 @@ pub use watch::{Found, Observation};
 
 // The editing types the intents and queries speak in.
 pub use bt_edit::{
-    Brush, BrushMode, FillShape, LayerLocation, ResizeHandle, SelectionMode, TileRegion,
+    Brush, BrushMode, FillShape, LayerLocation, Node, ResizeHandle, SelectionMode, TileRegion,
     rect_select_rect, shape_fill_region,
 };

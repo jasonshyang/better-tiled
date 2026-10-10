@@ -86,6 +86,10 @@ impl Editor {
             SelectionMode::Intersect => current.retain(|id| ids.contains(id)),
         }
         let selected = document.selection.objects.clone();
+        document
+            .selection
+            .nodes
+            .retain(|node| selected.contains(&node.object));
         // A map's objects all on one layer make it current; a tile's shapes have no layer.
         if !matches!(self.object_host(doc), Some(ObjectHost::Map(_))) {
             return;

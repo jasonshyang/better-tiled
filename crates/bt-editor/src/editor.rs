@@ -171,6 +171,11 @@ impl Editor {
                 self.session_changed();
                 Vec::new()
             }
+            Intent::SelectNodes { doc, nodes, mode } => {
+                self.select_nodes(doc, &nodes, mode);
+                Vec::new()
+            }
+            Intent::InsertNode { doc, segment, near } => self.insert_node_near(doc, segment, near),
             Intent::EditTileset { doc, slot } => self.edit_tileset(doc, slot),
             Intent::StopEditingTileset { doc } => self.stop_editing_tileset(doc),
             Intent::SelectTilesetTiles {

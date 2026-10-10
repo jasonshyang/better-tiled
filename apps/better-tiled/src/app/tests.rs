@@ -1234,3 +1234,77 @@ fn the_layers_panel_buttons_and_opacity_slider_act_on_the_selected_layers() {
     window.press(command(), Key::Z);
     assert_eq!((opacity(&window, 1), opacity(&window, 5)), (1.0, 1.0));
 }
+
+#[test]
+fn edit_polygons_moves_adds_and_removes_nodes() {
+    use bt_core::Shape;
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::DVec2;
+
+    let scratch = Scratch::new("window-edit-polygons").unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.press(command(), Key::N);
+    window.press(Modifiers::NONE, Key::Enter);
+    run_command(&mut window, "new object layer");
+    let doc = window.editor().current().unwrap();
+    let points = |window: &TestWindow| -> Vec<DVec2> {
+        let object = window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .layers
+            .iter()
+            .find_map(|layer| layer.as_object_layer())
+            .and_then(|layer| layer.objects.first().cloned())
+            .unwrap();
+        match object.shape {
+            Shape::Polygon(points) => points.iter().map(|p| *p + object.pos).collect(),
+            other => panic!("{other:?}"),
+        }
+    };
+    let near = |a: &[DVec2], b: &[DVec2]| {
+        a.len() == b.len() && a.iter().zip(b).all(|(p, q)| (*p - *q).length() < 0.5)
+    };
+    let v = DVec2::new;
+    let click = |window: &mut TestWindow, at: DVec2| {
+        window.click_world(at, PointerButton::Primary, Modifiers::NONE);
+    };
+
+    window.press(Modifiers::NONE, Key::P);
+    for at in [
+        v(40.0, 40.0),
+        v(120.0, 40.0),
+        v(120.0, 120.0),
+        v(41.0, 41.0),
+    ] {
+        click(&mut window, at);
+    }
+    let drawn = [v(40.0, 40.0), v(120.0, 40.0), v(120.0, 120.0)];
+    assert!(near(&points(&window), &drawn), "{:?}", points(&window));
+
+    // O: a node dragged moves, as one step.
+    window.press(Modifiers::NONE, Key::O);
+    window.drag_world(v(120.0, 40.0), v(140.0, 40.0), Modifiers::NONE);
+    let moved = [v(40.0, 40.0), v(140.0, 40.0), v(120.0, 120.0)];
+    assert!(near(&points(&window), &moved), "{:?}", points(&window));
+    window.press(command(), Key::Z);
+    assert!(near(&points(&window), &drawn), "undone");
+
+    // A double-click on a segment adds a node there; Delete takes a selected one away.
+    window.pause(1.0);
+    let middle = window.screen_of_world(v(80.0, 40.0));
+    window.click_on_screen(middle, PointerButton::Primary, Modifiers::NONE);
+    window.click_on_screen(middle, PointerButton::Primary, Modifiers::NONE);
+    let added = [
+        v(40.0, 40.0),
+        v(80.0, 40.0),
+        v(120.0, 40.0),
+        v(120.0, 120.0),
+    ];
+    assert!(near(&points(&window), &added), "{:?}", points(&window));
+    window.pause(1.0);
+    click(&mut window, v(120.0, 40.0));
+    window.press(Modifiers::NONE, Key::Delete);
+    let fewer = [v(40.0, 40.0), v(80.0, 40.0), v(120.0, 120.0)];
+    assert!(near(&points(&window), &fewer), "{:?}", points(&window));
+}

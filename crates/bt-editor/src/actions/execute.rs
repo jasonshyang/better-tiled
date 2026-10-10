@@ -10,7 +10,7 @@ use crate::document::{DocumentId, Reorient};
 use crate::editor::{Editor, warn};
 use crate::effect::{Dialog, Effect, FileRequest, ViewRequest};
 use crate::notice::Notice;
-use crate::objects::Restack;
+use crate::objects::{NodeCommand, Restack};
 use crate::settings::Snapping;
 
 /// The commands whose operations are still being built in this milestone: disabled, and
@@ -45,6 +45,16 @@ impl Editor {
                 .situation()
                 .document
                 .is_some_and(|d| !d.selection().tiles.is_empty())
+    }
+
+    /// Whether Delete takes the selected nodes rather than the objects: Edit Polygons is the
+    /// tool and nodes are selected.
+    fn edits_nodes(&self) -> bool {
+        self.tools.tool() == crate::tools::ToolKind::EditPolygons
+            && self
+                .situation()
+                .document
+                .is_some_and(|d| !d.selection().nodes.is_empty())
     }
 
     /// Chooses where objects snap; the preference is kept.
@@ -179,7 +189,18 @@ impl Editor {
                 on_document(self, &|editor, doc| editor.paste_copied_objects(doc, None))
             }
             ActionId::PasteInPlace => on_document(self, &Editor::paste_tiles_in_place),
+            ActionId::Delete if objects && self.edits_nodes() => {
+                on_document(self, &|editor, doc| {
+                    editor.change_selected_nodes(doc, NodeCommand::Delete)
+                })
+            }
             ActionId::Delete if objects => on_document(self, &Editor::delete_objects),
+            ActionId::JoinNodes => on_document(self, &|editor, doc| {
+                editor.change_selected_nodes(doc, NodeCommand::Join)
+            }),
+            ActionId::SplitSegments => on_document(self, &|editor, doc| {
+                editor.change_selected_nodes(doc, NodeCommand::Split)
+            }),
             ActionId::Delete => on_document(self, &Editor::delete_tiles),
             ActionId::FlipHorizontal | ActionId::FlipVertical => {
                 let axis = if id == ActionId::FlipHorizontal {

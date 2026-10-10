@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use bt_core::{Cell, Frame, LayerId, MapObject, ObjectId, PlacedCell, TileId, TilesetSlot};
-use bt_edit::{FillShape, LayerLocation, SelectionMode, TileRegion};
+use bt_edit::{FillShape, LayerLocation, Node, SelectionMode, TileRegion};
 use bt_utils::IRect;
 use glam::{DVec2, IVec2};
 
@@ -99,6 +99,24 @@ pub enum Intent {
         tile: TileId,
         /// Its frames; none for a still tile.
         frames: Vec<Frame>,
+    },
+    /// Select nodes of the selected polygons and polylines (Edit Polygons).
+    SelectNodes {
+        /// The document.
+        doc: DocumentId,
+        /// The nodes.
+        nodes: Vec<Node>,
+        /// How they combine with the selected ones.
+        mode: SelectionMode,
+    },
+    /// Insert a node on a segment, at its point nearest `near` (the map's screen space).
+    InsertNode {
+        /// The document.
+        doc: DocumentId,
+        /// The segment, named by the node it starts at.
+        segment: Node,
+        /// Where it goes.
+        near: DVec2,
     },
     /// Select layers, one of them the layer tools act on (the Layers panel's Shift and ⌘
     /// clicks): `current` is selected whether `layers` names it or not.

@@ -8,6 +8,7 @@ use crate::document::{Document, TilesetMode};
 use crate::editor::Editor;
 use crate::objects::ObjectHost;
 use crate::settings::Snapping;
+use crate::tools::ToolKind;
 
 /// Whether a command can run now.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,6 +147,14 @@ impl Editor {
             }
             ActionId::DuplicateObjects | ActionId::MoveObjectsToLayer if !has_objects => {
                 Enabled::Disabled(None)
+            }
+            ActionId::JoinNodes | ActionId::SplitSegments
+                if self.tools.tool() != ToolKind::EditPolygons
+                    || selection.is_none_or(|s| s.nodes.len() < 2) =>
+            {
+                Enabled::Disabled(Some(
+                    "Select two nodes or more with Edit Polygons first".to_owned(),
+                ))
             }
             ActionId::MoveObjectsToLayer if editing_tileset => {
                 Enabled::Disabled(Some("Collision shapes stay with their tile".to_owned()))

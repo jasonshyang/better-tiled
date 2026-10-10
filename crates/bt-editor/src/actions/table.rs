@@ -468,6 +468,12 @@ action_table! {
     DuplicateObjects => ActionSpec::new(ActionId::DuplicateObjects, "duplicate_objects", "Duplicate Objects", "copy clone")
         .on(ObjectLayer)
         .keys(&[cmd('d')]),
+    /// Edit Polygons: join the selected nodes into one.
+    JoinNodes => ActionSpec::new(ActionId::JoinNodes, "join_nodes", "Join Nodes", "polygon polyline merge points")
+        .on(ObjectLayer),
+    /// Edit Polygons: a node in the middle of each segment between selected nodes.
+    SplitSegments => ActionSpec::new(ActionId::SplitSegments, "split_segments", "Split Segments", "polygon polyline add points")
+        .on(ObjectLayer),
     /// Mirror the brush, the carried tiles or the selected objects left to right.
     FlipHorizontal => ActionSpec::new(ActionId::FlipHorizontal, "flip_horizontal", "Flip Horizontally", "mirror")
         .on(Document)

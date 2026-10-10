@@ -3,6 +3,7 @@
 
 mod brush;
 mod carry_drag;
+mod edit_polygons;
 mod eraser;
 mod fills;
 mod insert_objects;
