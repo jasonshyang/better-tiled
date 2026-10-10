@@ -252,6 +252,19 @@ impl TestWindow {
         at
     }
 
+    /// Where the middle of a tile of the Tiles panel is on screen.
+    pub(crate) fn tiles_panel_tile(&mut self, tile: u32) -> egui::Pos2 {
+        self.harness.run_steps(1);
+        let Some(at) = self
+            .harness
+            .state()
+            .tiles_panel_tile_on_screen(bt_core::TileId(tile))
+        else {
+            panic!("the Tiles panel shows no tile {tile}");
+        };
+        at
+    }
+
     /// Where a point of the collision view is on screen.
     pub(crate) fn collision_point(&mut self, world: glam::DVec2) -> egui::Pos2 {
         self.harness.run_steps(1);

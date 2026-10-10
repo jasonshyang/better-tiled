@@ -30,7 +30,7 @@ pub(crate) struct AnimationEditor {
     /// A duration being dragged or typed, applied when the edit ends.
     pending: Option<PendingDuration>,
     /// Where the palette was drawn last.
-    palette: Option<super::ShownTiles>,
+    palette: Option<crate::panels::ShownTiles>,
 }
 
 /// A frame's duration being edited.
@@ -252,7 +252,7 @@ fn palette(
     ui: &mut egui::Ui,
     tileset: &Tileset,
     source: &mut TileSource<'_>,
-) -> (Option<TileId>, Option<super::ShownTiles>) {
+) -> (Option<TileId>, Option<crate::panels::ShownTiles>) {
     let ids = tileset.tile_ids();
     let cell = vec2(PALETTE_SIDE, PALETTE_SIDE);
     let columns = ((ui.available_width() / cell.x).floor() as usize).max(1);
@@ -279,7 +279,7 @@ fn palette(
                     .and_then(|at| grid.index_at(at))
                     .and_then(|index| ids.get(index).copied());
             }
-            shown = Some(super::ShownTiles {
+            shown = Some(crate::panels::ShownTiles {
                 grid,
                 ids: ids.clone(),
             });

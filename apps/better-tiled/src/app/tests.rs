@@ -1528,3 +1528,127 @@ fn offset_layers_drags_the_selected_layers_and_escape_puts_them_back() {
         "the escaped drag left no step"
     );
 }
+
+/// The milestone's measure (`00-high-level-design.md` §17, M2): a level built from scratch in
+/// the window, without Tiled, saved as a Tiled map that holds all of it.
+#[test]
+fn a_level_is_built_from_scratch_in_the_window() {
+    use bt_core::{Shape, TileId};
+    use bt_editor::FileRequest;
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::DVec2;
+
+    let scratch = Scratch::new("window-level-from-scratch").unwrap();
+    bt_test_data::fixtures::Atlas::builder()
+        .name("terrain")
+        .tile_size(32, 32)
+        .grid(4, 2)
+        .build_in(scratch.path())
+        .unwrap();
+    let image = scratch.join("terrain.png");
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    let primary = PointerButton::Primary;
+    let none = Modifiers::NONE;
+
+    // A new map, and a tileset made from the image.
+    window.press(command(), Key::N);
+    window.press(none, Key::Enter);
+    let doc = window.editor().current().unwrap();
+    run_command(&mut window, "new tileset");
+    window.click("Browse…");
+    window.answer_file_dialog(FileRequest::TilesetImage, &image);
+    window.click("OK");
+
+    // Tiles picked in the Tiles panel paint a row; Bucket Fill covers the rest.
+    let at = window.tiles_panel_tile(1);
+    window.click_on_screen(at, primary, none);
+    window.drag_cells(IVec2::new(0, 0), IVec2::new(5, 0), none);
+    let at = window.tiles_panel_tile(5);
+    window.click_on_screen(at, primary, none);
+    window.press(none, Key::F);
+    window.click_cell(IVec2::new(10, 10), primary, none);
+
+    // An object layer with a rectangle on it.
+    run_command(&mut window, "new object layer");
+    window.press(none, Key::R);
+    window.drag_world(DVec2::new(64.0, 64.0), DVec2::new(128.0, 96.0), none);
+
+    // Tile 1 gets a collision shape in the tileset editor.
+    window.click("Edit Tileset");
+    let at = window.tileset_tile(1);
+    window.click_on_screen(at, primary, none);
+    window.click("Collision");
+    window.press(none, Key::R);
+    let from = window.collision_point(DVec2::new(0.0, 16.0));
+    let to = window.collision_point(DVec2::new(32.0, 32.0));
+    window.drag_on_screen(from, to, none);
+    window.click("◀ Map");
+
+    // An untitled map asks where to save.
+    window.press(command(), Key::S);
+    let saved = scratch.join("level.tmx");
+    window.answer_file_dialog(
+        FileRequest::SaveAs {
+            doc,
+            suggested: PathBuf::from("untitled.tmx"),
+        },
+        &saved,
+    );
+    assert!(!window.editor().has_unsaved());
+
+    // The file is a Tiled map that holds all of it.
+    let map = bt_tmx::Loader::builder()
+        .build()
+        .load_map(&saved)
+        .unwrap()
+        .value;
+    let ground = map.layers[0].as_tile_layer().unwrap();
+    for x in 0..6 {
+        assert_eq!(ground.cell(IVec2::new(x, 0)).tile(), TileId(1), "row {x}");
+    }
+    assert_eq!(ground.cell(IVec2::new(10, 10)).tile(), TileId(5));
+    assert_eq!(ground.cell(IVec2::new(29, 19)).tile(), TileId(5), "filled");
+    let objects = map
+        .layers
+        .iter()
+        .find_map(|layer| layer.as_object_layer())
+        .unwrap();
+    let [rect] = &objects.objects[..] else {
+        panic!("one object: {:?}", objects.objects);
+    };
+    assert_eq!(rect.shape, Shape::Rectangle);
+    assert!((rect.pos - DVec2::new(64.0, 64.0)).length() < 0.5);
+    assert!((rect.size - DVec2::new(64.0, 32.0)).length() < 0.5);
+    let tileset = &map.tilesets[0].tileset;
+    assert_eq!(tileset.name, "terrain");
+    let bt_core::TilesetImage::Atlas { image: atlas, .. } = &tileset.image else {
+        panic!("an atlas: {:?}", tileset.image);
+    };
+    let bt_core::ImageSource::File(file) = &atlas.source else {
+        panic!("an image file: {:?}", atlas.source);
+    };
+    assert_eq!(
+        file.source, "terrain.png",
+        "beside the map, by a relative path"
+    );
+    let shapes = &tileset
+        .tile(TileId(1))
+        .unwrap()
+        .collision
+        .as_ref()
+        .unwrap()
+        .layer;
+    let [shape] = &shapes.objects[..] else {
+        panic!("one shape: {:?}", shapes.objects);
+    };
+    assert!(
+        (shape.pos - DVec2::new(0.0, 16.0)).length() < 0.5,
+        "{}",
+        shape.pos
+    );
+    assert!(
+        (shape.size - DVec2::new(32.0, 16.0)).length() < 0.5,
+        "{}",
+        shape.size
+    );
+}

@@ -18,7 +18,7 @@ use egui::{Sense, Stroke, StrokeKind, vec2};
 use glam::DVec2;
 
 use crate::canvas::CanvasGpu;
-use crate::panels::{TileGrid, TileImages, TileSource, cell_size, paint_tile};
+use crate::panels::{ShownTiles, TileGrid, TileImages, TileSource, cell_size, paint_tile};
 use crate::tools::ToolBox;
 
 use animation::AnimationEditor;
@@ -35,28 +35,6 @@ pub(crate) struct TilesetEditorView {
     animation: AnimationEditor,
     /// Where each document's tiles were drawn last.
     shown: HashMap<DocumentId, ShownTiles>,
-}
-
-/// Where tiles were drawn in the last frame.
-#[derive(Clone, Debug)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the window's tests click the tiles drawn")
-)]
-pub(crate) struct ShownTiles {
-    /// The grid.
-    pub(crate) grid: TileGrid,
-    /// The tiles, in the grid's order.
-    pub(crate) ids: Vec<TileId>,
-}
-
-impl ShownTiles {
-    /// Where the middle of a tile is on screen.
-    #[cfg(test)]
-    pub(crate) fn centre_of(&self, tile: TileId) -> Option<egui::Pos2> {
-        let index = self.ids.iter().position(|t| *t == tile)?;
-        Some(self.grid.rect(index).center())
-    }
 }
 
 /// What a frame of the tileset editor works with.

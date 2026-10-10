@@ -11,7 +11,7 @@ use bt_editor::{DocumentId, Editor, Intent};
 use bt_image::ImageStore;
 use egui::{Pos2, Sense, Stroke, StrokeKind, vec2};
 
-use super::tile_grid::{TileGrid, TileSource, cell_size, paint_tile};
+use super::tile_grid::{ShownTiles, TileGrid, TileSource, cell_size, paint_tile};
 use super::tile_images::{TileImages, TileTexture};
 
 /// The zoom range of the panel.
@@ -26,6 +26,8 @@ pub(crate) struct TilesPanel {
     picked: HashMap<String, TilePick>,
     /// A drag over tiles under way: the place it started at.
     dragging: Option<usize>,
+    /// Where the tiles were drawn last.
+    shown: Option<ShownTiles>,
 }
 
 /// A rectangle of tiles in the panel's grid, from one place to another (any corners).
@@ -124,6 +126,12 @@ impl TilesPanel {
         }
     }
 
+    /// Where the middle of a tile of the tileset shown is on screen (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn tile_on_screen(&self, tile: bt_core::TileId) -> Option<egui::Pos2> {
+        self.shown.as_ref()?.centre_of(tile)
+    }
+
     fn show_tabs(&mut self, ui: &mut egui::Ui, map: &Map, doc: DocumentId) -> usize {
         let mut current = self
             .current
@@ -190,6 +198,10 @@ impl TilesPanel {
                 let size = vec2(columns as f32 * cell.x, grid.rows() as f32 * cell.y);
                 let (area, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
                 grid.origin = area.min;
+                self.shown = Some(ShownTiles {
+                    grid,
+                    ids: ids.clone(),
+                });
                 let under = |at: Option<Pos2>| at.and_then(|at| grid.index_at(at));
                 let pressed = under(response.interact_pointer_pos());
                 if response.drag_started() {

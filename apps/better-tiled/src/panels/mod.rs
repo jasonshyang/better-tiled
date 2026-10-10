@@ -9,6 +9,6 @@ mod tiles;
 
 pub(crate) use layers::LayersPanel;
 pub(crate) use objects::ObjectsPanel;
-pub(crate) use tile_grid::{TileGrid, TileSource, cell_size, paint_tile};
+pub(crate) use tile_grid::{ShownTiles, TileGrid, TileSource, cell_size, paint_tile};
 pub(crate) use tile_images::TileImages;
 pub(crate) use tiles::TilesPanel;

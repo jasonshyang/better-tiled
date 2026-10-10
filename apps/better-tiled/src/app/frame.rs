@@ -203,6 +203,12 @@ impl App {
             .collision_world_on_screen(self.editor.current()?, world)
     }
 
+    /// Where the middle of a tile of the Tiles panel is on screen (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn tiles_panel_tile_on_screen(&self, tile: bt_core::TileId) -> Option<egui::Pos2> {
+        self.tiles_panel.tile_on_screen(tile)
+    }
+
     /// Where the middle of a tile of the animation editor's palette is on screen (for the
     /// window's tests).
     #[cfg(test)]

@@ -51,6 +51,28 @@ impl TileGrid {
     }
 }
 
+/// Where tiles were drawn in the last frame.
+#[derive(Clone, Debug)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the window's tests click the tiles drawn")
+)]
+pub(crate) struct ShownTiles {
+    /// The grid.
+    pub(crate) grid: TileGrid,
+    /// The tiles, in the grid's order.
+    pub(crate) ids: Vec<TileId>,
+}
+
+impl ShownTiles {
+    /// Where the middle of a tile is on screen.
+    #[cfg(test)]
+    pub(crate) fn centre_of(&self, tile: TileId) -> Option<egui::Pos2> {
+        let index = self.ids.iter().position(|t| *t == tile)?;
+        Some(self.grid.rect(index).center())
+    }
+}
+
 /// What tiles are drawn with.
 pub(crate) struct TileSource<'a> {
     /// The textures uploaded so far.
