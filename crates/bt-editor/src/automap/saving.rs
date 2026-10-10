@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use bt_automap::layers::{AutoLayers, Restored, painted_record, restore};
 use bt_core::Map;
-use bt_project::{EntryPlace, ProjectFile, paths};
+use bt_project::{AutoMapRecord, EntryPlace, ProjectFile, paths};
 
 use crate::document::DocumentId;
 use crate::editor::Editor;
@@ -128,17 +128,20 @@ impl Editor {
     }
 
     /// Puts AutoMap layers read with a map into its new document: the setup, and the map as its
-    /// file holds it, to check against the first result; entries that did not apply are said.
+    /// file holds it (none for recovered work, which is unsaved anyway), to check against the
+    /// first result; entries that did not apply are said.
     pub(crate) fn restore_layers(
         &mut self,
         doc: DocumentId,
         restored: Restored,
-        saved: Arc<Map>,
+        saved: Option<Arc<Map>>,
     ) -> Vec<Effect> {
         if let Some(document) = self.documents.get_mut(doc) {
             document.automap = Some(restored.setup);
         }
-        self.automap.saved.insert(doc, saved);
+        if let Some(saved) = saved {
+            self.automap.saved.insert(doc, saved);
+        }
         let Some(first) = restored.notes.first() else {
             return Vec::new();
         };
@@ -147,6 +150,21 @@ impl Editor {
             Notice::warning(format!("AutoMap layers: {}", first.text))
                 .with_detail(details.join("\n")),
         )]
+    }
+
+    /// The setup of the map `asset`'s AutoMap layers for its recovery snapshot, which holds what
+    /// was painted: the record the project file would keep, with the rules file's full path and
+    /// no painted entries.
+    pub(crate) fn snapshot_layers(&self, asset: AssetId) -> Option<AutoMapRecord> {
+        let setup = self
+            .documents
+            .in_order()
+            .find(|d| d.asset() == asset)?
+            .automap
+            .as_ref()?;
+        let painted = AutoLayers::painted_only(Arc::clone(self.store.map(asset)?));
+        let rules = setup.rules.to_string_lossy().into_owned();
+        Some(painted_record(setup, rules, &painted))
     }
 
     /// Where project files are locked while they are written.

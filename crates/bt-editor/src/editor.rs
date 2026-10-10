@@ -424,6 +424,7 @@ impl Editor {
                     meta: SnapshotMeta {
                         original,
                         pid: self.recovery.pid(),
+                        automap: None,
                     },
                 }),
                 Err(error) => {
@@ -447,6 +448,7 @@ impl Editor {
                 meta: SnapshotMeta {
                     original,
                     pid: self.recovery.pid(),
+                    automap: self.snapshot_layers(id),
                 },
             }),
             Err(error) => {

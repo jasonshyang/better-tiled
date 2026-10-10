@@ -234,7 +234,9 @@ impl Editor {
             .into_iter()
             .map(|orphan| {
                 let path = orphan.original_path();
-                Effect::Load(self.load_job(path, LoadSource::Snapshot(orphan.snapshot)))
+                let mut job = self.load_job(path, LoadSource::Snapshot(orphan.snapshot));
+                job.recovered_layers = orphan.meta.automap;
+                Effect::Load(job)
             })
             .collect()
     }

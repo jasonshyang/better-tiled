@@ -177,16 +177,21 @@ fn heartbeat_path(folder: &Path, pid: u32) -> PathBuf {
 }
 
 /// What a snapshot is of.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotMeta {
     /// The file the map was saved to, if any.
     pub original: Option<PathBuf>,
     /// The run that wrote it.
     pub pid: u32,
+    /// The map's AutoMap layers, while they were on: the snapshot holds what was painted, and
+    /// this the setup, as the project file keeps it but with the rules file's full path and no
+    /// painted entries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automap: Option<bt_project::AutoMapRecord>,
 }
 
 /// A snapshot to write: the text Save would write, and what it is of.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
     /// Where it goes.
     pub path: PathBuf,
@@ -243,7 +248,7 @@ pub fn remove_heartbeat(folder: &Path, pid: u32) -> Result<(), std::io::Error> {
 }
 
 /// A snapshot whose run stopped without saving or deleting it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Orphan {
     /// The snapshot file.
     pub snapshot: PathBuf,

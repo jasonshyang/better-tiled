@@ -207,6 +207,7 @@ mod tests {
             meta: SnapshotMeta {
                 original: None,
                 pid: 7,
+                automap: None,
             },
         };
         writer.write_snapshot(snapshot.clone());

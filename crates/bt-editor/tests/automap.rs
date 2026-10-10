@@ -712,3 +712,51 @@ fn a_map_whose_rules_changed_since_it_was_saved_opens_unsaved() {
         )]
     );
 }
+
+#[test]
+fn live_automap_comes_back_with_recovered_work() {
+    use std::time::SystemTime;
+
+    use bt_editor::{Choice, orphans};
+
+    let (scratch, map) = folder_with_rules("bt-editor-live-recovery", 6);
+    let mut crashed = editor_in(&scratch);
+    apply(&mut crashed, Intent::Open(map));
+    apply(&mut crashed, Intent::Tick { now_ms: 0 });
+    let doc = crashed.current().unwrap();
+    apply(&mut crashed, Intent::Run(ActionId::LiveAutoMap));
+    paint(&mut crashed, doc, 2, IVec2::new(2, 1), 3);
+    let effects = apply(&mut crashed, Intent::Tick { now_ms: 10_000 });
+    let [Effect::WriteSnapshot(snapshot)] = effects.as_slice() else {
+        panic!("one snapshot: {effects:?}");
+    };
+    snapshot.write().unwrap();
+    drop(crashed);
+
+    let found = orphans(&scratch.join("recovery"), 2000, SystemTime::now());
+    assert_eq!(found.len(), 1);
+    std::fs::create_dir_all(scratch.join("locks")).unwrap();
+    let mut editor = Editor::builder()
+        .recovery_folder(scratch.join("recovery"))
+        .pid(2000)
+        .home(Some(scratch.path().to_path_buf()))
+        .lock_folder(scratch.join("locks"))
+        .build()
+        .unwrap();
+    let effects = apply(&mut editor, Intent::Recoverable(found));
+    let question = common::ask(&effects).clone();
+    apply(
+        &mut editor,
+        Intent::Decided {
+            decision: question.id,
+            choice: Choice::Recover,
+        },
+    );
+    apply(&mut editor, Intent::Tick { now_ms: 0 });
+    let doc = editor.current().unwrap();
+    let setup = editor.document(doc).unwrap().automap().unwrap();
+    assert_eq!(setup.rules, scratch.join("rules.txt"));
+    assert_eq!(top(&editor, doc), ". . .\n. . 3", "what was painted");
+    assert_eq!(shown_top(&editor, doc), "6 6 6\n6 6 6");
+    assert!(editor.has_unsaved());
+}

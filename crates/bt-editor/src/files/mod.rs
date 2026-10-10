@@ -40,7 +40,7 @@ pub(crate) struct Files {
 }
 
 /// What an awaited answer is for.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Pending {
     /// Closing a document with unsaved work.
     Close(DocumentId),

@@ -5,8 +5,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_automap::layers::Restored;
+use bt_automap::layers::{Restored, restore};
 use bt_core::{CustomTypes, Map, Project, Tileset};
+use bt_project::AutoMapRecord;
 use bt_tmx::{Loader, Warning};
 use bt_utils::hash::fnv1a_64;
 
@@ -60,6 +61,8 @@ pub struct LoadJob {
     pub(crate) purpose: LoadPurpose,
     /// The user's home folder, where the search for the map's project file stops.
     pub(crate) home: Option<PathBuf>,
+    /// For a recovered map, its AutoMap layers' setup as its snapshot's description keeps it.
+    pub(crate) recovered_layers: Option<AutoMapRecord>,
 }
 
 /// What a load read.
@@ -225,7 +228,10 @@ impl LoadJob {
         // A recovered map is what was painted already; AutoMap layers are read for the file.
         let layers = match &self.source {
             LoadSource::File => read_layers(canonical, self.home.as_deref(), &loaded.value),
-            LoadSource::Snapshot(_) => Ok(None),
+            LoadSource::Snapshot(_) => Ok(self
+                .recovered_layers
+                .as_ref()
+                .map(|record| restore(record, PathBuf::from(&record.rules), &loaded.value))),
         };
         Ok(LoadedFiles {
             content: LoadedContent::Map(Box::new(loaded.value)),

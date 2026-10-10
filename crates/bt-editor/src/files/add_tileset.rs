@@ -41,6 +41,7 @@ impl Editor {
             kind: LoadKind::Tileset,
             purpose: LoadPurpose::AddToMap(doc),
             home: self.files.home.clone(),
+            recovered_layers: None,
         })]
     }
 

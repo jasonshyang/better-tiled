@@ -57,6 +57,7 @@ impl Editor {
             },
             purpose: LoadPurpose::Open,
             home: self.files.home.clone(),
+            recovered_layers: None,
         }
     }
 
@@ -175,6 +176,7 @@ impl Editor {
         self.files.loaders.insert(asset, files.loader);
         let doc = self.open_document(asset);
         if let Some(restored) = layers {
+            let saved = loaded.recovered_from.is_none().then_some(saved);
             effects.extend(self.restore_layers(doc, restored, saved));
         }
         self.restore_view_state(doc, &path);
