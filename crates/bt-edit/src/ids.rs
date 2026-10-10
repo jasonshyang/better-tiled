@@ -15,13 +15,6 @@ pub(crate) fn take_layer_id(map: &mut Map) -> Result<LayerId, EditError> {
 }
 
 /// Takes the map's next object id.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the paste, layer and object commands take ids; they come next"
-    )
-)]
 pub(crate) fn take_object_id(map: &mut Map) -> Result<ObjectId, EditError> {
     let id = map.next_object_id.max(1);
     map.next_object_id = id.checked_add(1).ok_or(EditError::OutOfIds)?;

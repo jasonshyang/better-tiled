@@ -145,3 +145,72 @@ pub(crate) fn assert_valid(map: &bt_core::Map) {
     let violations = map.validate();
     assert!(violations.is_empty(), "{violations:?}");
 }
+
+/// The layer tree as text: `id:name` per layer, bottom first, a group's layers in brackets after
+/// it. What a test compares a tree against.
+pub(crate) fn tree(map: &bt_core::Map) -> String {
+    fn walk(layers: &[bt_core::Layer]) -> String {
+        layers
+            .iter()
+            .map(|layer| match &layer.kind {
+                bt_core::LayerKind::Group(children) => {
+                    format!("{}:{}[{}]", layer.id, layer.name, walk(children))
+                }
+                _ => format!("{}:{}", layer.id, layer.name),
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    walk(&map.layers)
+}
+
+/// A tile layer holding an ASCII grid's cells, the grid's size; the map builder gives its id.
+pub(crate) fn tile_layer(name: &str, grid: &str) -> bt_core::Layer {
+    let cells = bt_test_data::fixtures::grid_layer(grid).unwrap();
+    bt_core::Layer::new(bt_core::LayerId(0), name, bt_core::LayerKind::Tile(cells))
+}
+
+/// A group of layers; the map builder gives its id.
+pub(crate) fn group(name: &str, layers: Vec<bt_core::Layer>) -> bt_core::Layer {
+    bt_core::Layer::new(bt_core::LayerId(0), name, bt_core::LayerKind::Group(layers))
+}
+
+/// A rectangle object at `(x, y)` of `w × h` pixels; the map builder gives its id.
+pub(crate) fn rect_object(x: f64, y: f64, w: f64, h: f64) -> bt_core::MapObject {
+    bt_core::MapObject {
+        pos: glam::DVec2::new(x, y),
+        size: glam::DVec2::new(w, h),
+        ..bt_core::MapObject::default()
+    }
+}
+
+/// A 4×3 orthogonal map of 16-pixel tiles with every kind of layer, groups in groups:
+/// `1:ground 2:walls[3:floor 4:props[5:crates]] 6:sky`. The crates are objects 1 and 2, the
+/// first pointing at the second.
+pub(crate) fn nested() -> bt_core::Map {
+    let atlas = bt_test_data::fixtures::Atlas::builder()
+        .build_embedded()
+        .unwrap();
+    let mut first = rect_object(0.0, 0.0, 16.0, 16.0);
+    first.properties.insert(
+        "next".into(),
+        bt_core::Property::new(bt_core::Value::Object(bt_core::ObjectId(2))),
+    );
+    let crates = bt_core::Layer::new(
+        bt_core::LayerId(0),
+        "crates",
+        bt_core::LayerKind::Object(bt_core::ObjectLayer {
+            objects: std::sync::Arc::new(vec![first, rect_object(32.0, 16.0, 16.0, 16.0)]),
+            ..bt_core::ObjectLayer::default()
+        }),
+    );
+    let props = group("props", vec![crates]);
+    let floor = tile_layer("floor", "1 1 1 1\n1 1 1 1\n1 1 1 1");
+    bt_test_data::fixtures::MapBuilder::new(glam::UVec2::splat(16), glam::UVec2::new(4, 3))
+        .tileset(atlas.tileset)
+        .tile_layer("ground", "2 2 . .\n. . . .\n. . 3 3")
+        .layer(group("walls", vec![floor, props]))
+        .image_layer("sky", bt_core::ImageLayer::default())
+        .build()
+        .unwrap()
+}

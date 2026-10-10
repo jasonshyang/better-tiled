@@ -17,12 +17,14 @@ mod clip;
 mod error;
 mod ids;
 mod lattice;
+mod layer_ops;
 mod region;
 mod report;
 mod select;
 mod shapes;
 #[cfg(test)]
 mod testutil;
+mod tile_layers;
 mod tileset_ops;
 
 pub use brush::{Brush, BrushMode, Variation};
@@ -33,9 +35,16 @@ pub use clip::{
 pub use error::EditError;
 pub use ids::IdRemap;
 pub use lattice::{FlipDirection, RotateDirection};
+pub use layer_ops::{
+    LayerLocation, LayerType, LayerViaSource, can_merge_down, children, duplicate_layers,
+    group_layers, layer_order, layer_via_copy, layer_via_cut, locate, lower_layers,
+    merge_layers_down, move_layers, new_layer, offset_layers, other_layers, raise_layers,
+    remove_layers, toggle_locked, toggle_visible, ungroup_layers,
+};
 pub use region::{SelectionMode, TileRegion};
 pub use report::{
-    EraseReport, LayerChange, ObjectsReport, PasteReport, RemovedTileset, ResizeReport,
+    EraseReport, LayerChange, LayersReport, ObjectsReport, PasteReport, RemovedTileset,
+    ResizeReport,
 };
 pub use select::{fill_area, flood_fill, invert, magic_wand, select_same_tile};
 pub use shapes::{FillShape, rect_select_rect, shape_fill_region};

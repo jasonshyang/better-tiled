@@ -15,6 +15,20 @@ pub enum EditError {
     /// The layer holds no objects.
     #[error("layer {0} is not an object layer")]
     NotAnObjectLayer(LayerId),
+    /// The layer holds no layers.
+    #[error("layer {0} is not a group")]
+    NotAGroup(LayerId),
+    /// A group was asked to go inside itself or one of its own groups.
+    #[error("group {0} cannot go inside itself")]
+    IntoItself(LayerId),
+    /// A place among a group's layers (or the map's top-level layers) past the last one.
+    #[error("{} has no place {index}", owner_of_places(.parent))]
+    NoSuchPlace {
+        /// The group; `None` for the map's top level.
+        parent: Option<LayerId>,
+        /// The place asked for, counted from the bottom.
+        index: usize,
+    },
     /// No object layer holds an object with this id.
     #[error("the map has no object {0}")]
     NoSuchObject(ObjectId),
@@ -49,4 +63,12 @@ pub enum EditError {
     /// The model refused a change (a cell outside a finite layer).
     #[error(transparent)]
     Model(#[from] bt_core::Error),
+}
+
+/// What holds the places of [`EditError::NoSuchPlace`], in words.
+fn owner_of_places(parent: &Option<LayerId>) -> String {
+    match parent {
+        Some(group) => format!("group {group}"),
+        None => "the map's top level".to_owned(),
+    }
 }

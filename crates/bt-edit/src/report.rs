@@ -45,6 +45,24 @@ pub struct ResizeReport {
     pub pixel_offset: DVec2,
 }
 
+/// What a layer command did to the layer tree.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LayersReport {
+    /// The layers made, in the order they were made.
+    pub created: Vec<LayerId>,
+    /// The layers taken out of the map (a removed group takes its children with it).
+    pub removed: Vec<LayerId>,
+    /// The layers that changed or moved, in the order they did.
+    pub changed: Vec<LayerId>,
+}
+
+impl LayersReport {
+    /// Whether the command changed nothing.
+    pub fn is_empty(&self) -> bool {
+        self.created.is_empty() && self.removed.is_empty() && self.changed.is_empty()
+    }
+}
+
 /// A tileset taken out of a map, with what went with it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RemovedTileset {
