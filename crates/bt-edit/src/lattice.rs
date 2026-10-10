@@ -51,6 +51,39 @@ impl Stagger {
     }
 }
 
+/// A linear map of lattice coordinates ([`Lattice::coordinates`]), by where it takes the two
+/// unit steps: the part of a mirror or a turn that does not depend on where it is centred.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Linear {
+    /// Where `(1, 0)` goes.
+    x: IVec2,
+    /// Where `(0, 1)` goes.
+    y: IVec2,
+}
+
+impl Linear {
+    /// The map that leaves everything where it is.
+    pub(crate) const IDENTITY: Linear = Linear {
+        x: IVec2::X,
+        y: IVec2::Y,
+    };
+
+    /// Where it takes `v`. Coordinates saturate beyond `i32`, which no map reaches.
+    pub(crate) fn apply(self, v: IVec2) -> IVec2 {
+        self.x
+            .saturating_mul(IVec2::splat(v.x))
+            .saturating_add(self.y.saturating_mul(IVec2::splat(v.y)))
+    }
+
+    /// This map after `first`.
+    pub(crate) fn after(self, first: Linear) -> Linear {
+        Linear {
+            x: self.apply(first.x),
+            y: self.apply(first.y),
+        }
+    }
+}
+
 /// The lattice of a map's cells.
 ///
 /// Every cell has a point with integer coordinates `(a, b)` aligned with the screen, `a` across
@@ -183,6 +216,55 @@ impl Lattice {
     /// which is what keeps a shape's form.
     pub(crate) fn stepped(self, cell: IVec2, step: IVec2) -> IVec2 {
         self.cell(self.point(cell) + step)
+    }
+
+    /// A cell's lattice coordinates, in which every pair of integers is a cell, cell (0, 0) is at
+    /// (0, 0), a lattice step is the same change wherever it starts, and every mirror and turn
+    /// is an integer matrix ([`Lattice::linear`]): the cell itself on square and diamond grids,
+    /// its cell on the diamond grid behind the shifted rows (columns) of a staggered map, and its
+    /// axial coordinates on a hexagonal map (`bt_core::Hex`'s `x` and `z`).
+    pub(crate) fn coordinates(self, cell: IVec2) -> IVec2 {
+        match self {
+            Lattice::Square | Lattice::Diamond => cell,
+            Lattice::Staggered(_) => Lattice::Diamond.cell(self.step(IVec2::ZERO, cell)),
+            Lattice::Hexagonal(stagger) => {
+                let hex = Hex::from_offset(cell, stagger.axis, stagger.index);
+                IVec2::new(hex.x, hex.z)
+            }
+        }
+    }
+
+    /// The cell at lattice coordinates ([`Lattice::coordinates`]).
+    pub(crate) fn cell_at(self, coordinates: IVec2) -> IVec2 {
+        match self {
+            Lattice::Square | Lattice::Diamond => coordinates,
+            Lattice::Staggered(_) => self.stepped(IVec2::ZERO, Lattice::Diamond.point(coordinates)),
+            Lattice::Hexagonal(stagger) => {
+                // Axial coordinates are a cube's x and z; its y makes the sum 0.
+                let cube = Hex::new(coordinates.x, -coordinates.x - coordinates.y, coordinates.y);
+                cube.to_offset(stagger.axis, stagger.index)
+            }
+        }
+    }
+
+    /// How many turns make a whole one: six sixths on hexagonal lattices, four quarters on the
+    /// others.
+    pub(crate) fn turns_in_circle(self) -> u8 {
+        match self {
+            Lattice::Hexagonal(_) => 6,
+            Lattice::Square | Lattice::Diamond | Lattice::Staggered(_) => 4,
+        }
+    }
+
+    /// The linear part of a mirror or a turn in lattice coordinates, in which
+    /// [`Lattice::moved`] is an affine map: where it takes the unit steps from cell (0, 0).
+    pub(crate) fn linear(self, motion: Motion) -> Linear {
+        let origin = self.coordinates(self.moved(IVec2::ZERO, motion));
+        let image = |unit: IVec2| self.coordinates(self.moved(self.cell_at(unit), motion)) - origin;
+        Linear {
+            x: image(IVec2::X),
+            y: image(IVec2::Y),
+        }
     }
 
     /// The lattice step that puts the top-left of `cells` at `corner`: the topmost row at
@@ -337,5 +419,84 @@ mod tests {
             }
         }
         assert_eq!(Lattice::Square.anchoring_step(&[], IVec2::ZERO), None);
+    }
+
+    /// Every mirror and turn.
+    const MOTIONS: [Motion; 4] = [
+        Motion::Mirror(Axis::Horizontal),
+        Motion::Mirror(Axis::Vertical),
+        Motion::Turn(RotateDirection::Clockwise),
+        Motion::Turn(RotateDirection::CounterClockwise),
+    ];
+
+    #[test]
+    fn lattice_coordinates_name_every_cell_once_and_motions_are_affine_in_them() {
+        for geometry in every_grid() {
+            let lattice = Lattice::of(&geometry);
+            assert_eq!(
+                lattice.coordinates(IVec2::ZERO),
+                IVec2::ZERO,
+                "{geometry:?}"
+            );
+            let steps: Vec<IVec2> = cells()
+                .map(|cell| lattice.step(IVec2::ZERO, cell))
+                .collect();
+            for cell in cells() {
+                let at = lattice.coordinates(cell);
+                assert_eq!(lattice.cell_at(at), cell, "{geometry:?}");
+                // Every pair of integers is a cell.
+                assert_eq!(
+                    lattice.coordinates(lattice.cell_at(cell)),
+                    cell,
+                    "{geometry:?}"
+                );
+                for &step in &steps {
+                    assert_eq!(
+                        lattice.coordinates(lattice.stepped(cell, step)) - at,
+                        lattice.coordinates(lattice.stepped(IVec2::ZERO, step)),
+                        "a step from {cell} on {geometry:?}"
+                    );
+                }
+                for motion in MOTIONS {
+                    let origin = lattice.coordinates(lattice.moved(IVec2::ZERO, motion));
+                    assert_eq!(
+                        lattice.coordinates(lattice.moved(cell, motion)),
+                        lattice.linear(motion).apply(at) + origin,
+                        "{motion:?} of {cell} on {geometry:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_linear_parts_make_the_symmetries_of_the_lattice() {
+        for geometry in every_grid() {
+            let lattice = Lattice::of(&geometry);
+            let turn = lattice.linear(Motion::Turn(RotateDirection::Clockwise));
+            let mirror = lattice.linear(Motion::Mirror(Axis::Horizontal));
+            let turned = |count: u8, from: Linear| (0..count).fold(from, |at, _| turn.after(at));
+            let circle = lattice.turns_in_circle();
+            for count in 1..circle {
+                assert_ne!(turned(count, Linear::IDENTITY), Linear::IDENTITY);
+            }
+            assert_eq!(turned(circle, Linear::IDENTITY), Linear::IDENTITY);
+            assert_eq!(mirror.after(mirror), Linear::IDENTITY);
+            assert_eq!(
+                mirror.after(turn).after(mirror),
+                turned(circle - 1, Linear::IDENTITY),
+                "a mirror reverses turns on {geometry:?}"
+            );
+            assert_eq!(
+                lattice.linear(Motion::Mirror(Axis::Vertical)),
+                turned(circle / 2, mirror),
+                "top-bottom is left-right and a half turn on {geometry:?}"
+            );
+            assert_eq!(
+                lattice.linear(Motion::Turn(RotateDirection::CounterClockwise)),
+                turned(circle - 1, Linear::IDENTITY),
+                "{geometry:?}"
+            );
+        }
     }
 }

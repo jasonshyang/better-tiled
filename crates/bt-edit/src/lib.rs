@@ -18,6 +18,7 @@ mod brush;
 mod clip;
 mod duplicate_name;
 mod error;
+mod float;
 mod ids;
 mod lattice;
 mod layer_ops;
@@ -41,6 +42,7 @@ pub use clip::{
     paste,
 };
 pub use error::EditError;
+pub use float::{FloatingTiles, TileLift, TilePivot};
 pub use ids::{IdRemap, NewIds};
 pub use lattice::RotateDirection;
 pub use layer_ops::{

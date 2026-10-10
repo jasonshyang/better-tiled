@@ -10,6 +10,7 @@ mod paste;
 mod tilesets;
 
 pub use copy::{TileCut, copy, cut, erase, erase_targets};
+pub(crate) use copy::{tile_layers_among, tiles_in};
 pub use paste::{PasteTarget, find_target_layers, paste};
 pub(crate) use tilesets::ClipTilesets;
 

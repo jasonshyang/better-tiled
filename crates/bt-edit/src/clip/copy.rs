@@ -26,7 +26,7 @@ pub struct TileCut {
 /// The tile layers among `layers`, in the map's order (bottom to top, groups' children in
 /// place of the group), each once. Layers of other kinds are passed over: a selection of layers
 /// holds them too. An id the map does not have is an error.
-fn tile_layers_among(map: &Map, layers: &[LayerId]) -> Result<Vec<LayerId>, EditError> {
+pub(crate) fn tile_layers_among(map: &Map, layers: &[LayerId]) -> Result<Vec<LayerId>, EditError> {
     let wanted: BTreeSet<LayerId> = layers.iter().copied().collect();
     if let Some(&missing) = wanted.iter().find(|&&id| map.layer(id).is_none()) {
         return Err(EditError::NoSuchLayer(missing));
