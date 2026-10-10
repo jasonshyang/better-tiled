@@ -5,10 +5,15 @@ use std::path::{Path, PathBuf};
 
 use crate::skip::missing;
 
-/// The root of this checkout of the workspace.
+/// The root of this checkout of the workspace, without `..` in it, so paths built from it
+/// compare equal to the cleaned paths the crates report.
 pub fn workspace_root() -> PathBuf {
     // The manifest directory is `<root>/crates/bt-test-data`.
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest
+        .ancestors()
+        .nth(2)
+        .map_or_else(|| manifest.join("..").join(".."), Path::to_path_buf)
 }
 
 /// `relative` (such as `"reference/tiled/examples"`) in this checkout, or in the main checkout
