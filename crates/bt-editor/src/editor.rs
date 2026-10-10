@@ -9,6 +9,7 @@ use bt_core::{LayerId, LayerKind, Map};
 use bt_tmx::WriteRequest;
 
 use crate::actions::{Keymap, KeymapError, PaletteState};
+use crate::clipboard::Clipboard;
 use crate::document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
 use crate::effect::Effect;
 use crate::error::EditError;
@@ -20,7 +21,7 @@ use crate::recovery::{RecoveryPlan, Snapshot, SnapshotMeta};
 use crate::session::Session;
 use crate::settings::Settings;
 use crate::store::{AssetId, AssetStore, NewAsset, Root};
-use crate::tools::ToolState;
+use crate::tools::{StrokeState, ToolState};
 use crate::watch::WatchModel;
 
 /// Sets up an [`Editor`].
@@ -75,9 +76,11 @@ impl EditorBuilder {
             store: AssetStore::new(),
             documents: Documents::default(),
             gesture: None,
+            stroke: None,
             keymap,
             tools: ToolState::default(),
             palette: PaletteState::default(),
+            clipboard: Clipboard::default(),
             files: Files {
                 home: self.home,
                 ..Files::default()
@@ -98,9 +101,12 @@ pub struct Editor {
     pub(crate) store: AssetStore,
     pub(crate) documents: Documents,
     pub(crate) gesture: Option<Gesture>,
+    /// A tile tool's stroke under way.
+    pub(crate) stroke: Option<StrokeState>,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
     pub(crate) palette: PaletteState,
+    pub(crate) clipboard: Clipboard,
     pub(crate) files: Files,
     pub(crate) recovery: RecoveryPlan,
     pub(crate) watch: WatchModel,
@@ -167,6 +173,17 @@ impl Editor {
                 self.select_tiles(doc, &region, mode);
                 Vec::new()
             }
+            Intent::PickTiles { doc, cells } => self.pick_tiles(doc, &cells),
+            Intent::Stroke(step) => self.stroke(step),
+            Intent::Fill {
+                doc,
+                start,
+                extra,
+                whole_selection,
+            } => self.fill(doc, start, &extra, whole_selection),
+            Intent::ShapeFill { doc, region } => self.shape_fill(doc, &region),
+            Intent::PickFromMap { doc, at } => self.pick_from_map(doc, at),
+            Intent::Capture { doc, rect, cut } => self.capture(doc, rect, cut),
             Intent::SetSelectionMode(mode) => {
                 self.tools.selection_mode = mode;
                 Vec::new()

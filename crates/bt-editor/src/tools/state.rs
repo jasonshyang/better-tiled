@@ -1,7 +1,9 @@
 //! The tools' editor-wide state: stored once, never copied between documents, with the rules
 //! that keep the tool, the layer and the brush coherent.
 
-use bt_edit::{FillShape, SelectionMode};
+use bt_edit::{Brush, BrushMode, FillShape, SelectionMode};
+use bt_utils::rng::Rng;
+use glam::IVec2;
 
 use super::kind::{ToolFamily, ToolKind};
 
@@ -24,6 +26,13 @@ pub struct ToolState {
     pub(crate) selection_mode: SelectionMode,
     /// What Shape Fill paints.
     pub(crate) fill_shape: FillShape,
+    /// What the painting tools paint.
+    pub(crate) brush: Option<Brush>,
+    /// The seed the next placement, fill or random tile is drawn from; it moves on after each
+    /// paint, so the next preview shows the next variation.
+    pub(crate) seed: u64,
+    /// Where the last brush stroke ended, where Shift's line starts.
+    pub(crate) last_paint: Option<IVec2>,
 }
 
 impl Default for ToolState {
@@ -37,6 +46,9 @@ impl Default for ToolState {
             brush_size: 1,
             selection_mode: SelectionMode::Replace,
             fill_shape: FillShape::Rectangle,
+            brush: None,
+            seed: 0x5EED_0FB7_7E55,
+            last_paint: None,
         }
     }
 }
@@ -68,6 +80,32 @@ impl ToolState {
     /// What Shape Fill paints.
     pub fn fill_shape(&self) -> FillShape {
         self.fill_shape
+    }
+
+    /// The brush, if one was picked.
+    pub fn brush(&self) -> Option<&Brush> {
+        self.brush.as_ref()
+    }
+
+    /// Where the last brush stroke ended.
+    pub fn last_paint(&self) -> Option<IVec2> {
+        self.last_paint
+    }
+
+    /// Moves the seed on, for the next paint.
+    pub(crate) fn reseed(&mut self) {
+        self.seed = Rng::new(self.seed).next_u64();
+    }
+
+    /// Switches random mode, the brush following.
+    pub(crate) fn set_random(&mut self, random: bool) {
+        self.random = random;
+        let mode = if random {
+            BrushMode::Random
+        } else {
+            BrushMode::Stamp
+        };
+        self.brush = self.brush.take().map(|brush| brush.with_mode(mode));
     }
 
     /// Makes `tool` current, remembering it as its family's last tool.
@@ -102,6 +140,8 @@ impl ToolState {
     /// Sets the brush and eraser size, within 1 and [`MAX_BRUSH_SIZE`].
     pub(crate) fn set_brush_size(&mut self, size: u32) {
         self.brush_size = size.clamp(1, MAX_BRUSH_SIZE);
+        let size = self.brush_size;
+        self.brush = self.brush.take().map(|brush| brush.with_size(size));
     }
 }
 

@@ -4,6 +4,7 @@
 //! here; the window draws this state, feeds it intents and carries out the effects it returns.
 
 mod actions;
+mod clipboard;
 mod document;
 mod editor;
 mod effect;
@@ -11,6 +12,8 @@ mod error;
 mod files;
 mod history;
 mod intent;
+mod layer_commands;
+mod map_commands;
 mod notice;
 mod recovery;
 mod session;
@@ -45,8 +48,10 @@ pub use settings::{
     SettingColor, Settings, SettingsError, Snapping, Theme, data_folder,
 };
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
-pub use tools::{MAX_BRUSH_SIZE, ToolFamily, ToolKind, ToolState};
+pub use tools::{FillPreview, MAX_BRUSH_SIZE, Stroke, StrokeKind, ToolFamily, ToolKind, ToolState};
 pub use watch::{Found, Observation};
 
 // The editing types the intents and queries speak in.
-pub use bt_edit::{FillShape, SelectionMode, TileRegion, rect_select_rect};
+pub use bt_edit::{
+    Brush, BrushMode, FillShape, SelectionMode, TileRegion, rect_select_rect, shape_fill_region,
+};

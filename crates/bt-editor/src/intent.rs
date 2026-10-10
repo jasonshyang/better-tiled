@@ -3,8 +3,10 @@
 
 use std::path::PathBuf;
 
-use bt_core::LayerId;
+use bt_core::{Cell, LayerId, PlacedCell};
 use bt_edit::{SelectionMode, TileRegion};
+use bt_utils::IRect;
+use glam::IVec2;
 
 use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, ViewState};
@@ -12,6 +14,7 @@ use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
 use crate::recovery::Orphan;
 use crate::settings::Settings;
+use crate::tools::Stroke;
 use crate::watch::Observation;
 
 /// A request to the editor.
@@ -67,6 +70,50 @@ pub enum Intent {
         region: TileRegion,
         /// How they combine with what is selected.
         mode: SelectionMode,
+    },
+    /// Tiles picked in the Tiles panel become the brush: cells of the map's tilesets at their
+    /// places in the tileset.
+    PickTiles {
+        /// The document whose map's tilesets they are.
+        doc: DocumentId,
+        /// The tiles.
+        cells: Vec<PlacedCell>,
+    },
+    /// A step of the brush's or the eraser's stroke.
+    Stroke(Stroke),
+    /// Bucket Fill from a cell.
+    Fill {
+        /// The document.
+        doc: DocumentId,
+        /// Where the fill starts.
+        start: IVec2,
+        /// More kinds of tile the fill spreads over (those dragged over).
+        extra: Vec<Cell>,
+        /// Fill the selection instead (Shift).
+        whole_selection: bool,
+    },
+    /// Shape Fill over cells.
+    ShapeFill {
+        /// The document.
+        doc: DocumentId,
+        /// The cells.
+        region: TileRegion,
+    },
+    /// The Picker: the tile shown at a cell becomes the brush.
+    PickFromMap {
+        /// The document.
+        doc: DocumentId,
+        /// The cell.
+        at: IVec2,
+    },
+    /// The Brush's right-drag: the tiles in a rectangle become the brush.
+    Capture {
+        /// The document.
+        doc: DocumentId,
+        /// The cells.
+        rect: IRect,
+        /// Erase them too (Shift at release).
+        cut: bool,
     },
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),

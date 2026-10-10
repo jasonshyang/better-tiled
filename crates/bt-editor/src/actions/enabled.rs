@@ -60,11 +60,16 @@ impl Editor {
         let on_tiles = here
             .layer
             .is_some_and(|l| matches!(l.kind, LayerKind::Tile(_)));
-        let on_objects = here
-            .layer
-            .is_some_and(|l| matches!(l.kind, LayerKind::Object(_)));
         let has_tiles = selection.is_some_and(|s| !s.tiles.is_empty());
         let has_objects = selection.is_some_and(|s| !s.objects.is_empty());
+        let has_layers = selection.is_some_and(|s| !s.layers.is_empty());
+        let selects_group = selection.is_some_and(|s| {
+            s.layers.iter().any(|id| {
+                here.map
+                    .and_then(|m| m.layer(*id))
+                    .is_some_and(|l| matches!(l.kind, LayerKind::Group(_)))
+            })
+        });
         match id {
             ActionId::Undo if history.is_none_or(|h| h.undoable().is_none()) => {
                 Enabled::Disabled(Some("There is nothing to undo".to_owned()))
@@ -76,9 +81,46 @@ impl Editor {
                 Enabled::Disabled(None)
             }
             ActionId::SelectNone if !has_tiles && !has_objects => Enabled::Disabled(None),
-            ActionId::Cut | ActionId::Copy | ActionId::Delete
-                if !(on_tiles && has_tiles || on_objects && has_objects) =>
+            // Objects come to the clipboard with the object commands.
+            ActionId::Cut | ActionId::Copy | ActionId::Delete if !(on_tiles && has_tiles) => {
+                Enabled::Disabled(None)
+            }
+            ActionId::Cut | ActionId::Delete => {
+                let verb = if id == ActionId::Cut { "cut" } else { "delete" };
+                match here
+                    .document
+                    .and_then(|d| self.tiles_locked_reason(d.id(), verb))
+                {
+                    Some(reason) => Enabled::Disabled(Some(reason)),
+                    None => Enabled::Enabled,
+                }
+            }
+            ActionId::Paste | ActionId::PasteInPlace if !self.has_copied_tiles() => {
+                Enabled::Disabled(Some("Nothing was copied".to_owned()))
+            }
+            ActionId::FlipHorizontal
+            | ActionId::FlipVertical
+            | ActionId::RotateLeft
+            | ActionId::RotateRight
+                if !(on_tiles && self.tools.brush().is_some()) =>
             {
+                Enabled::Disabled(None)
+            }
+            ActionId::CropToSelection if !has_tiles => Enabled::Disabled(None),
+            ActionId::MergeLayerDown
+                if !here
+                    .document
+                    .is_some_and(|d| self.current_layer_merges_down(d.id())) =>
+            {
+                Enabled::Disabled(None)
+            }
+            ActionId::RemoveLayers | ActionId::GroupLayers | ActionId::DuplicateLayers
+                if !has_layers =>
+            {
+                Enabled::Disabled(None)
+            }
+            ActionId::UngroupLayers if !selects_group => Enabled::Disabled(None),
+            ActionId::LayerViaCopy | ActionId::LayerViaCut if !(has_tiles || has_objects) => {
                 Enabled::Disabled(None)
             }
             _ => Enabled::Enabled,

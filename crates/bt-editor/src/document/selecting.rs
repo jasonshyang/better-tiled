@@ -15,17 +15,10 @@ impl Editor {
     /// Makes `layer` current and the only selected layer; the selected tiles and objects stay,
     /// as in Tiled. The tool follows the layer's family.
     pub(crate) fn select_layer(&mut self, doc: DocumentId, layer: bt_core::LayerId) {
-        let family = self
-            .map_of(doc)
-            .and_then(|map| map.layer(layer))
-            .map(|l| match l.kind {
-                LayerKind::Tile(_) => ToolFamily::Tile,
-                LayerKind::Object(_) => ToolFamily::Object,
-                LayerKind::Image(_) | LayerKind::Group(_) => ToolFamily::Any,
-            });
         if let Some(document) = self.documents.get_mut(doc) {
             document.selection = document.selection.with_current_layer(layer);
         }
+        let family = self.current_family(doc);
         self.tools.follow_layer(family);
         self.session_changed();
     }
@@ -49,6 +42,16 @@ impl Editor {
         self.change_selection(doc, |selection| {
             selection.tiles = mode.apply(&selection.tiles, &region);
         });
+    }
+
+    /// The family of tools the current layer of `doc` takes.
+    pub(crate) fn current_family(&self, doc: DocumentId) -> Option<ToolFamily> {
+        let id = self.documents.get(doc)?.selection().current_layer?;
+        Some(match self.map_of(doc)?.layer(id)?.kind {
+            LayerKind::Tile(_) => ToolFamily::Tile,
+            LayerKind::Object(_) => ToolFamily::Object,
+            LayerKind::Image(_) | LayerKind::Group(_) => ToolFamily::Any,
+        })
     }
 
     /// Select All: the cells of every selected unlocked tile layer (the map on a finite map, the

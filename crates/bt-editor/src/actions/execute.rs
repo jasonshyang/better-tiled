@@ -1,6 +1,9 @@
 //! Running commands: each makes transactions, changes the tool state, or returns effects for
 //! the window. Nothing here opens a dialog or touches a file.
 
+use bt_core::{Map, MapGeometry};
+use bt_edit::{Brush, FlipDirection, LayerType, RotateDirection};
+
 use super::enabled::Enabled;
 use super::table::{ActionId, ActionKind};
 use crate::document::DocumentId;
@@ -14,43 +17,12 @@ use crate::settings::Snapping;
 pub(crate) fn pending(id: ActionId) -> bool {
     matches!(
         id,
-        ActionId::Cut
-            | ActionId::Copy
-            | ActionId::Paste
-            | ActionId::PasteInPlace
-            | ActionId::Delete
-            | ActionId::ResizeMap
+        ActionId::ResizeMap
             | ActionId::OffsetMap
-            | ActionId::CropToSelection
-            | ActionId::Autocrop
             | ActionId::AddExternalTileset
             | ActionId::MapProperties
-            | ActionId::NewTileLayer
-            | ActionId::NewObjectLayer
-            | ActionId::NewImageLayer
-            | ActionId::NewGroupLayer
-            | ActionId::LayerViaCopy
-            | ActionId::LayerViaCut
-            | ActionId::GroupLayers
-            | ActionId::UngroupLayers
-            | ActionId::DuplicateLayers
-            | ActionId::MergeLayerDown
-            | ActionId::RemoveLayers
-            | ActionId::SelectPreviousLayer
-            | ActionId::SelectNextLayer
-            | ActionId::SelectAllLayers
-            | ActionId::RaiseLayers
-            | ActionId::LowerLayers
-            | ActionId::ToggleSelectedLayers
-            | ActionId::ToggleLockSelectedLayers
-            | ActionId::ToggleOtherLayers
-            | ActionId::ToggleLockOtherLayers
             | ActionId::LayerProperties
             | ActionId::DuplicateObjects
-            | ActionId::FlipHorizontal
-            | ActionId::FlipVertical
-            | ActionId::RotateLeft
-            | ActionId::RotateRight
             | ActionId::RaiseObjects
             | ActionId::LowerObjects
             | ActionId::RaiseObjectsToTop
@@ -60,6 +32,16 @@ pub(crate) fn pending(id: ActionId) -> bool {
 }
 
 impl Editor {
+    /// Mirrors or turns the brush on the current map's grid.
+    fn transform_brush(&mut self, transform: impl FnOnce(&Brush, &MapGeometry) -> Brush) {
+        let Some(geometry) = self.situation().map.map(Map::geometry) else {
+            return;
+        };
+        if let Some(brush) = &self.tools.brush {
+            self.tools.brush = Some(transform(brush, &geometry));
+        }
+    }
+
     /// Chooses where objects snap; the preference is kept.
     fn set_snapping(&mut self, snapping: Snapping) -> Vec<Effect> {
         let mut settings = self.settings.clone();
@@ -147,7 +129,7 @@ impl Editor {
             ActionId::SnapToFineGrid => self.set_snapping(Snapping::FineGrid),
             ActionId::SnapToPixels => self.set_snapping(Snapping::Pixels),
             ActionId::RandomMode => {
-                self.tools.random = !self.tools.random;
+                self.tools.set_random(!self.tools.random);
                 Vec::new()
             }
             ActionId::BrushSizeUp => {
@@ -177,43 +159,86 @@ impl Editor {
             | ActionId::InsertTileTool
             | ActionId::InsertTextTool
             | ActionId::EditPolygonsTool => Vec::new(),
-            ActionId::Cut
-            | ActionId::Copy
-            | ActionId::Paste
-            | ActionId::PasteInPlace
-            | ActionId::Delete
-            | ActionId::ResizeMap
+            ActionId::Cut => on_document(self, Editor::cut_tiles),
+            ActionId::Copy => on_document(self, Editor::copy_tiles),
+            ActionId::Paste => self.paste_tiles(),
+            ActionId::PasteInPlace => on_document(self, Editor::paste_tiles_in_place),
+            ActionId::Delete => on_document(self, Editor::delete_tiles),
+            ActionId::FlipHorizontal | ActionId::FlipVertical => {
+                let direction = if id == ActionId::FlipHorizontal {
+                    FlipDirection::Horizontal
+                } else {
+                    FlipDirection::Vertical
+                };
+                self.transform_brush(|brush, geometry| brush.flipped(direction, geometry));
+                Vec::new()
+            }
+            ActionId::RotateLeft | ActionId::RotateRight => {
+                let direction = if id == ActionId::RotateRight {
+                    RotateDirection::Clockwise
+                } else {
+                    RotateDirection::CounterClockwise
+                };
+                self.transform_brush(|brush, geometry| brush.rotated(direction, geometry));
+                Vec::new()
+            }
+            ActionId::CropToSelection => on_document(self, Editor::crop_to_selection),
+            ActionId::Autocrop => on_document(self, Editor::autocrop_map),
+            ActionId::NewTileLayer => {
+                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Tile))
+            }
+            ActionId::NewObjectLayer => {
+                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Object))
+            }
+            ActionId::NewImageLayer => {
+                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Image))
+            }
+            ActionId::NewGroupLayer => {
+                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Group))
+            }
+            ActionId::LayerViaCopy => on_document(self, |editor, doc| editor.layer_via(doc, false)),
+            ActionId::LayerViaCut => on_document(self, |editor, doc| editor.layer_via(doc, true)),
+            ActionId::GroupLayers => on_document(self, Editor::group_selected_layers),
+            ActionId::UngroupLayers => on_document(self, Editor::ungroup_selected_layers),
+            ActionId::DuplicateLayers => on_document(self, Editor::duplicate_selected_layers),
+            ActionId::MergeLayerDown => on_document(self, Editor::merge_current_layer_down),
+            ActionId::RemoveLayers => on_document(self, Editor::remove_selected_layers),
+            ActionId::SelectPreviousLayer | ActionId::SelectNextLayer => {
+                if let Some(doc) = current {
+                    self.select_neighbour_layer(doc, id == ActionId::SelectNextLayer);
+                }
+                Vec::new()
+            }
+            ActionId::SelectAllLayers => {
+                if let Some(doc) = current {
+                    self.select_all_layers(doc);
+                }
+                Vec::new()
+            }
+            ActionId::RaiseLayers => {
+                on_document(self, |editor, doc| editor.step_selected_layers(doc, true))
+            }
+            ActionId::LowerLayers => {
+                on_document(self, |editor, doc| editor.step_selected_layers(doc, false))
+            }
+            ActionId::ToggleSelectedLayers => on_document(self, |editor, doc| {
+                editor.toggle_selected_layers(doc, false)
+            }),
+            ActionId::ToggleLockSelectedLayers => {
+                on_document(self, |editor, doc| editor.toggle_selected_layers(doc, true))
+            }
+            ActionId::ToggleOtherLayers => {
+                on_document(self, |editor, doc| editor.toggle_other_layers(doc, false))
+            }
+            ActionId::ToggleLockOtherLayers => {
+                on_document(self, |editor, doc| editor.toggle_other_layers(doc, true))
+            }
+            ActionId::ResizeMap
             | ActionId::OffsetMap
-            | ActionId::CropToSelection
-            | ActionId::Autocrop
             | ActionId::AddExternalTileset
             | ActionId::MapProperties
-            | ActionId::NewTileLayer
-            | ActionId::NewObjectLayer
-            | ActionId::NewImageLayer
-            | ActionId::NewGroupLayer
-            | ActionId::LayerViaCopy
-            | ActionId::LayerViaCut
-            | ActionId::GroupLayers
-            | ActionId::UngroupLayers
-            | ActionId::DuplicateLayers
-            | ActionId::MergeLayerDown
-            | ActionId::RemoveLayers
-            | ActionId::SelectPreviousLayer
-            | ActionId::SelectNextLayer
-            | ActionId::SelectAllLayers
-            | ActionId::RaiseLayers
-            | ActionId::LowerLayers
-            | ActionId::ToggleSelectedLayers
-            | ActionId::ToggleLockSelectedLayers
-            | ActionId::ToggleOtherLayers
-            | ActionId::ToggleLockOtherLayers
             | ActionId::LayerProperties
             | ActionId::DuplicateObjects
-            | ActionId::FlipHorizontal
-            | ActionId::FlipVertical
-            | ActionId::RotateLeft
-            | ActionId::RotateRight
             | ActionId::RaiseObjects
             | ActionId::LowerObjects
             | ActionId::RaiseObjectsToTop
