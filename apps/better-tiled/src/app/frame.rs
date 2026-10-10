@@ -22,7 +22,7 @@ use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun
 use crate::dialogs::{DialogRequest, Modals};
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
-use crate::panels::{LayersPanel, ObjectsPanel, TileImages, TilesPanel};
+use crate::panels::{LayersPanel, ObjectsPanel, PropertiesPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::apply_theme;
 use crate::tileset_editor::{TilesetEditorView, TilesetFrame};
@@ -49,6 +49,8 @@ pub(crate) struct App {
     /// The canvas's tools.
     toolbox: ToolBox,
     tiles_panel: TilesPanel,
+    /// The Properties panel, below the Tiles panel.
+    properties_panel: PropertiesPanel,
     /// The tileset editor, shown in place of a map or in a tileset's tab.
     pub(super) tileset_editor: TilesetEditorView,
     pub(super) tile_images: TileImages,
@@ -267,6 +269,7 @@ impl App {
             left_tab: LeftTab::default(),
             toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
+            properties_panel: PropertiesPanel::default(),
             tileset_editor: TilesetEditorView::default(),
             tile_images: TileImages::default(),
             modals: Modals::default(),
@@ -528,12 +531,10 @@ impl App {
         let Some(doc) = self.editor.current() else {
             return;
         };
-        if self.editor.map_of(doc).is_none() {
-            // A tileset's tab: the tileset editor is all there is.
-            return;
-        }
-        // While a map's tileset is edited in its place, the map's layers and objects wait.
-        if !self.shows_tileset_editor(doc) {
+        let on_map = self.editor.map_of(doc).is_some();
+        // While a map's tileset is edited in its place, the map's layers and objects wait; a
+        // tileset's tab has none.
+        if on_map && !self.shows_tileset_editor(doc) {
             egui::Panel::left("left_panels")
                 .resizable(true)
                 .default_size(240.0)
@@ -559,10 +560,24 @@ impl App {
                     }
                 });
         }
+        // The Properties panel below the Tiles panel (alone in a tileset's tab), so it stays
+        // beside the tileset editor.
         egui::Panel::right("tiles")
             .resizable(true)
             .default_size(300.0)
             .show(ui, |ui| {
+                if !on_map {
+                    self.properties_panel
+                        .show(ui, &self.editor, doc, &mut self.intents);
+                    return;
+                }
+                egui::Panel::bottom("properties")
+                    .resizable(true)
+                    .default_size(340.0)
+                    .show(ui, |ui| {
+                        self.properties_panel
+                            .show(ui, &self.editor, doc, &mut self.intents);
+                    });
                 self.tiles_panel.show(
                     ui,
                     &self.editor,
@@ -572,6 +587,11 @@ impl App {
                     &mut self.intents,
                 );
             });
+        for request in self.properties_panel.take_file_requests() {
+            if let Err(problem) = self.file_dialogs.ask(&mut self.workers, request) {
+                self.notify(Notice::error(problem));
+            }
+        }
     }
 
     /// What the frame ends with: the session written when it changed (after a pause), the

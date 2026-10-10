@@ -4,6 +4,8 @@
 mod effects;
 mod frame;
 mod menu;
+#[cfg(test)]
+mod properties_tests;
 mod startup;
 mod status_bar;
 mod tabs;
