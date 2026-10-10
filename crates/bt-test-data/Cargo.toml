@@ -1,12 +1,23 @@
 [package]
 name = "bt-test-data"
-description = "Finds better-tiled's git-ignored test corpora and gives tests folders of their own"
+description = "Finds better-tiled's git-ignored test corpora, gives tests folders of their own, and builds the shared fixtures"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license = "MIT OR Apache-2.0"
 publish = false
+
+[features]
+# The shared fixture builders: drawn tilesets, ASCII grids and maps. They build `bt-core` values,
+# so the crates below `bt-core` use this crate without them.
+fixtures = ["dep:bt-core", "dep:glam", "dep:image", "dep:thiserror"]
+
+[dependencies]
+bt-core = { workspace = true, optional = true }
+glam = { workspace = true, optional = true }
+image = { workspace = true, optional = true, features = ["png"] }
+thiserror = { workspace = true, optional = true }
 
 [lints]
 workspace = true

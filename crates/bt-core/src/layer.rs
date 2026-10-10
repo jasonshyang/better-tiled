@@ -103,7 +103,7 @@ pub struct EffectiveLayer {
 
 impl EffectiveLayer {
     /// The attributes of a top-level layer, or of a layer under `self`.
-    pub(crate) fn combined_with(self, layer: &Layer) -> EffectiveLayer {
+    pub fn combined_with(self, layer: &Layer) -> EffectiveLayer {
         EffectiveLayer {
             visible: self.visible && layer.visible,
             locked: self.locked || layer.locked,
@@ -118,7 +118,7 @@ impl EffectiveLayer {
     }
 
     /// What applies to a top-level layer: nothing.
-    pub(crate) const ROOT: EffectiveLayer = EffectiveLayer {
+    pub const ROOT: EffectiveLayer = EffectiveLayer {
         visible: true,
         locked: false,
         opacity: 1.0,

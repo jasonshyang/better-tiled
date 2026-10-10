@@ -11,7 +11,9 @@ authors = ["Jason Yang"]
 [workspace.dependencies]
 # Our crates.
 bt-core = { path = "crates/bt-core" }
+bt-editor = { path = "crates/bt-editor" }
 bt-image = { path = "crates/bt-image" }
+bt-render = { path = "crates/bt-render" }
 bt-test-data = { path = "crates/bt-test-data" }
 bt-tmx = { path = "crates/bt-tmx" }
 bt-utils = { path = "crates/bt-utils" }
@@ -19,14 +21,30 @@ bt-utils = { path = "crates/bt-utils" }
 # Others, pinned here so every crate takes the same version and only the features it uses.
 base64 = "0.23"
 bitflags = "2.13"
+bytemuck = { version = "1.25", features = ["derive"] }
+# The window: eframe, egui and egui-wgpu move together, and wgpu is the version egui-wgpu uses.
+eframe = { version = "0.36.2", default-features = false }
+egui = "0.36.2"
+egui-wgpu = "0.36.2"
+egui_kittest = "0.36.2"
+env_logger = "0.11"
+# The font of the renderer's text: egui's own, so canvas text matches the panels.
+epaint_default_fonts = "0.36.2"
 flate2 = "1.1"
+fontdue = "0.9"
 glam = "0.33"
 image = { version = "0.25", default-features = false }
+log = "0.4"
+pollster = "0.4"
 regex = "1.13"
+rfd = "0.17"
 roxmltree = "0.21"
 ruzstd = "0.9"
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"
+toml = "1.1"
+wgpu = "30.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

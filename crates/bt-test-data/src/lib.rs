@@ -5,8 +5,13 @@
 //! A test that needs something missing fails and names it. Setting `BT_SKIP_MISSING_TEST_DATA=1`
 //! turns that into a skip that says what it skipped, and `BT_SKIP_LOG` names a file every skip is
 //! appended to, which continuous integration checks with the `check-skips` program.
+//!
+//! With the `fixtures` feature, [`fixtures`] builds the values tests share: tilesets drawn pixel
+//! by pixel, tile layers written as ASCII grids, and maps made of both.
 
 mod corpus;
+#[cfg(feature = "fixtures")]
+pub mod fixtures;
 mod scratch;
 mod skip;
 mod skip_check;

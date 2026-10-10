@@ -27,7 +27,7 @@ use crate::tileset::{Alignment, Tileset};
 
 /// The geometry of a map's grid; cheap to copy. Built with [`Map::geometry`] or
 /// [`MapGeometry::new`].
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MapGeometry {
     /// The grid's shape.
     pub orientation: Orientation,

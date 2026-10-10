@@ -1,0 +1,32 @@
+[package]
+name = "bt-render"
+description = "better-tiled's renderer: Tiled's maps drawn on the GPU in every orientation, with Tiled's placement, order and layer effects, for the canvas and for headless pictures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+bt-image.workspace = true
+bt-utils.workspace = true
+bytemuck.workspace = true
+# Ubuntu Light, the font of the canvas's text (egui's own, so the canvas matches the panels).
+epaint_default_fonts.workspace = true
+fontdue.workspace = true
+glam.workspace = true
+log.workspace = true
+# Waiting for the GPU in headless renders.
+pollster.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+bt-tmx.workspace = true
+image = { workspace = true, features = ["png"] }
+
+[lints]
+workspace = true
