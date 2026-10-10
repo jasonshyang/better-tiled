@@ -295,15 +295,16 @@ writing is an option of the write request, not a global switch.
 ### 5.3 Images
 
 `bt-image` is the one place that decodes image files (PNG, JPEG, GIF, BMP, WebP, TGA, TIFF, PNM,
-ICO: the formats Tiled reads), caches decoded images by path and modification time or by content
-hash for embedded bytes, reads an image's size from its header without decoding it, applies a
-colour-key transparency, and measures alpha bounds (used to find where a sprite's feet are).
-Decoding runs on the store's worker threads with a completion hook, so a tileset's images never
-stall a frame. There is one image store per process: the renderer, the panels and the headless
-pictures all read it, and widget textures are derived from it rather than decoded again. A map
-file can serve as the image of a tileset, a tile or an image layer (a picture of that map): the
-image store takes a `MapImageSource` trait object at construction, which the application
-implements with the headless renderer, so there is no global hook and no nested GPU device.
+ICO: the raster formats Tiled's images use; SVG and Qt's rarer formats are not read), caches
+decoded images by path and modification time or by content hash for embedded bytes, reads an
+image's size from its header without decoding it, applies a colour-key transparency, and
+measures alpha bounds (used to find where a sprite's feet are). Decoding runs on the store's
+worker threads with a completion hook, so a tileset's images never stall a frame. There is one
+image store per process: the renderer, the panels and the headless pictures all read it, and
+widget textures are derived from it rather than decoded again. A map file can serve as the image
+of a tileset, a tile or an image layer (a picture of that map): the image store takes a
+`MapImageSource` trait object at construction, which the application implements with the
+headless renderer, so there is no global hook and no nested GPU device.
 
 ## 6. Rendering (`bt-render`)
 

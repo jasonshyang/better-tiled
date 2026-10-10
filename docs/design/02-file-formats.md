@@ -26,8 +26,11 @@ is `reference/tiled/docs/reference/`.*
 | map fragment | tiles or objects on the clipboard | TMX text | yes | yes |
 | `:/automap-tiles.tsx` | Tiled's built-in rule tileset | built into the binary | yes | referenced as written |
 
-`bt-image` reads PNG, JPEG, GIF, BMP, WebP, TGA, TIFF, PNM and ICO (the formats Tiled reads
-through Qt), probes sizes from headers, and renders maps used as images through a hook.
+`bt-image` reads PNG, JPEG, GIF, BMP, WebP, TGA, TIFF, PNM and ICO, the raster formats
+Tiled's images use, probes sizes from headers, and renders maps used as images through a hook.
+Formats Qt reads for Tiled beyond these, such as SVG and XPM, are not read: such an image gets
+a warning when its tileset or layer is loaded, and the renderer draws a marker in its place.
+Tiled's own rule tileset uses an SVG; the built-in one has a PNG of its own (§10).
 
 ## 2. The contract
 

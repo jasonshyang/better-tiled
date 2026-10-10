@@ -1,9 +1,9 @@
 //! The one place image files are decoded: PNG, JPEG, GIF, BMP, WebP, TGA, TIFF, PNM and ICO, the
-//! formats Tiled reads. It reads an image's size from its header without decoding it, applies a
-//! colour key, measures alpha bounds (where a sprite's feet are), and keeps decoded images in a
-//! store that decodes on worker threads, so a tileset's images never stall a frame. A map file
-//! can be the image of a tileset, a tile or an image layer; the store draws it through a
-//! [`MapImageSource`] it is given.
+//! raster formats Tiled's images use (SVG and Qt's rarer formats are not read). It reads an image's
+//! size from its header without decoding it, applies a colour key, measures alpha bounds (where a
+//! sprite's feet are), and keeps decoded images in a store that decodes on worker threads, so a
+//! tileset's images never stall a frame. A map file can be the image of a tileset, a tile or an
+//! image layer; the store draws it through a [`MapImageSource`] it is given.
 
 mod decode;
 mod error;
