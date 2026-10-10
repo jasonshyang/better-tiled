@@ -15,6 +15,7 @@ bt-edit = { path = "crates/bt-edit" }
 bt-editor = { path = "crates/bt-editor" }
 bt-image = { path = "crates/bt-image" }
 bt-render = { path = "crates/bt-render" }
+bt-terrain = { path = "crates/bt-terrain" }
 bt-test-data = { path = "crates/bt-test-data" }
 bt-tmx = { path = "crates/bt-tmx" }
 bt-utils = { path = "crates/bt-utils" }

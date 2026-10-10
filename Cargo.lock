@@ -615,6 +615,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bt-terrain"
+version = "0.1.0"
+dependencies = [
+ "bt-core",
+ "bt-test-data",
+ "bt-tmx",
+ "bt-utils",
+ "glam",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "bt-test-data"
 version = "0.1.0"
 dependencies = [

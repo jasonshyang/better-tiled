@@ -1,0 +1,22 @@
+[package]
+name = "bt-terrain"
+description = "Terrain painting and filling with Tiled's terrain sets (Wang sets): a port of Tiled's WangFiller and WangBrush, with the reasons a cell could not be filled"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+bt-utils.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+bt-tmx.workspace = true
+
+[lints]
+workspace = true
