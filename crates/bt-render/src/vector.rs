@@ -163,6 +163,20 @@ impl VectorItem {
         self
     }
 
+    /// The item moved by `by` world pixels (an overlay drawn at a layer's offset).
+    pub fn translated(mut self, by: DVec2) -> VectorItem {
+        match &mut self.shape {
+            VectorShape::Polyline(points) | VectorShape::Polygon(points) => {
+                for point in points.iter_mut() {
+                    *point += by;
+                }
+            }
+            VectorShape::Rect(rect) | VectorShape::Ellipse(rect) => *rect = rect.translated(by),
+            VectorShape::Text(text) => text.move_by(by),
+        }
+        self
+    }
+
     /// Where the item is drawn.
     pub fn placement(&self) -> Placement {
         self.placement
@@ -504,6 +518,25 @@ mod tests {
                 ((b - a).perp_dot(c - a) * 0.5).abs()
             })
             .sum()
+    }
+
+    #[test]
+    fn translated_items_move_every_point() {
+        let by = DVec2::new(3.0, -2.0);
+        let line = VectorItem::polyline(vec![DVec2::ZERO, DVec2::ONE]).translated(by);
+        assert_eq!(line.shape, VectorShape::Polyline(vec![by, DVec2::ONE + by]));
+        let rect = DRect::from_min_size(DVec2::ZERO, DVec2::splat(4.0));
+        let ellipse = VectorItem::ellipse(rect)
+            .stroke(Color::BLACK, 1.0)
+            .translated(by);
+        assert_eq!(ellipse.shape, VectorShape::Ellipse(rect.translated(by)));
+        assert!(ellipse.stroke.is_some(), "the style stays");
+        let text = VectorItem::text(TextItem::new("a", DVec2::ZERO).rotation(90.0, DVec2::ONE))
+            .translated(by);
+        assert_eq!(
+            text.as_text(),
+            Some(&TextItem::new("a", by).rotation(90.0, DVec2::ONE + by))
+        );
     }
 
     #[test]

@@ -150,6 +150,12 @@ impl TextItem {
         self
     }
 
+    /// Moves the text and its pivot by `by` world pixels.
+    pub(crate) fn move_by(&mut self, by: DVec2) {
+        self.origin += by;
+        self.pivot += by;
+    }
+
     /// Turns the text clockwise about `pivot` (world pixels).
     pub fn rotation(mut self, degrees: f64, pivot: DVec2) -> TextItem {
         self.rotation_degrees = degrees;
