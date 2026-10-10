@@ -505,6 +505,13 @@ fn live_automap_shows_the_rules_result_and_keeps_what_was_painted() {
         Some(false)
     );
     assert!(
+        matches!(
+            editor.enabled(ActionId::AutoMap),
+            bt_editor::Enabled::Disabled(Some(_))
+        ),
+        "AutoMap would write the rules' output into what was painted"
+    );
+    assert!(
         is_dirty(&editor, doc),
         "the map's file will hold the result"
     );

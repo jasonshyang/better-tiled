@@ -173,6 +173,11 @@ impl Editor {
                 }
             }
             ActionId::CropToSelection if !has_tiles => Enabled::Disabled(None),
+            ActionId::AutoMap if here.document.is_some_and(|d| d.automap().is_some()) => {
+                Enabled::Disabled(Some(
+                    "Live AutoMap is on: the rules run after every change".to_owned(),
+                ))
+            }
             ActionId::ShowPainted if here.document.is_none_or(|d| d.automap().is_none()) => {
                 Enabled::Disabled(Some(
                     "Live AutoMap is off: what is shown is what was painted".to_owned(),
