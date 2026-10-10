@@ -1458,3 +1458,73 @@ fn an_external_tileset_is_chosen_and_added_to_the_map() {
     window.press(command(), Key::Z);
     assert_eq!(count(&window), before, "one step");
 }
+
+#[test]
+fn offset_layers_drags_the_selected_layers_and_escape_puts_them_back() {
+    use bt_editor::ToolKind;
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Key, Modifiers};
+    use glam::{DVec2, UVec2};
+
+    let scratch = Scratch::new("window-offset-layers").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let empty_row = [". "; 8].concat();
+    let ground = format!("1 . . . . . . .\n{}", vec![empty_row; 5].join("\n"));
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(8, 6))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", &ground)
+        .object_layer("things", Vec::new())
+        .build()
+        .unwrap();
+    let path = scratch.join("offset-layers.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let current = window
+        .editor()
+        .document(doc)
+        .unwrap()
+        .selection()
+        .current_layer
+        .unwrap();
+    let offset = |window: &TestWindow, layer: LayerId| {
+        let map = window.editor().map_of(doc).unwrap();
+        map.layer(layer).unwrap().offset
+    };
+    let other = if current == LayerId(1) {
+        LayerId(2)
+    } else {
+        LayerId(1)
+    };
+
+    window.press(Modifiers::NONE, Key::M);
+    assert_eq!(window.editor().tools().tool(), ToolKind::OffsetLayers);
+    window.drag_world(
+        DVec2::new(40.0, 40.0),
+        DVec2::new(60.0, 50.0),
+        Modifiers::NONE,
+    );
+    assert_eq!(offset(&window, current), DVec2::new(20.0, 10.0));
+    assert_eq!(offset(&window, other), DVec2::ZERO, "not selected");
+
+    // Holding Command snaps the offset to the grid: (41, 20) goes to (48, 16).
+    window.drag_world_holding(DVec2::new(40.0, 40.0), DVec2::new(61.0, 50.0), command());
+    assert_eq!(offset(&window, current), DVec2::new(48.0, 16.0));
+    window.press(command(), Key::Z);
+    assert_eq!(offset(&window, current), DVec2::new(20.0, 10.0), "one step");
+
+    // Escape during a drag puts the layer back where the drag found it.
+    window.drag_world_then_escape(DVec2::new(40.0, 40.0), DVec2::new(90.0, 70.0));
+    assert_eq!(offset(&window, current), DVec2::new(20.0, 10.0));
+    window.press(command(), Key::Z);
+    assert_eq!(
+        offset(&window, current),
+        DVec2::ZERO,
+        "the escaped drag left no step"
+    );
+}

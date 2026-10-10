@@ -119,6 +119,48 @@ impl TestWindow {
         self.drag_on_screen(start, end, modifiers);
     }
 
+    /// Drags on the map like [`TestWindow::drag_world`], holding `modifiers` down from before
+    /// the press until after the release, so the tool sees them on every move.
+    pub(crate) fn drag_world_holding(
+        &mut self,
+        from: glam::DVec2,
+        to: glam::DVec2,
+        modifiers: egui::Modifiers,
+    ) {
+        self.harness.event(egui::Event::ModifiersChanged(modifiers));
+        self.drag_world(from, to, modifiers);
+        self.harness
+            .event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        self.settle();
+    }
+
+    /// Presses on the map at `from` (its screen space), moves to `to`, presses Escape and only
+    /// then lets go: a drag given up halfway.
+    pub(crate) fn drag_world_then_escape(&mut self, from: glam::DVec2, to: glam::DVec2) {
+        let start = self.screen_of_world(from);
+        let end = self.screen_of_world(to);
+        self.pointer(egui::Event::PointerMoved(start));
+        self.pointer(egui::Event::PointerButton {
+            pos: start,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        });
+        for step in 1..=8 {
+            self.pointer(egui::Event::PointerMoved(
+                start.lerp(end, step as f32 / 8.0),
+            ));
+        }
+        self.press(egui::Modifiers::NONE, egui::Key::Escape);
+        self.pointer(egui::Event::PointerButton {
+            pos: end,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        self.settle();
+    }
+
     /// Drags with the primary button from one screen point to another, holding `modifiers`.
     pub(crate) fn drag_on_screen(
         &mut self,

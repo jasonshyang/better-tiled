@@ -9,6 +9,7 @@ mod fills;
 mod insert_objects;
 mod insert_polygon;
 mod magic_wand;
+mod offset_layers;
 mod painting;
 mod picker;
 mod rect_select;

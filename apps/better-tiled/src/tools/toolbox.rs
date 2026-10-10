@@ -9,6 +9,7 @@ use super::fills::{BucketFill, ShapeFill};
 use super::insert_objects::{InsertKind, InsertObject};
 use super::insert_polygon::InsertPolygon;
 use super::magic_wand::LikeTiles;
+use super::offset_layers::OffsetLayers;
 use super::picker::Picker;
 use super::rect_select::RectSelect;
 use super::select_objects::SelectObjects;
@@ -41,6 +42,7 @@ impl Default for ToolBox {
                 Box::new(RectSelect::default()),
                 Box::new(LikeTiles::magic_wand()),
                 Box::new(LikeTiles::same_tile()),
+                Box::new(OffsetLayers::default()),
                 Box::new(SelectObjects::default()),
                 Box::new(EditPolygons::default()),
                 Box::new(InsertObject::new(InsertKind::Rectangle)),
