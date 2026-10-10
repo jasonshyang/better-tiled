@@ -680,12 +680,9 @@ mod tests {
                         object.id = ObjectId(rng.below(12).unwrap() as u32);
                         add_object(&mut map, layer, object, None).map(|_| ObjectsReport::default())
                     }
-                    4 => transform::rotate_objects(
-                        &mut map,
-                        &some,
-                        90.0,
-                        transform::Pivot::OwnPosition,
-                    ),
+                    4 => crate::object_clip::copy_objects(&map, &some).and_then(|clip| {
+                        crate::object_clip::paste_objects(&mut map, layer, &clip, delta)
+                    }),
                     5 => transform::flip_objects(&mut map, &some, Axis::Vertical, delta),
                     6 => transform::rotate_objects(
                         &mut map,

@@ -72,6 +72,11 @@ impl<'a> ObjectSpace<'a> {
         &self.geometry
     }
 
+    /// The tilesets tile objects' cells name.
+    pub(crate) fn tilesets(&self) -> &'a [TilesetRef] {
+        self.tilesets
+    }
+
     /// The tileset of a cell, when the space has it.
     pub(crate) fn tileset_of(&self, cell: Cell) -> Option<&'a Tileset> {
         self.tilesets

@@ -22,6 +22,7 @@ mod ids;
 mod lattice;
 mod layer_ops;
 mod map_ops;
+mod object_clip;
 mod objects;
 mod region;
 mod report;
@@ -50,6 +51,10 @@ pub use layer_ops::{
 };
 pub use map_ops::{
     autocrop, autocrop_to_layer, crop_to, make_finite, make_infinite, offset_map, resize_map,
+};
+pub use object_clip::{
+    ObjectClip, copy_objects, copy_objects_in, cut_objects, cut_objects_in, paste_objects,
+    paste_objects_in, paste_offset,
 };
 pub use objects::align::{
     Align, align_deltas, align_objects, align_objects_in, distribute_deltas, distribute_objects,
