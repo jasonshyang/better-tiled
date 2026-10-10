@@ -305,3 +305,57 @@ which places a preview already computed so a caller previews once), `diagnose`, 
   decision trace the solver keeps in tests only), Tiled's seven sample sets checked with code
   of their own for every decision of fills and brush targets of every kind and four seeds.
 
+## 16. As built at M3 (labelling helpers)
+
+M3 built `layouts`, `autolabel`, `patterns` and `rpg_maker` as public modules of `bt-terrain`
+(their functions are named for their module, `rpg_maker::tileset`), on crate-private
+`lanes` and `pixels`, and `bt-image::write_png`. What exists:
+
+| Module | What it holds |
+|---|---|
+| `layouts` | `Layout { name, about, kind }` with `size`, `slots`, `tile_count`, `labels`; `Slot`; `LAYOUTS`; `Samples::{new, from_tileset, size, side_colors, terrain_colors}`; `Fit { layout, origin, over_nothing }` with `area`; `detect`, `places`; `Histogram`, `recognize`, `SAME_TERRAIN`, `SAME_GROUND`; `KnownTerrains::{from_set, guess, label_all, terrain_count}`, `Block` with `labels` |
+| `autolabel` | `Method::{Auto, Transparency, Learned}`, `label_with`, `Proposal { color, kind, method, tiles }` with `apply_to` |
+| `patterns` | `needed(&Terrain) -> Patterns { listed, total }` with `present`, `missing`; `NeededPattern { pattern, tiles }`; `MAX_LISTED` |
+| `rpg_maker` | `autotiles`, `guess_tile`, `sheet_warning -> Option<SheetWarning>`, `expand -> Result<Expansion, RpgMakerError>`, `tileset(&Expansion, name)` |
+
+Where it differs from §9–§12, or says more:
+
+- **Two more layouts.** The Epic RPG World packs draw every terrain as a 5×5 island with a bump
+  on each side: "5×5 cross island, diagonals" (all 15 corner tiles, the two diagonal ones in
+  its top corners) and "5×5 cross island" (13, without them). The packs' own labels follow
+  them. `LAYOUTS` is blob sets, then corner sets, then edge sets, each the larger first.
+- **Shapes.** Sizes and origins are `UVec2`; `labels` returns `BTreeMap<TileId,
+  Option<WangId>>` (`None`: the tile gets no label) and leaves out slots past the atlas's
+  columns; terrains are `TerrainColor`.
+- **Detection** allows one lane in fifteen to disagree, not one in thirty (scattered paving
+  stones spill over a few lanes); a block is no fit when two or more lanes of one side of a tile
+  all disagree (a tile the layout needs is not there, such as an empty corner where a layout
+  has a diagonal tile); a side is see-through below a mean alpha of one half (ragged edges reach
+  into it); and on layouts of 64 lanes or more what the terrain stands on may have two looks,
+  nothing and something else (a raised island's own wall, the water around it).
+- **The packs** (`tests/layouts.rs` lists every terrain tileset of Ancient Ruins and Desert):
+  the flat blocks are found but one, the raised ones of the walls, cliffs and platforms mostly
+  too, and nothing else (three 2×2 holes the Desert draws as decorations count as found). Not
+  found: rocky ground over rocky ground, whose two sides share their colours; islands whose top
+  is see-through (the "-transp" walls and animated sheets, the Desert's transparent cliffs,
+  Terrain2's frames: only a rim shows); raised islands whose top is two colours (walls 8 and 9,
+  some platforms); and animated previews whose middle is a checkerboard of see-through tiles.
+- **Label All** is `KnownTerrains::label_all` here, not in the editor: blocks over nothing get
+  no ground; a block's ground is never its own terrain; terrains past the set's are new, for
+  the caller to add. `guess` gives one block's terrains without learning them.
+- **Auto-labelling** returns a `Proposal` of the tiles with some part of the terrain;
+  `apply_to(labels)` applies it: the terrain's lanes follow it, other terrains' labels stay,
+  tiles it leaves out keep their labels (a stale lane of the terrain there stays too), and a
+  label left empty goes. `tiles` is `BTreeMap<TileId, IRect>`. On the packs' single-terrain
+  sets it gives nine tiles in ten their hand-made labels.
+- **Patterns** take the prepared `Terrain`, so a pattern's tiles count the flipped and turned
+  variants the tileset allows, as Tiled marks them used (`Terrain` gained a crate-private
+  `labels()`). The list stops at Tiled's 65,535; a group of more than 2²⁰ combinations is
+  counted and listed as far as the list goes.
+- **RPG Maker.** `expand(sheet, tile)` takes the tile size and refuses an odd one, a sheet with
+  no whole autotile, one with nothing drawn and one of more than 254 autotiles, with a typed
+  `RpgMakerError`. The image is written as a new file (`write_png` creates it only when nothing
+  is there, `bt_image::Error::Exists` otherwise): `<stem> blob.png`, then `<stem> blob 2.png` and
+  on. `Expansion`'s fields are read through methods, so only `expand` makes one. Terrains are
+  "Autotile N", each in the mean colour of its full tile, which is its tile; the set's tile is
+  the first one's. `sheet_warning` returns a `SheetWarning` whose `Display` is the sentence.
