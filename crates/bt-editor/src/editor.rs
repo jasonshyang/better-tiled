@@ -279,6 +279,7 @@ impl Editor {
             Intent::ApplyLayout { doc, into, block } => self.apply_layout(doc, into, block),
             Intent::LabelAllLayouts { doc, into } => self.label_all_layouts(doc, into),
             Intent::TilesetImageRead(read) => self.finish_reading_tileset_image(*read),
+            Intent::AutoLabel { doc, tile } => self.auto_label(doc, tile),
             Intent::PasteObjects { doc, at } => self.paste_copied_objects(doc, at),
             Intent::MoveObjectsToLayer { doc, layer } => self.move_selected_objects_to(doc, layer),
             Intent::Stroke(step) => self.stroke(step),

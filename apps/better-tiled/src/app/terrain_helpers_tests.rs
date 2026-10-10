@@ -1,6 +1,6 @@
 //! The tileset editor's terrain helpers in the window, on tilesets drawn lane by lane: Layout…
-//! finds a block in the image, Apply labels it and Label All labels every block found, each one
-//! step.
+//! finds a block in the image, Apply labels it and Label All labels every block found;
+//! Auto-label… labels the chosen terrain from the tile clicked; each one step.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -10,7 +10,9 @@ use bt_editor::DocumentId;
 use bt_terrain::TerrainColor;
 use bt_terrain::layouts::LAYOUTS;
 use bt_test_data::Scratch;
-use bt_test_data::fixtures::{Atlas, MapBuilder, blank_picture, paint_lanes};
+use bt_test_data::fixtures::{
+    Atlas, MapBuilder, TerrainSetBuilder, blank_picture, corners, paint_lanes,
+};
 use bt_tmx::WriteRequest;
 use egui::{Modifiers, PointerButton};
 use glam::UVec2;
@@ -146,4 +148,50 @@ fn layout_finds_a_block_and_labels_it_with_apply_and_label_all() {
     let set = edited(&window, doc).wang_sets[0].clone();
     assert_eq!(set.tiles, expected, "every block found: the one island");
     assert_eq!(steps(&window, doc), ["Label All Layouts"]);
+}
+
+#[test]
+fn auto_label_labels_the_chosen_terrain_from_the_tile_clicked() {
+    let scratch = Scratch::new("window-terrain-auto-label").unwrap();
+    // Over dirt: all grass, grass at the top-left, all dirt, grass along the top.
+    let grass = [
+        [true; 4],
+        [false, false, false, true],
+        [false; 4],
+        [true, false, false, true],
+    ];
+    let mut picture = blank_picture(4 * TILE, TILE);
+    for (column, on) in (0..).zip(grass) {
+        let mut colors = [None; 9];
+        for (lane, on) in [1, 3, 5, 7].into_iter().zip(on) {
+            colors[lane] = Some(if on { GRASS } else { DIRT });
+        }
+        let at = UVec2::new(column * TILE, 0);
+        paint_lanes(&mut picture, at, TILE, WangSetType::Corner, colors);
+    }
+    let atlas = Atlas::builder()
+        .name("strip")
+        .tile_size(TILE, TILE)
+        .grid(4, 1)
+        .picture(picture)
+        .build_in(scratch.path())
+        .unwrap();
+    let tileset = TerrainSetBuilder::new(WangSetType::Corner)
+        .terrains(&["Grass", "Dirt"])
+        .added_to((*atlas.tileset).clone());
+    let path = map_with(&scratch, Arc::new(tileset));
+    let (mut window, doc) = terrain_mode(&scratch, &path);
+
+    window.click("Ground");
+    window.click("Auto-label…");
+    let first = window.tileset_tile(0);
+    window.click_on_screen(first, PointerButton::Primary, Modifiers::NONE);
+    let labels = edited(&window, doc).wang_sets[0].tiles.clone();
+    let expected = [
+        (TileId(0), corners([1, 1, 1, 1])),
+        (TileId(1), corners([0, 0, 0, 1])),
+        (TileId(3), corners([1, 0, 0, 1])),
+    ];
+    assert_eq!(labels, expected.into_iter().collect());
+    assert_eq!(steps(&window, doc), ["Auto-label Terrain"]);
 }

@@ -123,17 +123,21 @@ fn find_layouts(editor: &mut Editor, doc: DocumentId) -> Vec<Fit> {
     }
 }
 
-/// What `bt-terrain` finds in the tileset's image, and what Label All gives the blocks of `kind`
-/// in a set with no terrains yet.
-fn terrain_crate_finds(tileset: &Tileset, kind: WangSetType) -> (Vec<Fit>, Vec<Block>) {
+/// The tileset's embedded image, decoded.
+fn decoded(tileset: &Tileset) -> bt_image::DecodedImage {
     let bt_core::TilesetImage::Atlas { image, .. } = &tileset.image else {
         panic!("an atlas");
     };
     let bt_core::ImageSource::Embedded(embedded) = &image.source else {
         panic!("an embedded image");
     };
-    let decoded = bt_image::decode_bytes(&embedded.bytes, &embedded.format, None).unwrap();
-    let samples = Samples::from_tileset(tileset, &decoded);
+    bt_image::decode_bytes(&embedded.bytes, &embedded.format, None).unwrap()
+}
+
+/// What `bt-terrain` finds in the tileset's image, and what Label All gives the blocks of `kind`
+/// in a set with no terrains yet.
+fn terrain_crate_finds(tileset: &Tileset, kind: WangSetType) -> (Vec<Fit>, Vec<Block>) {
+    let samples = Samples::from_tileset(tileset, &decoded(tileset));
     let fits = detect(&samples);
     let of_kind: Vec<Fit> = fits
         .iter()
@@ -401,4 +405,113 @@ fn a_search_belongs_to_the_tileset_it_was_made_for() {
         notice.text,
         "A collection of images has no grid: no autotile layout fits it"
     );
+}
+
+/// A strip of tiles over dirt, each with grass on the corners listed (top-right, bottom-right,
+/// bottom-left, top-left), with a corner set "Ground" of grass and dirt; tile 2 is labelled all
+/// dirt.
+fn corner_strip(corners: &[[bool; 4]]) -> Arc<Tileset> {
+    let columns = u32::try_from(corners.len()).unwrap();
+    let mut picture = blank_picture(columns * TILE, TILE);
+    for (column, grass) in (0..).zip(corners) {
+        let mut colors = [None; 9];
+        for (lane, &on) in [1, 3, 5, 7].iter().zip(grass) {
+            colors[*lane] = Some(if on { GRASS } else { DIRT });
+        }
+        paint_lanes(
+            &mut picture,
+            UVec2::new(column * TILE, 0),
+            TILE,
+            WangSetType::Corner,
+            colors,
+        );
+    }
+    let atlas = Atlas::builder()
+        .name("strip")
+        .tile_size(TILE, TILE)
+        .grid(columns, 1)
+        .picture(picture)
+        .build_embedded()
+        .unwrap();
+    let tileset = bt_test_data::fixtures::TerrainSetBuilder::new(WangSetType::Corner)
+        .terrains(&["Grass", "Dirt"])
+        .label(2, bt_test_data::fixtures::corners([2, 2, 2, 2]))
+        .added_to((*atlas.tileset).clone());
+    Arc::new(tileset)
+}
+
+#[test]
+fn auto_label_labels_a_terrain_from_one_tile_as_one_step() {
+    let strip = corner_strip(&[
+        [true; 4],
+        [false, false, false, true],
+        [false; 4],
+        [true, false, false, true],
+    ]);
+    let (mut editor, doc) = editor_with(strip.clone());
+    let before = tileset(&editor, doc).wang_sets[0].tiles.clone();
+    let effects = editor.apply(Intent::AutoLabel {
+        doc,
+        tile: TileId(0),
+    });
+    let [Effect::Notify(notice)] = effects.as_slice() else {
+        panic!("{effects:?}");
+    };
+    assert_eq!(notice.text, "Choose the terrain to auto-label first");
+
+    editor.apply(Intent::ChooseLabelTerrain {
+        doc,
+        label: LabelTerrain {
+            set: 0,
+            color: TerrainColor(1),
+        },
+    });
+    let effects = apply(
+        &mut editor,
+        Intent::AutoLabel {
+            doc,
+            tile: TileId(0),
+        },
+    );
+    let [Effect::Notify(notice)] = effects.as_slice() else {
+        panic!("{effects:?}");
+    };
+    assert_eq!(
+        notice.text,
+        "Auto-label found “Grass” on 3 tiles, told apart from the rest by its colours"
+    );
+    // What bt-terrain proposes, applied to the labels there were.
+    let tiles: BTreeMap<TileId, bt_utils::IRect> = (0..4)
+        .map(|id| (TileId(id), strip.tile_image(TileId(id)).unwrap().rect))
+        .collect();
+    let proposal = bt_terrain::autolabel::label_with(
+        bt_terrain::autolabel::Method::Auto,
+        &decoded(&strip),
+        WangSetType::Corner,
+        UVec2::splat(TILE),
+        tiles[&TileId(0)],
+        TerrainColor(1),
+        &tiles,
+    );
+    let mut expected = before.clone();
+    proposal.apply_to(&mut expected);
+    let labels = &tileset(&editor, doc).wang_sets[0].tiles;
+    assert_eq!(labels, &expected);
+    let corners = bt_test_data::fixtures::corners;
+    assert_eq!(labels[&TileId(0)], corners([1, 1, 1, 1]));
+    assert_eq!(
+        labels[&TileId(1)],
+        corners([0, 0, 0, 1]),
+        "grass at the top-left"
+    );
+    assert_eq!(
+        labels[&TileId(2)],
+        corners([2, 2, 2, 2]),
+        "the dirt label stays"
+    );
+    assert_eq!(labels[&TileId(3)], corners([1, 0, 0, 1]));
+    assert_eq!(steps(&editor, doc), ["Auto-label Terrain"]);
+
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(tileset(&editor, doc).wang_sets[0].tiles, before, "one step");
 }

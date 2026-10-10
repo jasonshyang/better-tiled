@@ -1,7 +1,9 @@
 //! The tileset editor's terrain helpers (`06-application.md`, §8, on `bt-terrain`'s labelling
 //! helpers, `07-terrain.md`, §9–§12): blocks of autotile layouts labelled at once (Layout…:
-//! Apply and Label All). What reads the tileset's pixels runs on a worker.
+//! Apply and Label All) and one terrain labelled from one tile of it (Auto-label). What reads
+//! the tileset's pixels runs on a worker.
 
+mod auto_label;
 mod image_job;
 mod layouts;
 

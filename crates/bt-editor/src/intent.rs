@@ -349,6 +349,14 @@ pub enum Intent {
     },
     /// A read of a tileset's pixels the editor asked for finished.
     TilesetImageRead(Box<crate::terrain_helpers::TilesetImageRead>),
+    /// Auto-label: label the terrain the Terrain mode labels with on every tile, from one tile
+    /// that is all of it; the image is read on a worker, the labels are one step.
+    AutoLabel {
+        /// The document.
+        doc: DocumentId,
+        /// The tile that is all of the terrain.
+        tile: TileId,
+    },
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

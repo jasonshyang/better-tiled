@@ -4,7 +4,8 @@
 //! labels the lanes it passes with the chosen terrain, the right button clears them, each drag
 //! one step. Beside the tiles, the tileset's terrain sets and the chosen set's terrains: choose
 //! one to label with, and the sets' and terrains' commands; and the helpers, which take the
-//! tiles' clicks while they are open: Layout… (`layouts.rs`).
+//! tiles' clicks while they are open: Layout… (`layouts.rs`), and Auto-label…, which labels the
+//! chosen terrain from the next tile clicked.
 
 use bt_core::{Color, TileId, Tileset, WangSet, WangSetType};
 use bt_editor::{
@@ -34,6 +35,11 @@ pub(crate) struct TerrainLabeller {
 enum Helper {
     /// Layout…: blocks of autotile layouts labelled at once.
     Layouts(LayoutsPanel),
+    /// Auto-label…: the next click on a tile labels the chosen terrain from that tile.
+    AutoLabel {
+        /// The document.
+        doc: DocumentId,
+    },
 }
 
 impl Helper {
@@ -41,6 +47,7 @@ impl Helper {
     fn doc(&self) -> DocumentId {
         match self {
             Helper::Layouts(panel) => panel.doc(),
+            Helper::AutoLabel { doc } => *doc,
         }
     }
 }
@@ -103,8 +110,62 @@ impl TerrainLabeller {
                 }
                 shown
             }
+            Some(Helper::AutoLabel { .. }) => self.show_auto_label_tiles(ui, cx, zoom, source, out),
             None => self.show_label_tiles(ui, cx, zoom, source, out),
         }
+    }
+
+    /// Auto-label…: the tiles with the chosen set's labels; a click on one labels the chosen
+    /// terrain from it, and the helper closes.
+    fn show_auto_label_tiles(
+        &mut self,
+        ui: &mut egui::Ui,
+        cx: TerrainFrame<'_>,
+        zoom: &mut f32,
+        source: &mut TileSource<'_>,
+        out: &mut Vec<Intent>,
+    ) -> Option<ShownTiles> {
+        let label = cx.editing.label_terrain();
+        let set = label.and_then(|l| cx.tileset.wang_sets.get(l.set));
+        let name = label
+            .zip(set)
+            .and_then(|(l, s)| s.colors.get(usize::from(l.color.0).saturating_sub(1)))
+            .map_or_else(String::new, |c| c.name.clone());
+        ui.horizontal(|ui| {
+            ui.label(format!(
+                "Click a tile that is all “{name}”: the terrain is labelled on every tile that \
+                 shows it"
+            ));
+            let escape = !crate::focus::is_typing(ui.ctx())
+                && ui.input(|input| input.key_pressed(egui::Key::Escape));
+            if ui.button("Cancel").clicked() || escape {
+                self.helper = None;
+            }
+        });
+        let diamond = diamond_ratio(cx.tileset);
+        let drawn = draw_tiles(
+            ui,
+            cx.tileset,
+            zoom,
+            source,
+            Sense::click(),
+            |ui, id, rect| {
+                if let Some(set) = set {
+                    draw_labels(ui.painter(), set, id, TileFrame::of(rect, diamond));
+                }
+            },
+        )?;
+        let DrawnTiles { response, shown } = drawn;
+        if response.clicked()
+            && let Some(tile) = response
+                .interact_pointer_pos()
+                .and_then(|at| shown.grid.index_at(at))
+                .and_then(|index| shown.ids.get(index).copied())
+        {
+            out.push(Intent::AutoLabel { doc: cx.doc, tile });
+            self.helper = None;
+        }
+        Some(shown)
     }
 
     /// The tiles with the chosen set's labels, labelled lane by lane.
@@ -247,6 +308,30 @@ impl TerrainLabeller {
                 None
             } else {
                 Some(Helper::Layouts(LayoutsPanel::new(cx.doc)))
+            };
+        }
+        let terrain_chosen = cx
+            .editing
+            .label_terrain()
+            .is_some_and(|label| !label.color.is_none());
+        let picking = matches!(self.helper, Some(Helper::AutoLabel { .. }));
+        let auto = ui
+            .add_enabled(
+                atlas && terrain_chosen,
+                egui::Button::selectable(picking, "Auto-label…"),
+            )
+            .on_hover_text(
+                "Label the chosen terrain on every tile at once, from one tile that is all of \
+                 it: click this, then that tile",
+            )
+            .on_disabled_hover_text(
+                "Choose a terrain to label (not Erase), on a tileset cut from one image",
+            );
+        if auto.clicked() {
+            self.helper = if picking {
+                None
+            } else {
+                Some(Helper::AutoLabel { doc: cx.doc })
             };
         }
     }

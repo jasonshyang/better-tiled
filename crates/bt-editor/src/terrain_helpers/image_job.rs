@@ -1,13 +1,17 @@
 //! Reading a tileset's pixels for the labelling helpers, on a worker: the editor never decodes an
 //! image on the thread that owns it. A [`TilesetImageJob`] decodes the tileset's image and looks
-//! for autotile layouts in it; its [`TilesetImageRead`] comes back as
-//! [`crate::Intent::TilesetImageRead`].
+//! for autotile layouts in it, or labels one terrain from one tile of it; its
+//! [`TilesetImageRead`] comes back as [`crate::Intent::TilesetImageRead`].
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use bt_core::{ImageRef, ImageSource, Tileset, TilesetImage};
+use bt_core::{ImageRef, ImageSource, TileId, Tileset, TilesetImage, WangSetType};
 use bt_image::{ColorKey, DecodedImage};
+use bt_terrain::TerrainColor;
+use bt_terrain::autolabel::{Method, Proposal, label_with};
 use bt_terrain::layouts::{Fit, Samples, detect};
+use bt_utils::IRect;
 use glam::UVec2;
 
 use crate::document::DocumentId;
@@ -49,11 +53,23 @@ impl ImageCut {
     }
 }
 
+/// Auto-label's question: terrain `color` of set `set`, of `kind`, labelled from tile
+/// `reference`, which is all of it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AutoLabelRequest {
+    pub(crate) set: usize,
+    pub(crate) kind: WangSetType,
+    pub(crate) color: TerrainColor,
+    pub(crate) reference: TileId,
+}
+
 /// What a job reads the pixels for.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ImagePurpose {
     /// Layout…: the blocks of autotile layouts in the image.
     FindLayouts,
+    /// Auto-label: the tiles one terrain is on, from one tile of it.
+    AutoLabel(AutoLabelRequest),
 }
 
 /// A read of a tileset's image for a labelling helper, to run on a worker with
@@ -82,6 +98,13 @@ pub struct TilesetImageRead {
 enum ImageFindings {
     /// The blocks of layouts.
     Layouts(Result<FoundLayouts, String>),
+    /// The labels proposed for the terrain asked about.
+    AutoLabel {
+        /// The question.
+        request: AutoLabelRequest,
+        /// The proposal.
+        proposal: Result<Proposal, String>,
+    },
 }
 
 /// The blocks of autotile layouts found in a tileset's image (Layout…), with what the tiles look
@@ -96,11 +119,6 @@ impl FoundLayouts {
     /// The blocks found, best first, none overlapping another (`bt_terrain::layouts::detect`).
     pub fn fits(&self) -> &[Fit] {
         &self.fits
-    }
-
-    /// The atlas's size in tiles, columns and rows, as the image was cut.
-    pub fn atlas_size(&self) -> UVec2 {
-        self.samples.size()
     }
 }
 
@@ -142,6 +160,10 @@ impl TilesetImageJob {
                 let fits = detect(&samples);
                 FoundLayouts { samples, fits }
             })),
+            ImagePurpose::AutoLabel(request) => ImageFindings::AutoLabel {
+                request,
+                proposal: image.and_then(|image| self.auto_label(&image, request)),
+            },
         };
         TilesetImageRead {
             doc: self.doc,
@@ -149,6 +171,33 @@ impl TilesetImageJob {
             cut: self.cut.clone(),
             findings,
         }
+    }
+
+    /// `bt_terrain::autolabel::label_with`, choosing its method, over every tile of the image.
+    fn auto_label(
+        &self,
+        image: &DecodedImage,
+        request: AutoLabelRequest,
+    ) -> Result<Proposal, String> {
+        let tiles: BTreeMap<TileId, IRect> = self
+            .tileset
+            .tile_ids()
+            .into_iter()
+            .filter_map(|id| Some((id, self.tileset.tile_image(id)?.rect)))
+            .collect();
+        let reference = tiles
+            .get(&request.reference)
+            .copied()
+            .ok_or_else(|| format!("the tileset has no tile {}", request.reference.0))?;
+        Ok(label_with(
+            Method::Auto,
+            image,
+            request.kind,
+            self.tileset.tile_size(),
+            reference,
+            request.color,
+            &tiles,
+        ))
     }
 }
 
@@ -163,6 +212,9 @@ impl Editor {
         } = read;
         match findings {
             ImageFindings::Layouts(found) => self.finish_finding_layouts(doc, home, cut, found),
+            ImageFindings::AutoLabel { request, proposal } => {
+                self.finish_auto_labelling(doc, home, request, proposal)
+            }
         }
     }
 }
