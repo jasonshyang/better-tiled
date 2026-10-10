@@ -360,6 +360,20 @@ impl TestWindow {
         self.settle();
     }
 
+    /// Right-clicks the text `text` itself, not the widget it names (a property's name).
+    pub(crate) fn right_click_text(&mut self, text: &str) {
+        let by = egui_kittest::kittest::By::new()
+            .label(text)
+            .include_labels()
+            .role(egui::accesskit::Role::Label);
+        let node = self.harness.get_all(by).next();
+        let Some(node) = node else {
+            panic!("no text “{text}” is shown");
+        };
+        node.click_secondary();
+        self.settle();
+    }
+
     /// Drags the first widget labelled `label` from its middle to `along` the height of the
     /// first widget labelled `onto` (0 its top edge, 1 its bottom), with the primary button.
     pub(crate) fn drag_onto(&mut self, label: &str, onto: &str, along: f32) {

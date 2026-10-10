@@ -1,7 +1,8 @@
 //! The Properties panel's flows through the test window: it shows the map, then the objects
 //! selected, then the map again from Map ▸ Map Properties; custom properties are added, typed
-//! into and given files; attributes are typed into, each run of typing one step; and it stays
-//! beside the tileset editor, showing its tileset and tiles.
+//! into and given files, then renamed, converted, copied, pasted and removed from their menu;
+//! attributes are typed into, each run of typing one step; and it stays beside the tileset
+//! editor, showing its tileset and tiles.
 
 use std::path::PathBuf;
 
@@ -152,4 +153,61 @@ fn the_properties_panel_stays_beside_the_tileset_editor() {
     type_into(&mut window, "Probability", "0.5");
     let tileset = window.editor().edited_tileset(doc).unwrap();
     assert_eq!(tileset.tile(TileId(3)).unwrap().probability, 0.5);
+}
+
+#[test]
+fn custom_properties_are_renamed_converted_copied_pasted_and_removed() {
+    let scratch = Scratch::new("window-properties-operations").unwrap();
+    let path = map_with_objects(&scratch);
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let property = |window: &TestWindow, object: u32, name: &str| {
+        let map = window.editor().map_of(doc).unwrap();
+        let object = map.object(ObjectId(object)).unwrap();
+        object
+            .properties
+            .get(name)
+            .map(|property| property.value.clone())
+    };
+    window.click_last("Objects");
+    window.click_holding("chest", Modifiers::NONE);
+    add_property(&mut window, "hp", "int");
+    type_into(&mut window, "hp", "7");
+
+    window.right_click_text("hp");
+    window.click("Rename…");
+    window.press(command(), Key::A);
+    window.type_text("gold");
+    window.press(Modifiers::NONE, Key::Enter);
+    assert_eq!(property(&window, 1, "hp"), None);
+    assert_eq!(property(&window, 1, "gold"), Some(Value::Int(7)));
+
+    window.right_click_text("gold");
+    // A submenu's button ends with its arrow.
+    window.click("Convert To ⏵");
+    window.click("string");
+    assert_eq!(
+        property(&window, 1, "gold"),
+        Some(Value::String("7".to_owned()))
+    );
+
+    // Copied from the chest, pasted onto the door.
+    window.right_click_text("gold");
+    window.click("Copy");
+    window.click_holding("door", Modifiers::NONE);
+    window.click("Paste");
+    assert_eq!(
+        property(&window, 2, "gold"),
+        Some(Value::String("7".to_owned()))
+    );
+
+    window.right_click_text("gold");
+    window.click("Remove Property");
+    assert_eq!(property(&window, 2, "gold"), None);
+    window.press(command(), Key::Z);
+    assert_eq!(
+        property(&window, 2, "gold"),
+        Some(Value::String("7".to_owned()))
+    );
 }
