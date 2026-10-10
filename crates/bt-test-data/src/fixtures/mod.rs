@@ -7,9 +7,11 @@ mod error;
 mod grid;
 mod map;
 mod rules;
+mod terrain;
 
 pub use atlas::{Atlas, AtlasBuilder, GUTTER, MARKER};
 pub use error::FixtureError;
 pub use grid::{grid_cells, grid_layer};
 pub use map::MapBuilder;
 pub use rules::{RULE_SLOT, rule_tiles};
+pub use terrain::{TerrainSetBuilder, combination_tile, corners, edges, every_combination};

@@ -7,15 +7,12 @@
 
 use std::sync::Arc;
 
-use bt_core::{
-    Cell, Color, LayerId, Map, PlacedCell, TileId, Tileset, TilesetSlot, WangColor, WangId,
-    WangSet, WangSetType,
-};
+use bt_core::{Cell, LayerId, Map, PlacedCell, TileId, Tileset, TilesetSlot, WangSetType};
 use bt_editor::{
     ActionId, DocumentId, Editor, Effect, Intent, NoTerrain, TerrainStroke, TilesetHome, ToolKind,
 };
 use bt_terrain::{BrushTarget, Terrain, TerrainColor};
-use bt_test_data::fixtures::{Atlas, MapBuilder};
+use bt_test_data::fixtures::{Atlas, MapBuilder, TerrainSetBuilder, corners};
 use glam::{IVec2, UVec2};
 
 const GROUND: LayerId = LayerId(1);
@@ -27,52 +24,22 @@ fn slot() -> TilesetSlot {
     TilesetSlot::new(0).unwrap()
 }
 
-fn color(name: &str) -> WangColor {
-    WangColor {
-        name: name.to_owned(),
-        class: String::new(),
-        color: Color::rgb(0, 0, 0),
-        tile: None,
-        probability: 1.0,
-        properties: Default::default(),
-    }
-}
-
 /// A tileset whose "Ground" corner set has sand and grass; with `transitions`, every
 /// combination of the two (tile 0 all sand, tile 15 all grass), else just the two plain tiles.
 fn sand_and_grass(transitions: bool) -> Tileset {
-    let mut tileset = (*Atlas::builder()
+    let atlas = (*Atlas::builder()
         .grid(16, 16)
         .build_embedded()
         .unwrap()
         .tileset)
         .clone();
-    let mut set = WangSet {
-        name: "Ground".to_owned(),
-        class: String::new(),
-        kind: WangSetType::Corner,
-        tile: None,
-        colors: vec![color("Sand"), color("Grass")],
-        tiles: Default::default(),
-        properties: Default::default(),
+    let set = TerrainSetBuilder::new(WangSetType::Corner).terrains(&["Sand", "Grass"]);
+    let set = if transitions {
+        set.every_combination()
+    } else {
+        set.label(0, corners([1; 4])).label(15, corners([2; 4]))
     };
-    let mut tile = 0;
-    for a in 1..=2 {
-        for b in 1..=2 {
-            for c in 1..=2 {
-                for d in 1..=2 {
-                    let plain = a == b && b == c && c == d;
-                    if transitions || plain {
-                        set.tiles
-                            .insert(TileId(tile), WangId::from_lanes([0, a, 0, b, 0, c, 0, d]));
-                    }
-                    tile += 1;
-                }
-            }
-        }
-    }
-    tileset.wang_sets.push(set);
-    tileset
+    set.added_to(atlas)
 }
 
 /// A 6×6 map of all-sand ground under an object layer, open with the ground current.

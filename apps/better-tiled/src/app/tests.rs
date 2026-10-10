@@ -1657,9 +1657,9 @@ fn a_level_is_built_from_scratch_in_the_window() {
 fn the_terrain_tool_paints_a_terrain_chosen_in_the_terrains_panel() {
     use std::sync::Arc;
 
-    use bt_core::{Color, TileId, WangColor, WangId, WangSet, WangSetType};
+    use bt_core::WangSetType;
     use bt_editor::ToolKind;
-    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_test_data::fixtures::{Atlas, MapBuilder, TerrainSetBuilder};
     use bt_tmx::WriteRequest;
     use egui::{Modifiers, PointerButton};
     use glam::{DVec2, UVec2};
@@ -1671,32 +1671,10 @@ fn the_terrain_tool_paints_a_terrain_chosen_in_the_terrains_panel() {
         .build_in(scratch.path())
         .unwrap();
     // Sand and grass on the corners, every combination: tile 0 all sand.
-    let mut tileset = (*atlas.tileset).clone();
-    let terrain = |name: &str| WangColor {
-        name: name.to_owned(),
-        class: String::new(),
-        color: Color::rgb(200, 180, 90),
-        tile: None,
-        probability: 1.0,
-        properties: Default::default(),
-    };
-    let mut set = WangSet {
-        name: "Ground".to_owned(),
-        class: String::new(),
-        kind: WangSetType::Corner,
-        tile: None,
-        colors: vec![terrain("Sand"), terrain("Grass")],
-        tiles: Default::default(),
-        properties: Default::default(),
-    };
-    for tile in 0..16_u32 {
-        let corner = |bit: u32| if tile & (1 << bit) == 0 { 1 } else { 2 };
-        set.tiles.insert(
-            TileId(tile),
-            WangId::from_lanes([0, corner(0), 0, corner(1), 0, corner(2), 0, corner(3)]),
-        );
-    }
-    tileset.wang_sets.push(set);
+    let tileset = TerrainSetBuilder::new(WangSetType::Corner)
+        .terrains(&["Sand", "Grass"])
+        .every_combination()
+        .added_to((*atlas.tileset).clone());
     let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(6))
         .tileset(Arc::new(tileset))
         .tile_layer("ground", &["0 0 0 0 0 0"; 6].join("\n"))
