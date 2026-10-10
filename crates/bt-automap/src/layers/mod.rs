@@ -7,11 +7,13 @@
 //! from the map as saved, so the painted map comes back when the map is opened again.
 
 mod auto_layers;
+mod change;
 mod record;
 mod rule_layers;
 mod setup;
 
 pub use auto_layers::AutoLayers;
+pub use change::MapChange;
 pub use record::{Restored, painted_record, restore};
 pub use rule_layers::RuleLayers;
 pub use setup::Setup;
