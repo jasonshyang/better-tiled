@@ -389,6 +389,7 @@ pub(crate) fn read_raw_map(
             if !root.has_tag_name("map") {
                 return Err(not_kind(path, "map", root.tag_name().name()));
             }
+            record_doctype(text, warnings);
             Ok(xml::XmlReader::new(warnings).read_map(root))
         }
         Format::Json | Format::JavaScript => {
@@ -407,6 +408,7 @@ fn read_raw_tileset(text: &str, path: &Path, warnings: &mut Warnings) -> Result<
             if !root.has_tag_name("tileset") {
                 return Err(not_kind(path, "tileset", root.tag_name().name()));
             }
+            record_doctype(text, warnings);
             Ok(xml::XmlReader::new(warnings).read_tileset(root))
         }
         Format::Json | Format::JavaScript => {
@@ -435,6 +437,16 @@ fn read_raw_template(
             let value = json::parse_document(text, path)?;
             json::read_template(&value, path, warnings)
         }
+    }
+}
+
+/// Notes a `DOCTYPE` (written by Tiled before 1.0), which a save leaves out.
+fn record_doctype(text: &str, warnings: &mut Warnings) {
+    if text.contains("<!DOCTYPE") {
+        warnings.record(
+            crate::warning::WarningKind::LegacyShape,
+            "the file has a DOCTYPE (Tiled before 1.0); it is left out when saved",
+        );
     }
 }
 

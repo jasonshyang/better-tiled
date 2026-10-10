@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="1" height="1" tilewidth="32" tileheight="32" infinite="0" nextlayerid="1" nextobjectid="1">
+ <properties>
+  <property name="pasted" type="list">
+   <item type="int" value="1"/>
+   <item value="two"/>
+  </property>
+ </properties>
+</map>

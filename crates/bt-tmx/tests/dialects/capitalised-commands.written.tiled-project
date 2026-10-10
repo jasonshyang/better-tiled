@@ -1,0 +1,23 @@
+{
+    "automappingRulesFile": "",
+    "commands": [
+        {
+            "arguments": "%mapfile",
+            "command": "game",
+            "enabled": true,
+            "name": "Run",
+            "saveBeforeExecute": true,
+            "shortcut": "F5",
+            "showOutput": false,
+            "workingDirectory": "."
+        }
+    ],
+    "extensionsPath": "extensions",
+    "folders": [
+        "."
+    ],
+    "properties": [
+    ],
+    "propertyTypes": [
+    ]
+}

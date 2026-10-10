@@ -1,0 +1,25 @@
+{ "height":1,
+ "layers":[],
+ "nextobjectid":1,
+ "orientation":"orthogonal",
+ "properties":
+    {
+     "hp":"12",
+     "name":"hero",
+     "speed":1.5,
+     "visible":true
+    },
+ "propertytypes":
+    {
+     "hp":"int",
+     "name":"string",
+     "speed":"float",
+     "visible":"bool"
+    },
+ "renderorder":"right-down",
+ "tileheight":32,
+ "tilesets":[],
+ "tilewidth":32,
+ "version":1,
+ "width":1
+}

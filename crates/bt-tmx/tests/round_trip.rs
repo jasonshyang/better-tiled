@@ -3,6 +3,8 @@
 //! rewrite; every other file reads back to the same value, apart from what the writer
 //! normalises.
 
+#![cfg(test)]
+
 mod corpus;
 
 use std::path::Path;

@@ -1,0 +1,54 @@
+# libFuzzer targets for the readers (`13-testing.md`, §6): run by hand with
+# `cargo +nightly fuzz run <target>` and weekly by `.github/workflows/fuzz.yml`. The normal
+# test suite runs a seeded mutation pass over the same readers.
+[package]
+name = "bt-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+bt-tmx = { path = "../crates/bt-tmx" }
+libfuzzer-sys = "0.4"
+
+# Not part of the main workspace: fuzzing builds need nightly and a sanitizer.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "xml_map"
+path = "fuzz_targets/xml_map.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json_map"
+path = "fuzz_targets/json_map.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tileset"
+path = "fuzz_targets/tileset.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "layer_data"
+path = "fuzz_targets/layer_data.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "project_world"
+path = "fuzz_targets/project_world.rs"
+test = false
+doc = false
+bench = false

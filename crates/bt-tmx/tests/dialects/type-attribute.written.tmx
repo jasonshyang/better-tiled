@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="2" height="2" tilewidth="32" tileheight="32" infinite="0" nextlayerid="2" nextobjectid="3">
+ <tileset firstgid="1" name="rules" tilewidth="32" tileheight="32" tilecount="5" columns="5">
+  <image source="../../src/automap-tiles.png" width="160" height="32"/>
+  <tile id="1" type="Wall"/>
+ </tileset>
+ <objectgroup id="1" name="things">
+  <object id="1" type="Chest" x="1" y="2" width="3" height="4"/>
+  <object id="2" type="Door" x="5" y="6" width="7" height="8"/>
+ </objectgroup>
+</map>

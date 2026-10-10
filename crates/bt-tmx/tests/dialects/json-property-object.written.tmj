@@ -1,0 +1,40 @@
+{ "compressionlevel":-1,
+ "height":1,
+ "infinite":false,
+ "layers":[],
+ "nextlayerid":1,
+ "nextobjectid":1,
+ "orientation":"orthogonal",
+ "properties":[
+        {
+         "name":"hp",
+         "type":"int",
+         "value":12
+        },
+    
+        {
+         "name":"name",
+         "type":"string",
+         "value":"hero"
+        },
+    
+        {
+         "name":"speed",
+         "type":"float",
+         "value":1.5
+        },
+    
+        {
+         "name":"visible",
+         "type":"bool",
+         "value":true
+        }],
+ "renderorder":"right-down",
+ "tiledversion":"1.12.2",
+ "tileheight":32,
+ "tilesets":[],
+ "tilewidth":32,
+ "type":"map",
+ "version":"1",
+ "width":1
+}

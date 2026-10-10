@@ -1,0 +1,17 @@
+{
+    "commands": [
+        {
+            "Arguments": "%mapfile",
+            "Command": "game",
+            "Enabled": true,
+            "Name": "Run",
+            "SaveBeforeExecute": true,
+            "Shortcut": "F5",
+            "ShowOutput": false,
+            "WorkingDirectory": "."
+        }
+    ],
+    "folders": [
+        "."
+    ]
+}

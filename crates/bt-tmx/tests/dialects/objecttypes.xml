@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objecttypes>
+ <objecttype name="Chest" color="#a0a0a4">
+  <property name="gold" type="int" default="10"/>
+ </objecttype>
+</objecttypes>

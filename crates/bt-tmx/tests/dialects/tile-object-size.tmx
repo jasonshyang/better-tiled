@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.0" orientation="orthogonal" width="2" height="2" tilewidth="32" tileheight="32">
+ <tileset firstgid="1" name="rules" tilewidth="32" tileheight="32" tilecount="5" columns="5">
+  <image source="../../src/automap-tiles.png" width="160" height="32"/>
+ </tileset>
+ <objectgroup name="things">
+  <object gid="2" x="10" y="42"/>
+ </objectgroup>
+</map>

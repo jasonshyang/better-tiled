@@ -324,22 +324,17 @@ mod tests {
     /// Random and mutated payloads: no panic, never more cells than asked for.
     #[test]
     fn garbage_never_panics() {
-        let mut state = 0x2545_f491_4f6c_dd1du64;
-        let mut next = move || {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            state
-        };
+        let mut rng = bt_utils::rng::Rng::new(0x2545_f491_4f6c_dd1d);
+        let mut below = |n: u64| usize::try_from(rng.below(n).unwrap()).unwrap();
         let valid = encode_base64(&[5; 64], LayerDataFormat::Base64Zlib, None);
         for _ in 0..500 {
-            let len = (next() % 80) as usize;
+            let len = below(80);
             let text: String = (0..len)
-                .map(|_| char::from(b"AZaz09+/=, \n1x"[(next() % 14) as usize]))
+                .map(|_| char::from(b"AZaz09+/=, \n1x"[below(14)]))
                 .collect();
             let mut mutated = valid.clone().into_bytes();
-            let at = (next() as usize) % mutated.len();
-            mutated[at] = b"ABab+/"[(next() % 6) as usize];
+            let at = below(mutated.len() as u64);
+            mutated[at] = b"ABab+/"[below(6)];
             let mutated = String::from_utf8(mutated).unwrap();
             for format in ALL_BASE64 {
                 assert!(decode_base64(&text, format, 16).gids.len() <= 16);

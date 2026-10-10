@@ -26,6 +26,8 @@ else
   git clone --quiet --filter=blob:none --no-checkout "$REPO" "$dest"
 fi
 
+# The files are compared byte for byte: never convert their line endings.
+git -C "$dest" config core.autocrlf false
 git -C "$dest" sparse-checkout set --cone docs examples src tests
 git -C "$dest" -c advice.detachedHead=false checkout --quiet "$PINNED"
 printf '%s\n' "$PINNED" > "$root/reference/PINNED"

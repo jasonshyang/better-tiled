@@ -260,6 +260,12 @@ impl Finisher<'_> {
         map.layers = self.layers_of(raw.layers, &mut finish);
         if let Some(format) = finish.layer_data {
             map.file.layer_data = format;
+            if format == LayerDataFormat::Xml {
+                self.record(
+                    WarningKind::LegacyShape,
+                    "the tile layers list their cells as <tile> elements (Tiled 0.15 and before); they are saved as CSV",
+                );
+            }
         }
         finish.space.settle_placeholder_ranges();
         map.tilesets = finish.space.tilesets;

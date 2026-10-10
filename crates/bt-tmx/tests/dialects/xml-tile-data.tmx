@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="2" height="2" tilewidth="32" tileheight="32" infinite="0" nextlayerid="2" nextobjectid="1">
+ <tileset firstgid="1" name="rules" tilewidth="32" tileheight="32" tilecount="5" columns="5">
+  <image source="../../src/automap-tiles.png" width="160" height="32"/>
+ </tileset>
+ <layer id="1" name="ground" width="2" height="2">
+  <data>
+   <tile gid="1"/>
+   <tile/>
+   <tile gid="2147483651"/>
+   <tile gid="5"/>
+  </data>
+ </layer>
+</map>

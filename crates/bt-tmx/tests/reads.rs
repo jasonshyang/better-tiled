@@ -1,5 +1,7 @@
 //! Every Tiled file of the corpora reads.
 
+#![cfg(test)]
+
 mod corpus;
 
 use std::collections::BTreeMap;
