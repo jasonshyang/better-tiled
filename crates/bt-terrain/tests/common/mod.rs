@@ -1,7 +1,9 @@
 //! What the terrain tests share: terrain sets built in code, maps to paint on, and the check that
-//! every pair of neighbouring tiles agrees where they touch.
+//! every pair of neighbouring tiles agrees where they touch; `pictures` draws tileset images.
 
 #![allow(dead_code, reason = "each test file uses some of these")]
+
+pub mod pictures;
 
 use std::sync::Arc;
 

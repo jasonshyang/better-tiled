@@ -20,9 +20,12 @@ mod diagnose;
 mod error;
 mod feedback;
 mod filler;
+mod lanes;
+pub mod layouts;
 #[cfg(test)]
 mod oracle_tests;
 mod paint;
+mod pixels;
 mod request;
 mod terrain;
 mod topology;

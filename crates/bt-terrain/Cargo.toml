@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 bt-core.workspace = true
+bt-image.workspace = true
 bt-utils.workspace = true
 glam.workspace = true
 thiserror.workspace = true

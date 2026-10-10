@@ -11,6 +11,7 @@ or reproduces someone else's work, with the notices their licenses ask to be kep
 | `crates/bt-tmx` (the readers and writers of Tiled's formats) | libtiled's `MapReader`, `MapWriter` and variant converters | BSD-2-Clause |
 | `crates/bt-tmx` (`src/deflate.rs`) | zlib's `deflate.c` and `trees.c` (an altered version) | zlib |
 | `crates/bt-tmx` (`src/json/print.rs`) | the layout of Tiled's `JsonWriter` (`plugins/json/qjsonparser/json.cpp`) | permissive, below |
+| `crates/bt-terrain` (`src/layouts.rs`: the Godot 3 and Tilesetter layouts) | the autotile templates of TileBitTools | MIT |
 
 Tiled's editor (`src/tiled` in Tiled's repository) is licensed under the GNU GPL; no code
 derived from it is in a crate licensed under MIT or Apache-2.0. The crates that port it say so in
@@ -100,3 +101,25 @@ Copyright (c) 2010 Girish Ramakrishnan <girish@forwardbias.in>
 
 Use, modification and distribution is allowed without limitation,
 warranty, liability or support of any kind.
+
+## TileBitTools — MIT License
+
+<https://github.com/dandeliondino/tile_bit_tools>. The arrangements of the Godot 3 and
+Tilesetter autotile layouts in `crates/bt-terrain/src/layouts.rs` follow its templates.
+
+Copyright (c) 2023 dandeliondino
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
