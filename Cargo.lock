@@ -662,6 +662,7 @@ version = "0.1.0"
 dependencies = [
  "bt-test-data",
  "glam",
+ "rustix 1.1.5",
  "thiserror 2.0.21",
 ]
 

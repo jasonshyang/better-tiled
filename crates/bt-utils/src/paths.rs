@@ -1,9 +1,11 @@
-//! Path helpers: lexical cleaning, absolute and relative paths, file stems and labels, and the
-//! upward search that finds a project file above a map.
+//! Path helpers: lexical cleaning, absolute and relative paths, file stems and labels, the
+//! upward search that finds a project file above a map, and the user's private runtime folder.
 
 use std::path::{Component, Path, PathBuf};
 
 use crate::error::Error;
+#[cfg(unix)]
+use crate::error::NotPrivate;
 
 /// The folders whose presence marks the top of a repository.
 const REPOSITORY_MARKERS: [&str; 3] = [".git", ".hg", ".svn"];
@@ -122,6 +124,86 @@ pub fn search_up<T>(
     None
 }
 
+/// The user's runtime folder: where the live link's sockets and the project files' write locks
+/// are kept. It is private to the user and the same for every program of theirs, whatever
+/// `$HOME` is.
+///
+/// On Unix it is `/tmp/better-tiled-<uid>`, short so that a socket path in it stays well below
+/// the hundred-odd bytes a socket path may have. It is made with mode `0700` when missing and
+/// checked on every call: it must be a folder (not a symbolic link) that the user owns and no
+/// one else can read, write or enter. A wider mode is narrowed to `0700`; any other failure is
+/// [`Error::NotPrivate`], and the folder is not used.
+///
+/// On Windows, which has no live link, it is `better-tiled` in the user's temporary folder
+/// (`%TEMP%`, inside the user's own profile, so other users cannot reach it), made when missing.
+pub fn runtime_dir() -> Result<PathBuf, Error> {
+    #[cfg(unix)]
+    {
+        let uid = rustix::process::getuid().as_raw();
+        let dir = runtime_dir_of(uid);
+        make_private_dir(&dir, uid)?;
+        Ok(dir)
+    }
+    #[cfg(not(unix))]
+    {
+        let dir = std::env::temp_dir().join("better-tiled");
+        std::fs::create_dir_all(&dir).map_err(|source| Error::Folder {
+            path: dir.clone(),
+            source,
+        })?;
+        Ok(dir)
+    }
+}
+
+/// The runtime folder of the user `uid` on Unix.
+#[cfg(unix)]
+fn runtime_dir_of(uid: u32) -> PathBuf {
+    PathBuf::from(format!("/tmp/better-tiled-{uid}"))
+}
+
+/// Makes `dir` a folder of the user `uid` alone: creates it with mode `0700` when it is missing,
+/// refuses a symbolic link, anything that is not a folder and a folder someone else owns, and
+/// narrows a mode open to others to `0700`. In `/tmp`, whose sticky bit lets only an entry's
+/// owner rename or remove it, a folder that passed cannot be swapped for another afterwards.
+#[cfg(unix)]
+fn make_private_dir(dir: &Path, uid: u32) -> Result<(), Error> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+
+    let folder = |source: std::io::Error| Error::Folder {
+        path: dir.to_path_buf(),
+        source,
+    };
+    let not_private = |reason: NotPrivate| Error::NotPrivate {
+        path: dir.to_path_buf(),
+        reason,
+    };
+    match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(source) => return Err(folder(source)),
+    }
+    let metadata = std::fs::symlink_metadata(dir).map_err(folder)?;
+    if metadata.file_type().is_symlink() {
+        return Err(not_private(NotPrivate::SymbolicLink));
+    }
+    if !metadata.is_dir() {
+        return Err(not_private(NotPrivate::NotAFolder));
+    }
+    if metadata.uid() != uid {
+        return Err(not_private(NotPrivate::OwnedByOther {
+            owner: metadata.uid(),
+        }));
+    }
+    if metadata.mode() & 0o077 != 0 {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).map_err(folder)?;
+        let mode = std::fs::symlink_metadata(dir).map_err(folder)?.mode() & 0o7777;
+        if mode & 0o077 != 0 {
+            return Err(not_private(NotPrivate::OpenToOthers { mode }));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +318,86 @@ mod tests {
         for dir in dirs {
             std::fs::create_dir_all(dir).unwrap();
         }
+    }
+
+    #[cfg(unix)]
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::symlink_metadata(path).unwrap().mode() & 0o7777
+    }
+
+    #[cfg(unix)]
+    fn owner(path: &Path) -> u32 {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).unwrap().uid()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_runtime_folder_is_named_after_the_user_in_tmp() {
+        assert_eq!(runtime_dir_of(501), PathBuf::from("/tmp/better-tiled-501"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_folder_is_made_with_mode_0700_and_a_wider_mode_is_narrowed() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = Scratch::new("bt-utils-private-dir").unwrap();
+        let uid = owner(scratch.path());
+        let dir = scratch.join("runtime");
+        make_private_dir(&dir, uid).unwrap();
+        assert_eq!(mode(&dir), 0o700, "made private");
+        std::fs::write(dir.join("editor.sock"), "").unwrap();
+        make_private_dir(&dir, uid).unwrap();
+        assert!(
+            dir.join("editor.sock").is_file(),
+            "an existing folder is kept"
+        );
+        for wider in [0o755, 0o711, 0o701, 0o770, 0o777] {
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(wider)).unwrap();
+            make_private_dir(&dir, uid).unwrap();
+            assert_eq!(mode(&dir), 0o700, "{wider:o} narrowed");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn links_files_and_other_users_folders_are_never_used() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = Scratch::new("bt-utils-private-dir-refused").unwrap();
+        let uid = owner(scratch.path());
+        let real = scratch.join("real");
+        make_private_dir(&real, uid).unwrap();
+        let refusal = |dir: &Path, uid: u32| match make_private_dir(dir, uid) {
+            Err(Error::NotPrivate { reason, .. }) => reason,
+            other => panic!("{} was not refused: {other:?}", dir.display()),
+        };
+
+        let link = scratch.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert_eq!(refusal(&link, uid), NotPrivate::SymbolicLink);
+        let dangling = scratch.join("dangling");
+        std::os::unix::fs::symlink(scratch.join("nowhere"), &dangling).unwrap();
+        assert_eq!(refusal(&dangling, uid), NotPrivate::SymbolicLink);
+        assert!(!scratch.join("nowhere").exists(), "nothing made through it");
+
+        let file = scratch.join("file");
+        std::fs::write(&file, "").unwrap();
+        assert_eq!(refusal(&file, uid), NotPrivate::NotAFolder);
+
+        // Another user's folder is refused as it is, mode and all.
+        std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let someone_else = uid.wrapping_add(1);
+        assert_eq!(
+            refusal(&real, someone_else),
+            NotPrivate::OwnedByOther { owner: uid }
+        );
+        assert_eq!(mode(&real), 0o755, "left alone");
+        let error = make_private_dir(&real, someone_else).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("{} is not used: it belongs to user {uid}", real.display())
+        );
+        assert_eq!(error.refused(), None);
     }
 }

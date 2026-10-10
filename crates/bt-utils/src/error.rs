@@ -31,6 +31,24 @@ pub enum Error {
         #[source]
         source: std::io::Error,
     },
+    /// A folder could not be created, examined or have its mode narrowed.
+    #[error("couldn't prepare the folder {}: {source}", path.display())]
+    Folder {
+        /// The folder.
+        path: PathBuf,
+        /// What the system said.
+        #[source]
+        source: std::io::Error,
+    },
+    /// A folder that must be the user's alone (the runtime folder) is not, so it is not used:
+    /// anyone else able to write there could stand in for the user's programs.
+    #[error("{} is not used: {reason}", path.display())]
+    NotPrivate {
+        /// The folder.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: NotPrivate,
+    },
 }
 
 impl Error {
@@ -39,7 +57,43 @@ impl Error {
     pub fn refused(&self) -> Option<Refused> {
         match self {
             Error::Refused { reason, .. } => Some(*reason),
-            Error::Write { .. } | Error::Resolve { .. } => None,
+            Error::Write { .. }
+            | Error::Resolve { .. }
+            | Error::Folder { .. }
+            | Error::NotPrivate { .. } => None,
+        }
+    }
+}
+
+/// Why a folder that must be the user's alone is not used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NotPrivate {
+    /// It is a symbolic link, which could lead anywhere.
+    SymbolicLink,
+    /// It is a file or something else that is not a folder.
+    NotAFolder,
+    /// Another user owns it.
+    OwnedByOther {
+        /// The owner's user id.
+        owner: u32,
+    },
+    /// Others can still read, write or enter it after its mode was narrowed (a file system that
+    /// keeps modes of its own).
+    OpenToOthers {
+        /// The folder's permission bits.
+        mode: u32,
+    },
+}
+
+impl std::fmt::Display for NotPrivate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NotPrivate::SymbolicLink => f.write_str("it is a symbolic link"),
+            NotPrivate::NotAFolder => f.write_str("it is not a folder"),
+            NotPrivate::OwnedByOther { owner } => write!(f, "it belongs to user {owner}"),
+            NotPrivate::OpenToOthers { mode } => {
+                write!(f, "others can use it (mode {mode:03o})")
+            }
         }
     }
 }

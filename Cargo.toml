@@ -44,6 +44,8 @@ pollster = "0.4"
 regex = "1.13"
 rfd = "0.17"
 roxmltree = "0.21"
+# The user id that names the runtime folder (bt-utils, Unix only): no unsafe code of ours.
+rustix = { version = "1.1", default-features = false, features = ["process"] }
 ruzstd = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
