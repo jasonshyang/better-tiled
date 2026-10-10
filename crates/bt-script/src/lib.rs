@@ -16,6 +16,7 @@ mod feet;
 pub mod grid;
 mod history;
 mod names;
+mod regions;
 mod report;
 mod script;
 mod shapes;
@@ -31,6 +32,10 @@ pub use history::{
 pub use names::{
     Ground, GroupPart, MaterialPart, NamedTerrain, Names, Piece, PieceObjects, Sprite, TileGroup,
     object_type,
+};
+pub use regions::{
+    AreasOutcome, CellsShowing, ConnectedArea, GridAxis, MapEdge, NoWay, Reach, ReachOutcome,
+    ReachRequest, ShapeCells, Way,
 };
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
