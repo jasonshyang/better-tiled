@@ -14,6 +14,7 @@
 //! (`reference/tiled/src/libtiled/wangset.cpp`). Tiled's editor code is GPL-2.0-or-later and is
 //! used here under GPL-3.0-or-later. `docs/design/07-terrain.md` is the design.
 
+pub mod autolabel;
 mod brush;
 mod color;
 mod diagnose;
