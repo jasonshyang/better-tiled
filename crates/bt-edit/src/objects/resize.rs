@@ -895,6 +895,32 @@ mod tests {
     }
 
     #[test]
+    fn turned_polygons_scale_in_their_own_frame() {
+        let map = square_map();
+        let polygon = MapObject {
+            rotation: 90.0,
+            shape: Shape::Polygon(vec![v(0.0, 0.0), v(20.0, 0.0), v(0.0, 10.0)]),
+            ..rect_object(50.0, 50.0, 0.0, 0.0)
+        };
+        // Its points' box is 20 × 10 from the position; turned, the box's bottom-right corner
+        // is drawn below and left of the position.
+        let quad = quad_of_one(&map, &polygon);
+        assert_eq!(ResizeHandle::BottomRight.on(quad), v(40.0, 70.0));
+        // Dragged twice as far from the opposite corner, the position, the points double.
+        let resized = resized_one(
+            &map,
+            &polygon,
+            Resize::handle_to(ResizeHandle::BottomRight, v(30.0, 90.0)),
+        );
+        assert_eq!(resized.pos, v(50.0, 50.0));
+        assert_eq!(
+            resized.shape,
+            Shape::Polygon(vec![v(0.0, 0.0), v(40.0, 0.0), v(0.0, 20.0)])
+        );
+        assert_eq!(resized.rotation, 90.0);
+    }
+
+    #[test]
     fn points_only_move() {
         let map = square_map();
         let point = MapObject {
