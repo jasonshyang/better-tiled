@@ -228,12 +228,14 @@ pub fn differing_share(actual: &Picture, expected: &Picture, tolerance: u8) -> f
     differing as f64 / (expected.width * expected.height).max(1) as f64
 }
 
-/// Writes a picture into `BT_GOLDEN_DIFF_DIR` when it is set, to look at.
+/// Writes a picture into `BT_GOLDEN_DIFF_DIR` when it is set, to look at; the folder is made
+/// when it is not there yet (CI names one inside `target/`).
 pub fn keep(picture: &Picture, name: &str) {
     if let Some(dir) = std::env::var_os("BT_GOLDEN_DIFF_DIR") {
-        let path = PathBuf::from(dir).join(format!("{name}.png"));
+        let dir = PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
         image::save_buffer(
-            &path,
+            dir.join(format!("{name}.png")),
             &picture.rgba,
             picture.width,
             picture.height,
