@@ -51,6 +51,33 @@ impl ImageCut {
             tile_count: *tile_count,
         })
     }
+
+    /// Whether `tileset`'s image is this one, cut this way (asked every frame a helper shows, so
+    /// nothing is copied, and embedded bytes shared with the tileset are not compared).
+    pub(crate) fn matches(&self, tileset: &Tileset) -> bool {
+        let TilesetImage::Atlas {
+            image,
+            columns,
+            tile_count,
+        } = &tileset.image
+        else {
+            return false;
+        };
+        let same_source = match (&image.source, &self.image.source) {
+            (ImageSource::Embedded(a), ImageSource::Embedded(b)) => {
+                Arc::ptr_eq(&a.bytes, &b.bytes) || a == b
+            }
+            (a, b) => a == b,
+        };
+        same_source
+            && image.transparent == self.image.transparent
+            && image.declared_size == self.image.declared_size
+            && tileset.tile_size() == self.tile_size
+            && tileset.margin == self.margin
+            && tileset.spacing == self.spacing
+            && *columns == self.columns
+            && *tile_count == self.tile_count
+    }
 }
 
 /// Auto-label's question: terrain `color` of set `set`, of `kind`, labelled from tile
@@ -255,6 +282,26 @@ mod tests {
         assert!(cut.matches(&atlas(16, 0)));
         assert!(!cut.matches(&atlas(8, 0)), "another tile size");
         assert!(!cut.matches(&atlas(16, 1)), "another margin");
-        assert_eq!(ImageCut::of(&Tileset::default()), None, "a collection");
+        assert!(!cut.matches(&Tileset::default()), "a collection");
+        assert_eq!(ImageCut::of(&Tileset::default()), None, "has no cut");
+
+        let embedded = |bytes: &[u8]| Tileset {
+            image: TilesetImage::Atlas {
+                image: ImageRef {
+                    source: ImageSource::Embedded(bt_core::EmbeddedImage {
+                        format: "png".into(),
+                        bytes: Arc::from(bytes),
+                    }),
+                    declared_size: UVec2::splat(64),
+                    transparent: None,
+                },
+                columns: 4,
+                tile_count: 16,
+            },
+            ..atlas(16, 0)
+        };
+        let cut = ImageCut::of(&embedded(b"png")).unwrap();
+        assert!(cut.matches(&embedded(b"png")), "the same bytes");
+        assert!(!cut.matches(&embedded(b"gif")));
     }
 }

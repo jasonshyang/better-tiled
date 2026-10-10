@@ -267,13 +267,6 @@ impl Editor {
     }
 }
 
-impl ImageCut {
-    /// Whether `tileset`'s image is cut this way.
-    pub(crate) fn matches(&self, tileset: &Tileset) -> bool {
-        ImageCut::of(tileset).as_ref() == Some(self)
-    }
-}
-
 /// Why `block` cannot be labelled in `into` of `tileset`, as a sentence; `None` when it can.
 fn block_problem(tileset: &Tileset, into: LayoutTarget, block: &Block) -> Option<String> {
     let Some(layout) = LAYOUTS.get(block.layout) else {
