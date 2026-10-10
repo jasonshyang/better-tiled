@@ -691,7 +691,7 @@ impl App {
                         _ => None,
                     })
                 });
-                run.step(readiness, picture.as_deref())
+                run.step(std::time::Instant::now(), readiness, picture.as_deref())
             }
             DevRun::Bench(run) => {
                 let current = self.editor.current();

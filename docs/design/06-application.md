@@ -423,7 +423,8 @@ before the screenshot, so a scripted run can picture any state; it is compiled i
 without the variables.
 
 As built: `--screenshot OUT.png` waits until no load runs, no image is being decoded (on the
-canvas or in the Tiles panel) and no far square is pending, for three frames in a row, then
+canvas or in the Tiles panel) and no far square is pending, for three frames in a row and
+0.3 s (longer than egui's 0.2 s animations, so a window a command opened has faded in), then
 saves the window's own picture and quits; it fails after 30 s, saying whether the window was
 not ready or its picture never came (a locked screen or a hidden window presents nothing).
 `--bench MAP` waits the same way, then pans across the map at every power-of-two zoom from

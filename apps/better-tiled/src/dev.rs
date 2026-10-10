@@ -1,5 +1,5 @@
 //! The checks that run without a person. `--screenshot` opens the files, waits until they are
-//! loaded and every image is drawn, runs the commands `BT_SCREENSHOT_ACTIONS` names (by their
+//! loaded, every image is drawn and egui's animations are over, runs the commands `BT_SCREENSHOT_ACTIONS` names (by their
 //! keymap names, separated by commas) and waits again, saves the window as a PNG and quits. `--bench` waits the
 //! same way, then pans across the current map at each zoom from 1/32 to 64, prints the frame
 //! times and the renderer's account at each, and quits.
@@ -18,6 +18,9 @@ use crate::canvas::{Canvas, MAX_ZOOM, MIN_ZOOM, ViewTransform};
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Frames in a row with nothing pending before the window counts as drawn.
 const SETTLED_FRAMES: u32 = 3;
+/// How long it must stay so too: longer than egui's animations (`Style::animation_time`,
+/// 0.2 s), so a window a command opened has faded in.
+const SETTLE_TIME: Duration = Duration::from_millis(300);
 /// Frames drawn at each zoom before they are measured.
 const WARMUP_FRAMES: usize = 15;
 /// Frames measured at each zoom.
@@ -74,6 +77,8 @@ pub(crate) struct ScreenshotRun {
     path: PathBuf,
     started: Instant,
     settled: u32,
+    /// When the frames in a row with nothing pending began.
+    settled_since: Option<Instant>,
     requested: bool,
     /// Commands still to run before the picture.
     actions: Vec<ActionId>,
@@ -86,6 +91,7 @@ impl ScreenshotRun {
             path,
             started: Instant::now(),
             settled: 0,
+            settled_since: None,
             requested: false,
             actions,
         }
@@ -94,13 +100,14 @@ impl ScreenshotRun {
     /// The next step, given what the window is waiting on and a picture taken, if any.
     pub(crate) fn step(
         &mut self,
+        now: Instant,
         readiness: Readiness,
         picture: Option<&egui::ColorImage>,
     ) -> DevStep {
         if let Some(picture) = picture {
             return DevStep::Quit(save_png(picture, &self.path).err());
         }
-        if self.started.elapsed() > READY_TIMEOUT {
+        if now.duration_since(self.started) > READY_TIMEOUT {
             let what = if self.requested {
                 // A window that cannot present (a locked screen, another Space) draws nothing to
                 // take a picture of.
@@ -116,14 +123,18 @@ impl ScreenshotRun {
         if self.requested {
             return DevStep::Continue;
         }
-        self.settled = if readiness.ready() {
-            self.settled + 1
+        if readiness.ready() {
+            self.settled += 1;
+            self.settled_since.get_or_insert(now);
         } else {
-            0
-        };
-        if self.settled >= SETTLED_FRAMES {
+            self.settled = 0;
+            self.settled_since = None;
+        }
+        let settled_for = self.settled_since.map(|since| now.duration_since(since));
+        if self.settled >= SETTLED_FRAMES && settled_for.is_some_and(|t| t >= SETTLE_TIME) {
             if !self.actions.is_empty() {
                 self.settled = 0;
+                self.settled_since = None;
                 return DevStep::Run(std::mem::take(&mut self.actions));
             }
             self.requested = true;
@@ -436,6 +447,8 @@ mod tests {
     #[test]
     fn a_screenshot_waits_until_the_window_has_settled() {
         let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), Vec::new());
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
         let busy = Readiness {
             busy: true,
             pending_images: false,
@@ -447,33 +460,38 @@ mod tests {
             has_document: true,
             ..busy
         };
-        assert_eq!(run.step(busy, None), DevStep::Continue);
-        assert_eq!(run.step(ready, None), DevStep::Continue);
-        assert_eq!(run.step(ready, None), DevStep::Continue);
-        assert_eq!(run.step(ready, None), DevStep::TakeScreenshot);
-        assert_eq!(run.step(ready, None), DevStep::Continue);
+        assert_eq!(run.step(at(0), busy, None), DevStep::Continue);
+        assert_eq!(run.step(at(8), ready, None), DevStep::Continue);
+        assert_eq!(run.step(at(16), ready, None), DevStep::Continue);
+        // Three frames, but a window just opened may still be fading in.
+        assert_eq!(run.step(at(24), ready, None), DevStep::Continue);
+        assert_eq!(run.step(at(308), ready, None), DevStep::TakeScreenshot);
+        assert_eq!(run.step(at(316), ready, None), DevStep::Continue);
     }
 
     #[test]
     fn commands_run_before_the_picture_and_the_window_settles_again() {
         let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), vec![ActionId::ShowGrid]);
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
         let ready = Readiness {
             busy: false,
             pending_images: false,
             has_document: true,
             expects_document: true,
         };
-        for _ in 0..2 {
-            assert_eq!(run.step(ready, None), DevStep::Continue);
-        }
+        assert_eq!(run.step(at(0), ready, None), DevStep::Continue);
+        // Long enough, but not yet three frames.
+        assert_eq!(run.step(at(400), ready, None), DevStep::Continue);
         assert_eq!(
-            run.step(ready, None),
+            run.step(at(408), ready, None),
             DevStep::Run(vec![ActionId::ShowGrid])
         );
-        for _ in 0..2 {
-            assert_eq!(run.step(ready, None), DevStep::Continue);
+        // It settles again, as long, before the picture.
+        for ms in [416, 424, 432] {
+            assert_eq!(run.step(at(ms), ready, None), DevStep::Continue);
         }
-        assert_eq!(run.step(ready, None), DevStep::TakeScreenshot);
+        assert_eq!(run.step(at(716), ready, None), DevStep::TakeScreenshot);
         assert_eq!(
             screenshot_actions(Some("show_grid, select_all")),
             Ok(vec![ActionId::ShowGrid, ActionId::SelectAll])
