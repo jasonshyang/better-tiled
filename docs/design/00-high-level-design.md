@@ -77,7 +77,8 @@ These are the project's rules; the detailed docs and reviews hold code to them.
 - **No `unwrap()` or `expect()` outside tests and `main`.** Library code returns `Result`; the
   binaries unwrap at the outermost layer if they must. Indexing a collection by a position that
   might not exist counts as an `unwrap`.
-- **No `unsafe`.** A use case that seems to need it goes to design review first.
+- **No `unsafe`.** A use case that seems to need it goes to design review first. The one
+  allowed so far is the macOS quit guard (`06-application.md`, §12).
 - **No silent fallbacks.** A missing or invalid configuration value fails loudly at startup with
   a clear message. A value a file cannot express, an id that does not exist, a cast that cannot
   fit, a limit that was exceeded: each is an error or a warning, never a default.
@@ -475,7 +476,7 @@ apps/better-tiled/src/
 │                  properties, Godot setup, export; each driven by an effect from bt-editor
 ├── files/         the window side of open, save, reload and close; dialogs; the watcher's timer
 ├── live/          the socket server for bt and its job queue
-└── platform/      the macOS quit key, reveal in Finder, open with the system editor
+└── platform/      macOS quit guard, reveal in Finder, open with the system editor
 ```
 
 Modals are one stack of one enum, so "is a modal open" is one question. Dialogs run from
@@ -790,8 +791,7 @@ doc and `13-testing.md` are as built.
 M1 was built on 2026-10-10; `03-rendering.md` and the M1 parts of `05-editor-core.md`,
 `06-application.md` (their §1.1) and `13-testing.md` are as built. Building it changed two
 designs, recorded in `decisions.md`: far zoom draws squares of layer runs instead of a picture
-per chunk, and the macOS quit key is routed to the window instead of adding a delegate method
-with `unsafe` code, which is left for design review.
+per chunk, and the macOS quit guard, reviewed, is the workspace's one `unsafe` code.
 
 ## 18. Glossary
 

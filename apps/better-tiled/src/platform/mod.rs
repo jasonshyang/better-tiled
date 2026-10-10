@@ -2,4 +2,6 @@
 
 mod quit;
 
-pub(crate) use quit::route_quit_key_to_window;
+#[cfg(test)]
+pub(crate) use quit::SystemQuit;
+pub(crate) use quit::{QuitGuard, install_system_quit_guard};

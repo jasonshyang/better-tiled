@@ -13,6 +13,7 @@ use egui_kittest::kittest::Queryable;
 
 use crate::app::{App, Startup};
 use crate::cli::Cli;
+use crate::platform::SystemQuit;
 
 /// How long the window may take to finish its work after an input.
 const SETTLE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -109,6 +110,14 @@ impl TestWindow {
             .events
             .push(egui::ViewportEvent::Close);
         self.settle();
+    }
+
+    /// Asks to quit as the app menu, the Dock or a logout does on macOS; the answer the system
+    /// gets.
+    pub(crate) fn system_quit(&mut self) -> SystemQuit {
+        let answer = self.harness.state().quit_guard().answer_system_quit();
+        self.settle();
+        answer
     }
 
     /// Ends the run as eframe does when the window closes.

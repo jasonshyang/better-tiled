@@ -450,17 +450,23 @@ screen, not the map: the median far out is under 1 ms and the 95th percentile 6.
 Clipping each square to itself, with the parts of oversized tiles that reach into it, keeps
 Tiled's stacking across square edges, which pictures of whole chunk stacks would not.
 
-## 2026-10-10 — Quitting asks without unsafe code
+## 2026-10-10 — The macOS quit guard is the one unsafe code
 
-**Decided:** on macOS the app menu's Quit item gives its ⌘Q key equivalent to the window, so ⌘Q
-runs the Quit command and asks about unsaved work as the close button does; a quit from the app
-menu, the Dock or a logout ends the run without asking, and the window writes the snapshots the
-latest changes need and keeps them for the next start.
-**Instead of:** adding `applicationShouldTerminate:` to the application delegate at runtime
-through `objc2` (`06-application.md`, §12 as first designed).
-**Why:** that needs `unsafe`, which the workspace forbids and which goes to design review first;
-the key and the close button are the usual ways to quit, and recovery keeps the rest. The
-delegate method is the one question left for that review.
+**Decided:** at start, winit's application delegate gets `applicationShouldTerminate:`, added to
+its class with `class_addMethod`: the app menu's Quit, the Dock's and a logout quit at once when
+nothing is unsaved, and otherwise are cancelled and run the Quit command, whose question decides
+(a logout is interrupted until it is answered). It is the workspace's one `unsafe` code: the
+application's crate denies `unsafe_code` where every other crate forbids it, and allows it in
+the one function that adds the method. Reviewed and allowed on 2026-10-10.
+**Instead of:** routing only ⌘Q to the window and letting the menu, the Dock and a logout quit
+without asking, with the work kept as recovery snapshots (built first); replacing the delegate
+(winit stops at any other); answering "later" and replying once the question is answered
+(AppKit then runs its loop in a mode winit's loop is not built for).
+**Why:** many Mac users quit from the app menu or the Dock, and an editor that vanishes with
+unsaved work alarms even when the next start gives it back. Adding a method to an Objective-C
+class is a claim about a message's types the compiler cannot check, so it needs `unsafe`;
+keeping it to one function of a few lines, with the guard's logic in safe, tested code, keeps
+the rule everywhere else.
 
 ## 2026-10-10 — The saved zoom is in screen points
 

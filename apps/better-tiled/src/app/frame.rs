@@ -22,7 +22,7 @@ use crate::dialogs::Modals;
 use crate::files::{BackgroundWriter, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{LayersPanel, TileImages, TilesPanel};
-use crate::platform::route_quit_key_to_window;
+use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::apply_theme;
 use crate::workers::Workers;
 
@@ -51,6 +51,7 @@ pub(crate) struct App {
     pub(super) flash: Option<Flash>,
     session: SessionSync,
     pub(super) quit_allowed: bool,
+    quit_guard: Arc<QuitGuard>,
     pub(super) dev: Option<DevRun>,
     pub(super) outcome: RunOutcome,
     title: String,
@@ -81,7 +82,11 @@ impl App {
         })?;
         let mut app = App::assemble(&cc.egui_ctx, startup)?;
         app.gpu = Some(CanvasGpu::install(render_state, Arc::clone(&app.images)));
-        route_quit_key_to_window();
+        if let Err(reason) = install_system_quit_guard(Arc::clone(&app.quit_guard)) {
+            app.notify(Notice::warning(format!(
+                "Quitting from the app menu or the Dock will not ask about unsaved work: {reason}"
+            )));
+        }
         Ok(app)
     }
 
@@ -113,6 +118,12 @@ impl App {
     #[cfg(test)]
     pub(crate) fn is_closing(&self) -> bool {
         self.quit_allowed
+    }
+
+    /// What answers a quit the system asks for (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn quit_guard(&self) -> &QuitGuard {
+        &self.quit_guard
     }
 
     fn assemble(ctx: &egui::Context, startup: Startup) -> Result<App, String> {
@@ -155,6 +166,7 @@ impl App {
                 enabled: !checking,
             },
             quit_allowed: false,
+            quit_guard: QuitGuard::new(ctx.clone()),
             dev: None,
             outcome: startup.outcome(),
             title: String::new(),
@@ -235,6 +247,23 @@ impl App {
             notice,
             until: Instant::now() + lasts,
         });
+    }
+
+    /// A quit the system asked for and the guard held back runs the Quit command, with the
+    /// window brought forward so its question is seen.
+    fn handle_system_quit(&mut self, ctx: &egui::Context) {
+        if !self.quit_guard.take_asked() || self.quit_allowed || self.modals.asks_about_quitting() {
+            return;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        self.intents.push(Intent::Run(ActionId::Quit));
+    }
+
+    /// Tells the guard whether a quit now would lose unsaved work.
+    fn sync_quit_guard(&self) {
+        self.quit_guard
+            .set_unsaved(!self.quit_allowed && self.editor.has_unsaved());
     }
 
     fn handle_close_request(&mut self, ctx: &egui::Context) {
@@ -471,6 +500,7 @@ impl eframe::App for App {
         self.intents.extend(finished);
         let now_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.intents.push(Intent::Tick { now_ms });
+        self.handle_system_quit(ctx);
         self.apply_intents(ctx);
         for problem in self.writer.take_problems() {
             self.notify(Notice::warning(problem));
@@ -478,6 +508,7 @@ impl eframe::App for App {
         if self.editor.has_unsaved() {
             ctx.request_repaint_after(RECOVERY_TICK);
         }
+        self.sync_quit_guard();
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -499,12 +530,14 @@ impl eframe::App for App {
         self.modals.show(&ctx, &mut self.intents);
         self.apply_intents(&ctx);
         self.end_frame(&ctx);
+        self.sync_quit_guard();
     }
 
     fn on_exit(&mut self) {
         if !self.quit_allowed {
-            // The system ended the run (the app menu, the Dock, a logout): the last snapshots
-            // of unsaved work are written and kept for the next start.
+            // The run ends without a quit anyone answered (the system's, when the quit guard
+            // could not be set up): the last snapshots of unsaved work are written and kept for
+            // the next start.
             for snapshot in self.editor.snapshots_for_unanswered_exit() {
                 self.writer.write_snapshot(snapshot);
             }

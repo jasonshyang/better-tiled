@@ -9,6 +9,7 @@ use bt_core::LayerId;
 use bt_editor::ActionId;
 use bt_test_data::Scratch;
 
+use crate::platform::SystemQuit;
 use crate::test_window::TestWindow;
 
 /// Tiled's desert example copied into `scratch`, or `None` when the reference data is missing
@@ -152,6 +153,30 @@ fn closing_with_unsaved_work_asks_first() {
     window.request_close();
     window.click("Don't Save");
     assert!(window.is_closing());
+}
+
+#[test]
+fn a_system_quit_asks_while_something_is_unsaved() {
+    let scratch = Scratch::new("window-system-quit").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    assert_eq!(window.system_quit(), SystemQuit::Proceed, "nothing unsaved");
+    window.click("👁");
+    assert_eq!(window.system_quit(), SystemQuit::Cancel);
+    assert!(
+        window.has_modal() && !window.is_closing(),
+        "the Quit command asks"
+    );
+    window.click("Don't Save");
+    assert!(window.is_closing());
+    assert_eq!(
+        window.system_quit(),
+        SystemQuit::Proceed,
+        "quitting goes ahead now"
+    );
 }
 
 #[test]

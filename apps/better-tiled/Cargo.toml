@@ -24,16 +24,32 @@ pollster.workspace = true
 rfd.workspace = true
 serde_json.workspace = true
 
-# The quit guard: the app menu's Quit item gives up ⌘Q, which then reaches the window.
+# The quit guard: the application's delegate is asked before the system quits it.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSMenu", "NSMenuItem", "NSResponder"] }
-objc2-foundation = { workspace = true, features = ["NSString"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSResponder"] }
 
 [dev-dependencies]
 bt-test-data = { workspace = true, features = ["fixtures"] }
 bt-tmx.workspace = true
 egui_kittest = { workspace = true, features = ["eframe"] }
+toml.workspace = true
 
-[lints]
-workspace = true
+# The workspace's lints, but `unsafe_code` is denied where the workspace forbids it: the macOS
+# quit guard allows it in one function (src/platform/quit.rs, docs/decisions.md). A test there
+# keeps this table the workspace's otherwise.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"

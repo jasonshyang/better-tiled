@@ -18,7 +18,7 @@ the transaction.
 Dependencies: `bt-editor`, `bt-render`, `bt-image`, `bt-script` (to run the live link's
 scripts), `bt-live`, `bt-godot`, `bt-tmx`, `bt-core`, `bt-utils`; `eframe`/`egui` with the
 wgpu backend, `egui_wgpu`, `rfd` for file dialogs, `notify`-free polling for the watcher,
-`log`/`env_logger`, and on macOS `objc2`/`objc2-app-kit` to give the quit key to the window.
+`log`/`env_logger`, and on macOS `objc2`/`objc2-app-kit` for the quit guard.
 
 ### 1.1 As built at M1
 
@@ -95,7 +95,7 @@ App
 ├── live: Option<LiveServer>
 ├── focus: Focus                                  §4
 ├── perf: FrameStats
-└── platform: Platform                            the quit key, menu, reveal, open-with
+└── platform: Platform                            quit guard, menu, reveal, open-with
 ```
 
 ### 3.1 A frame
@@ -335,13 +335,15 @@ buttons first and clips the tools to the room left; labels drop before buttons d
 
 ## 12. Platform
 
-- **macOS quit**: the window's close button and ⌘Q ask about unsaved work: at start the app
-  menu's Quit item gives up its ⌘Q key equivalent (safe AppKit calls through `objc2-app-kit`),
-  so the key reaches the window and runs the Quit command. Choosing Quit from the app menu, the
-  Dock or a logout still ends the run without asking: asking there needs the application
-  delegate's `applicationShouldTerminate:`, which can only be added with `unsafe` and waits for
-  a design review. Such an exit writes the snapshots the latest changes need and keeps them, so
-  the next start offers the work back.
+- **macOS quit**: the window's close button and the Quit command ask about unsaved work in the
+  frame loop. The app menu's Quit (⌘Q), the Dock's and a logout call AppKit's `terminate:`,
+  which asks the application's delegate `applicationShouldTerminate:`; winit's delegate has no
+  answer and must stay winit's, so `platform/quit.rs` adds the method to its class at start
+  (the workspace's one `unsafe` code, `decisions.md`). The method asks a `QuitGuard` the frame
+  loop keeps up to date: with nothing unsaved the application quits; otherwise the system's
+  quit is cancelled, the window is brought forward and the Quit command asks (a logout is
+  interrupted until it is answered). If the guard cannot be set up, the window says so; an exit
+  nobody answered writes the snapshots the latest changes need and keeps them.
 - **Open with the system** and **reveal in the file manager** through the platform's commands.
 - **HiDPI**: the camera and overlays work in device pixels; text and strokes are cosmetic.
 - **Theme**: the egui style is derived from the theme settings (base colour decides light or

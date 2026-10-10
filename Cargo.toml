@@ -38,7 +38,6 @@ log = "0.4"
 # The macOS quit guard (apps/better-tiled): the versions winit already uses.
 objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
 pollster = "0.4"
 regex = "1.13"
 rfd = "0.17"
