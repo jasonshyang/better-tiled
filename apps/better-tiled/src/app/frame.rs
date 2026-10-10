@@ -328,7 +328,10 @@ impl App {
             self.notify(Notice::warning(problem));
         }
         self.dev = if let Some(path) = startup.screenshot {
-            Some(DevRun::Screenshot(ScreenshotRun::new(path)))
+            Some(DevRun::Screenshot(ScreenshotRun::new(
+                path,
+                startup.screenshot_actions.clone(),
+            )))
         } else if startup.bench {
             Some(DevRun::Bench(BenchRun::new()))
         } else {
@@ -685,6 +688,10 @@ impl App {
         };
         match step {
             DevStep::Continue => ctx.request_repaint(),
+            DevStep::Run(actions) => {
+                self.intents.extend(actions.into_iter().map(Intent::Run));
+                ctx.request_repaint();
+            }
             DevStep::TakeScreenshot => {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 ctx.request_repaint();

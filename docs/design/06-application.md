@@ -422,8 +422,11 @@ not ready or its picture never came (a locked screen or a hidden window presents
 per zoom the interval between frames (median, 95th percentile, worst), the window's own work,
 the renderer's prepare time and its counts, then the display's rate and how many frames took
 over half again the median; frames faster than any display are reported as not presented, and
-with debug logging each slow frame is logged with the window's own work and the renderer's. The
-`BT_SCREENSHOT_*` hooks come with the tools.
+with debug logging each slow frame is logged with the window's own work and the renderer's. As
+built at M2, `BT_SCREENSHOT_ACTIONS` names commands by their keymap names, separated by commas
+(`rect_select_tool,select_all`): `--screenshot` runs them once the window has settled, waits for
+it to settle again, then takes the picture; a name that is no command stops the start with the
+reason. Selecting a cell for Explain and showing rule matches come with M3.
 
 ## 14. Module layout
 

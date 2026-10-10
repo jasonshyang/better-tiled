@@ -22,6 +22,8 @@ pub(crate) struct Startup {
     pub(crate) files: Vec<PathBuf>,
     /// `--screenshot`: where the picture goes.
     pub(crate) screenshot: Option<PathBuf>,
+    /// The commands `BT_SCREENSHOT_ACTIONS` names, run before the picture.
+    pub(crate) screenshot_actions: Vec<bt_editor::ActionId>,
     /// `--bench`.
     pub(crate) bench: bool,
     /// The preferences.
@@ -75,9 +77,16 @@ impl Startup {
                 )),
             ),
         };
+        let screenshot_actions = if cli.screenshot.is_some() {
+            let named = std::env::var("BT_SCREENSHOT_ACTIONS").ok();
+            crate::dev::screenshot_actions(named.as_deref())?
+        } else {
+            Vec::new()
+        };
         Ok(Startup {
             files: cli.files,
             screenshot: cli.screenshot,
+            screenshot_actions,
             bench: cli.bench,
             settings,
             session,

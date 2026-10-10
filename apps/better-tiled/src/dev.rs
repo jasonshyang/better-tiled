@@ -1,5 +1,6 @@
 //! The checks that run without a person. `--screenshot` opens the files, waits until they are
-//! loaded and every image is drawn, saves the window as a PNG and quits. `--bench` waits the
+//! loaded and every image is drawn, runs the commands `BT_SCREENSHOT_ACTIONS` names (by their
+//! keymap names, separated by commas) and waits again, saves the window as a PNG and quits. `--bench` waits the
 //! same way, then pans across the current map at each zoom from 1/32 to 64, prints the frame
 //! times and the renderer's account at each, and quits.
 
@@ -7,6 +8,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use bt_core::Map;
+use bt_editor::ActionId;
 use bt_render::RenderStats;
 use glam::DVec2;
 
@@ -59,6 +61,8 @@ impl Readiness {
 pub(crate) enum DevStep {
     /// Keep drawing frames.
     Continue,
+    /// Run these commands, then wait for the window to settle again.
+    Run(Vec<ActionId>),
     /// Take a picture of the window.
     TakeScreenshot,
     /// The check is over: quit, having failed when there is a reason.
@@ -71,16 +75,19 @@ pub(crate) struct ScreenshotRun {
     started: Instant,
     settled: u32,
     requested: bool,
+    /// Commands still to run before the picture.
+    actions: Vec<ActionId>,
 }
 
 impl ScreenshotRun {
-    /// A screenshot to `path`.
-    pub(crate) fn new(path: PathBuf) -> ScreenshotRun {
+    /// A screenshot to `path`, after running `actions` once the window has settled.
+    pub(crate) fn new(path: PathBuf, actions: Vec<ActionId>) -> ScreenshotRun {
         ScreenshotRun {
             path,
             started: Instant::now(),
             settled: 0,
             requested: false,
+            actions,
         }
     }
 
@@ -115,11 +122,32 @@ impl ScreenshotRun {
             0
         };
         if self.settled >= SETTLED_FRAMES {
+            if !self.actions.is_empty() {
+                self.settled = 0;
+                return DevStep::Run(std::mem::take(&mut self.actions));
+            }
             self.requested = true;
             return DevStep::TakeScreenshot;
         }
         DevStep::Continue
     }
+}
+
+/// The commands `BT_SCREENSHOT_ACTIONS` names, by their keymap names separated by commas; a name
+/// that is no command stops the run.
+pub(crate) fn screenshot_actions(value: Option<&str>) -> Result<Vec<ActionId>, String> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| {
+            ActionId::from_name(name)
+                .ok_or_else(|| format!("BT_SCREENSHOT_ACTIONS names no command “{name}”"))
+        })
+        .collect()
 }
 
 /// Saves the window's picture as a PNG.
@@ -407,7 +435,7 @@ mod tests {
 
     #[test]
     fn a_screenshot_waits_until_the_window_has_settled() {
-        let mut run = ScreenshotRun::new(PathBuf::from("unused.png"));
+        let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), Vec::new());
         let busy = Readiness {
             busy: true,
             pending_images: false,
@@ -424,5 +452,33 @@ mod tests {
         assert_eq!(run.step(ready, None), DevStep::Continue);
         assert_eq!(run.step(ready, None), DevStep::TakeScreenshot);
         assert_eq!(run.step(ready, None), DevStep::Continue);
+    }
+
+    #[test]
+    fn commands_run_before_the_picture_and_the_window_settles_again() {
+        let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), vec![ActionId::ShowGrid]);
+        let ready = Readiness {
+            busy: false,
+            pending_images: false,
+            has_document: true,
+            expects_document: true,
+        };
+        for _ in 0..2 {
+            assert_eq!(run.step(ready, None), DevStep::Continue);
+        }
+        assert_eq!(
+            run.step(ready, None),
+            DevStep::Run(vec![ActionId::ShowGrid])
+        );
+        for _ in 0..2 {
+            assert_eq!(run.step(ready, None), DevStep::Continue);
+        }
+        assert_eq!(run.step(ready, None), DevStep::TakeScreenshot);
+        assert_eq!(
+            screenshot_actions(Some("show_grid, select_all")),
+            Ok(vec![ActionId::ShowGrid, ActionId::SelectAll])
+        );
+        assert_eq!(screenshot_actions(None), Ok(Vec::new()));
+        assert!(screenshot_actions(Some("no_such_thing")).is_err());
     }
 }
