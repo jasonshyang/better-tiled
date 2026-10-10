@@ -194,6 +194,16 @@ enum EntryState {
     Failed(Error),
 }
 
+/// A decoded image that trimming may evict.
+struct Evictable {
+    /// The tick of its last request or poll.
+    last_used: u64,
+    /// Its key.
+    key: ImageKey,
+    /// The memory its pixels take.
+    bytes: usize,
+}
+
 /// Decoded images by key. One store serves a process: the renderer, the panels and the
 /// headless pictures all read it.
 pub struct ImageStore {
@@ -292,20 +302,24 @@ impl ImageStore {
     /// `keep_bytes`. Images being decoded stay.
     pub fn trim(&mut self, keep_bytes: usize) {
         self.take_finished();
-        let mut ready: Vec<(u64, ImageKey, usize)> = Vec::new();
+        let mut ready: Vec<Evictable> = Vec::new();
         for (key, entry) in &self.entries {
             if let EntryState::Ready(image) = &entry.state {
-                ready.push((entry.last_used, key.clone(), image.byte_size()));
+                ready.push(Evictable {
+                    last_used: entry.last_used,
+                    key: key.clone(),
+                    bytes: image.byte_size(),
+                });
             }
         }
-        let mut total: usize = ready.iter().map(|(_, _, bytes)| bytes).sum();
-        ready.sort_by_key(|(last_used, _, _)| *last_used);
-        for (_, key, bytes) in ready {
+        let mut total: usize = ready.iter().map(|image| image.bytes).sum();
+        ready.sort_by_key(|image| image.last_used);
+        for image in ready {
             if total <= keep_bytes {
                 break;
             }
-            self.entries.remove(&key);
-            total -= bytes;
+            self.entries.remove(&image.key);
+            total -= image.bytes;
         }
     }
 

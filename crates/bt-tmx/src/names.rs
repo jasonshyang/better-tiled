@@ -137,37 +137,43 @@ pub(crate) fn alignment_name(alignment: Alignment) -> &'static str {
     }
 }
 
-/// Every blend mode with its name.
-const BLEND_MODES: [(BlendMode, &str); 13] = [
-    (BlendMode::Normal, "normal"),
-    (BlendMode::Add, "add"),
-    (BlendMode::Multiply, "multiply"),
-    (BlendMode::Screen, "screen"),
-    (BlendMode::Overlay, "overlay"),
-    (BlendMode::Darken, "darken"),
-    (BlendMode::Lighten, "lighten"),
-    (BlendMode::ColorDodge, "color-dodge"),
-    (BlendMode::ColorBurn, "color-burn"),
-    (BlendMode::HardLight, "hard-light"),
-    (BlendMode::SoftLight, "soft-light"),
-    (BlendMode::Difference, "difference"),
-    (BlendMode::Exclusion, "exclusion"),
-];
-
 /// The blend mode a name gives.
 pub(crate) fn blend_mode_from_name(name: &str) -> Option<BlendMode> {
-    BLEND_MODES
-        .iter()
-        .find(|(_, spelled)| *spelled == name)
-        .map(|(mode, _)| *mode)
+    match name {
+        "normal" => Some(BlendMode::Normal),
+        "add" => Some(BlendMode::Add),
+        "multiply" => Some(BlendMode::Multiply),
+        "screen" => Some(BlendMode::Screen),
+        "overlay" => Some(BlendMode::Overlay),
+        "darken" => Some(BlendMode::Darken),
+        "lighten" => Some(BlendMode::Lighten),
+        "color-dodge" => Some(BlendMode::ColorDodge),
+        "color-burn" => Some(BlendMode::ColorBurn),
+        "hard-light" => Some(BlendMode::HardLight),
+        "soft-light" => Some(BlendMode::SoftLight),
+        "difference" => Some(BlendMode::Difference),
+        "exclusion" => Some(BlendMode::Exclusion),
+        _ => None,
+    }
 }
 
 /// A blend mode's name.
 pub(crate) fn blend_mode_name(mode: BlendMode) -> &'static str {
-    BLEND_MODES
-        .iter()
-        .find(|(listed, _)| *listed == mode)
-        .map_or("normal", |(_, name)| name)
+    match mode {
+        BlendMode::Normal => "normal",
+        BlendMode::Add => "add",
+        BlendMode::Multiply => "multiply",
+        BlendMode::Screen => "screen",
+        BlendMode::Overlay => "overlay",
+        BlendMode::Darken => "darken",
+        BlendMode::Lighten => "lighten",
+        BlendMode::ColorDodge => "color-dodge",
+        BlendMode::ColorBurn => "color-burn",
+        BlendMode::HardLight => "hard-light",
+        BlendMode::SoftLight => "soft-light",
+        BlendMode::Difference => "difference",
+        BlendMode::Exclusion => "exclusion",
+    }
 }
 
 /// The terrain set kind a name gives.
@@ -327,9 +333,23 @@ mod tests {
 
     #[test]
     fn names_go_both_ways() {
-        for (mode, name) in BLEND_MODES {
-            assert_eq!(blend_mode_from_name(name), Some(mode));
-            assert_eq!(blend_mode_name(mode), name);
+        let modes = [
+            BlendMode::Normal,
+            BlendMode::Add,
+            BlendMode::Multiply,
+            BlendMode::Screen,
+            BlendMode::Overlay,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+            BlendMode::HardLight,
+            BlendMode::SoftLight,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+        ];
+        for mode in modes {
+            assert_eq!(blend_mode_from_name(blend_mode_name(mode)), Some(mode));
         }
         assert_eq!(blend_mode_from_name("glow"), None);
         assert_eq!(

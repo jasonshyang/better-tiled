@@ -40,7 +40,10 @@
 //! jloup@gzip.org          madler@alumni.caltech.edu
 //! ```
 
-#![allow(clippy::indexing_slicing)]
+#![allow(
+    clippy::indexing_slicing,
+    reason = "a port of zlib's array arithmetic, whose indices zlib's invariants bound"
+)]
 
 use std::sync::OnceLock;
 
@@ -89,18 +92,82 @@ const BL_ORDER: [usize; BL_CODES] = [
     16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
 ];
 
-/// Levels → (good_length, max_lazy, nice_length, max_chain); levels 1–3 use `deflate_fast`.
-const CONFIGURATION_TABLE: [(u32, u32, i32, u32); 10] = [
-    (0, 0, 0, 0),
-    (4, 4, 8, 4),
-    (4, 5, 16, 8),
-    (4, 6, 32, 32),
-    (4, 4, 16, 16),
-    (8, 16, 32, 32),
-    (8, 16, 128, 128),
-    (8, 32, 128, 256),
-    (32, 128, 258, 1024),
-    (32, 258, 258, 4096),
+/// zlib's `config`: how hard a level searches for matches.
+#[derive(Copy, Clone)]
+struct Configuration {
+    /// Above this match length, the search shortens.
+    good_length: u32,
+    /// Lazy matching is not tried for matches this long (levels 4–9); levels 1–3 insert new
+    /// strings only for matches up to this long.
+    max_lazy: u32,
+    /// The search stops at a match this long.
+    nice_length: i32,
+    /// How many hash chain entries the search follows.
+    max_chain: u32,
+}
+
+/// zlib's `configuration_table`, by level; levels 1–3 use `deflate_fast`.
+const CONFIGURATION_TABLE: [Configuration; 10] = [
+    Configuration {
+        good_length: 0,
+        max_lazy: 0,
+        nice_length: 0,
+        max_chain: 0,
+    },
+    Configuration {
+        good_length: 4,
+        max_lazy: 4,
+        nice_length: 8,
+        max_chain: 4,
+    },
+    Configuration {
+        good_length: 4,
+        max_lazy: 5,
+        nice_length: 16,
+        max_chain: 8,
+    },
+    Configuration {
+        good_length: 4,
+        max_lazy: 6,
+        nice_length: 32,
+        max_chain: 32,
+    },
+    Configuration {
+        good_length: 4,
+        max_lazy: 4,
+        nice_length: 16,
+        max_chain: 16,
+    },
+    Configuration {
+        good_length: 8,
+        max_lazy: 16,
+        nice_length: 32,
+        max_chain: 32,
+    },
+    Configuration {
+        good_length: 8,
+        max_lazy: 16,
+        nice_length: 128,
+        max_chain: 128,
+    },
+    Configuration {
+        good_length: 8,
+        max_lazy: 32,
+        nice_length: 128,
+        max_chain: 256,
+    },
+    Configuration {
+        good_length: 32,
+        max_lazy: 128,
+        nice_length: 258,
+        max_chain: 1024,
+    },
+    Configuration {
+        good_length: 32,
+        max_lazy: 258,
+        nice_length: 258,
+        max_chain: 4096,
+    },
 ];
 
 /// zlib's `ct_data`: `fc` is the frequency or the code, `dl` the father ("dad") or the length.
@@ -476,7 +543,12 @@ struct Deflate<'a> {
 
 impl<'a> Deflate<'a> {
     fn new(input: &'a [u8], level: usize) -> Deflate<'a> {
-        let (good, lazy, nice, chain) = CONFIGURATION_TABLE[level];
+        let Configuration {
+            good_length,
+            max_lazy,
+            nice_length,
+            max_chain,
+        } = CONFIGURATION_TABLE[level];
         let mut s = Deflate {
             input,
             next_in: 0,
@@ -495,10 +567,10 @@ impl<'a> Deflate<'a> {
             match_start: 0,
             lookahead: 0,
             prev_length: MIN_MATCH as u32 - 1,
-            max_chain_length: chain,
-            max_lazy_match: lazy,
-            good_match: good,
-            nice_match: nice,
+            max_chain_length: max_chain,
+            max_lazy_match: max_lazy,
+            good_match: good_length,
+            nice_match: nice_length,
             insert: 0,
             dyn_ltree: [Ct::default(); HEAP_SIZE],
             dyn_dtree: [Ct::default(); 2 * D_CODES + 1],
@@ -1137,10 +1209,10 @@ pub(crate) enum Wrapper {
 }
 
 /// Compresses like zlib's `deflateInit2(level, Z_DEFLATED, 15 or 31, 8, Z_DEFAULT_STRATEGY)`
-/// followed by `deflate(Z_FINISH)`. A negative level is zlib's default (6); others are clamped
-/// to 1–9.
+/// followed by `deflate(Z_FINISH)`. As in Tiled (`libtiled/compression.cpp`), level -1 is
+/// zlib's default (6) and every other level is clamped to 1–9.
 pub(crate) fn compress(data: &[u8], level: i32, wrapper: Wrapper) -> Vec<u8> {
-    let level = if level < 0 {
+    let level = if level == -1 {
         6
     } else {
         level.clamp(1, 9) as usize
@@ -1250,8 +1322,23 @@ mod tests {
         }
     }
 
-    /// (kind, size, level, gzip, compressed length, CRC-32 of the compressed bytes).
-    const VECTORS: &[(&str, usize, i32, bool, usize, u32)] = &include!("deflate_vectors.in");
+    /// What zlib wrote for one input, level and wrapper.
+    struct Vector {
+        /// The generator of the input.
+        kind: &'static str,
+        /// The input's length.
+        size: usize,
+        /// The compression level.
+        level: i32,
+        /// Whether the stream is a gzip member rather than a zlib stream.
+        gzip: bool,
+        /// The length of zlib's output.
+        len: usize,
+        /// The CRC-32 of zlib's output.
+        crc: u32,
+    }
+
+    const VECTORS: &[Vector] = &include!("deflate_vectors.in");
 
     fn decompressed(stream: &[u8], wrapper: Wrapper) -> Vec<u8> {
         let mut back = Vec::new();
@@ -1266,13 +1353,21 @@ mod tests {
     #[test]
     fn streams_match_zlib_byte_for_byte() {
         let mut failures = Vec::new();
-        for &(kind, n, level, gzip, len, crc) in VECTORS {
+        for &Vector {
+            kind,
+            size: n,
+            level,
+            gzip,
+            len,
+            crc,
+        } in VECTORS
+        {
             let data = generate(kind, n);
             let wrapper = if gzip { Wrapper::Gzip } else { Wrapper::Zlib };
             let out = compress(&data, level, wrapper);
             let mut hasher = flate2::Crc::new();
             hasher.update(&out);
-            if (out.len(), hasher.sum()) != (len, crc) {
+            if out.len() != len || hasher.sum() != crc {
                 failures.push(format!(
                     "{kind} n={n} level={level} gzip={gzip}: {} bytes, zlib wrote {len}",
                     out.len()
@@ -1292,6 +1387,18 @@ mod tests {
             VECTORS.len(),
             failures.join("\n")
         );
+    }
+
+    #[test]
+    fn levels_are_clamped_as_tiled_clamps_them() {
+        let data = generate("text", 5000);
+        for wrapper in [Wrapper::Zlib, Wrapper::Gzip] {
+            assert_ne!(compress(&data, 1, wrapper), compress(&data, 6, wrapper));
+            assert_eq!(compress(&data, -1, wrapper), compress(&data, 6, wrapper));
+            assert_eq!(compress(&data, -2, wrapper), compress(&data, 1, wrapper));
+            assert_eq!(compress(&data, 0, wrapper), compress(&data, 1, wrapper));
+            assert_eq!(compress(&data, 12, wrapper), compress(&data, 9, wrapper));
+        }
     }
 
     #[test]

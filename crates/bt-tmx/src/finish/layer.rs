@@ -189,7 +189,13 @@ impl Finisher<'_> {
             return layer;
         };
         map.layer_data = Some(format);
-        let mut placed = Placement::default();
+        let mut placed = Placement {
+            format,
+            what,
+            target: target.clone(),
+            unknown: UnknownGids::default(),
+            outside: 0,
+        };
         let start = IVec2::new(
             self.i32_of(&raw.start_x, format_args!("{what}'s start"))
                 .unwrap_or(0),
@@ -201,16 +207,7 @@ impl Finisher<'_> {
                 if map.infinite { start } else { IVec2::ZERO },
                 size.as_ivec2(),
             );
-            self.place_cells(
-                &data.payload,
-                format,
-                bounds,
-                &mut layer,
-                map,
-                &mut placed,
-                what,
-                target.clone(),
-            );
+            self.place_cells(&data.payload, bounds, &mut layer, map, &mut placed);
         }
         for chunk in &data.chunks {
             let bounds = IRect {
@@ -227,16 +224,7 @@ impl Finisher<'_> {
                     .i32_of(&chunk.height, format_args!("a chunk of {what}"))
                     .unwrap_or(0),
             };
-            self.place_cells(
-                &chunk.payload,
-                format,
-                bounds,
-                &mut layer,
-                map,
-                &mut placed,
-                what,
-                target.clone(),
-            );
+            self.place_cells(&chunk.payload, bounds, &mut layer, map, &mut placed);
         }
         self.record_unknown_gids(&placed.unknown, what, target.clone());
         if placed.outside > 0 {
@@ -249,22 +237,17 @@ impl Finisher<'_> {
                 ),
             );
         }
-        let _ = data_format_name(format);
         layer
     }
 
     /// Decodes a payload covering `bounds` and sets its cells.
-    #[allow(clippy::too_many_arguments)]
     fn place_cells(
         &mut self,
         payload: &RawPayload,
-        format: LayerDataFormat,
         bounds: IRect,
         layer: &mut TileLayer,
         map: &mut MapFinish,
-        placed: &mut Placement,
-        what: &str,
-        target: Option<Target>,
+        placed: &mut Placement<'_>,
     ) {
         let area = usize::try_from(bounds.w.max(0)).unwrap_or(0)
             * usize::try_from(bounds.h.max(0)).unwrap_or(0);
@@ -277,9 +260,9 @@ impl Finisher<'_> {
                 },
                 area,
             ),
-            RawPayload::Text(text) => match format {
+            RawPayload::Text(text) => match placed.format {
                 LayerDataFormat::Csv | LayerDataFormat::Xml => decode_csv(text, area),
-                _ => decode_base64(text, format, area),
+                _ => decode_base64(text, placed.format, area),
             },
         };
         if let Some(problem) = decoded.problem
@@ -290,10 +273,10 @@ impl Finisher<'_> {
             let cell = IVec2::new(bounds.x + at % width, bounds.y + at / width);
             self.warnings.record_about(
                 WarningKind::CorruptLayerData,
-                target,
+                placed.target.clone(),
                 format!(
-                    "{what}: {} (at cell {}, {})",
-                    problem.message, cell.x, cell.y
+                    "{}: {} (at cell {}, {})",
+                    placed.what, problem.message, cell.x, cell.y
                 ),
             );
         }
@@ -317,23 +300,17 @@ impl Finisher<'_> {
     }
 }
 
-/// What placing a layer's cells found.
-#[derive(Default)]
-struct Placement {
+/// Placing a layer's cells: how its data is written, how messages name the layer, and what
+/// placing found.
+struct Placement<'a> {
+    /// The format of the layer's payloads.
+    format: LayerDataFormat,
+    /// How messages name the layer.
+    what: &'a str,
+    /// The layer, for warnings.
+    target: Option<Target>,
     /// Global ids no tileset owns.
     unknown: UnknownGids,
     /// Cells outside a finite layer.
     outside: usize,
-}
-
-/// The name of a layer data format, for messages.
-fn data_format_name(format: LayerDataFormat) -> &'static str {
-    match format {
-        LayerDataFormat::Xml => "XML",
-        LayerDataFormat::Csv => "CSV",
-        LayerDataFormat::Base64 => "base64",
-        LayerDataFormat::Base64Zlib => "zlib",
-        LayerDataFormat::Base64Gzip => "gzip",
-        LayerDataFormat::Base64Zstd => "zstd",
-    }
 }

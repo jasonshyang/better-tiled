@@ -14,33 +14,29 @@ pub fn probe_size(path: &Path) -> Result<UVec2, Error> {
         .with_guessed_format()
         .map_err(|e| Error::from_io(path, &e))?;
     let source_name = path.display().to_string();
-    sized(
-        reader
-            .into_dimensions()
-            .map_err(|e| decode_error(&source_name, e))?,
-        &source_name,
-    )
+    let (width, height) = reader
+        .into_dimensions()
+        .map_err(|e| decode_error(&source_name, e))?;
+    nonempty_size(UVec2::new(width, height), &source_name)
 }
 
 /// The size of an embedded image, read from its header; `format` is the format the file names
 /// (see [`crate::ImageInput::Bytes`]).
 pub fn probe_size_of_bytes(bytes: &[u8], format: &str) -> Result<UVec2, Error> {
-    sized(
-        reader_of_bytes(bytes, format)?
-            .into_dimensions()
-            .map_err(|e| decode_error(EMBEDDED, e))?,
-        EMBEDDED,
-    )
+    let (width, height) = reader_of_bytes(bytes, format)?
+        .into_dimensions()
+        .map_err(|e| decode_error(EMBEDDED, e))?;
+    nonempty_size(UVec2::new(width, height), EMBEDDED)
 }
 
-/// A size, refusing an image with no pixels.
-fn sized((width, height): (u32, u32), source_name: &str) -> Result<UVec2, Error> {
-    if width == 0 || height == 0 {
+/// The size, refusing an image with no pixels.
+fn nonempty_size(size: UVec2, source_name: &str) -> Result<UVec2, Error> {
+    if size.x == 0 || size.y == 0 {
         return Err(Error::Unsupported {
             source_name: source_name.to_owned(),
         });
     }
-    Ok(UVec2::new(width, height))
+    Ok(size)
 }
 
 #[cfg(test)]
