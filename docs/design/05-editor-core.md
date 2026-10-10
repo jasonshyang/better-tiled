@@ -71,7 +71,7 @@ editor's model. What it added or changed, module by module:
 | `watch.rs` | the watcher's model (`Observation`, `Found`, `WatchModel`): a file changed by another program reloads as a step, or asks when the open copy has unsaved changes |
 | `recovery.rs` | unsaved tileset files are snapshotted too, and come back in their tabs |
 | `settings/` | the watcher switch, the fine grid (1 to 128, a value outside refused when loaded or changed), snapping, object selection, enclosed rubber bands, a tool key that goes back; `ChangeSettings` checks the key bindings |
-| `properties/` | the property-editing model of §14 |
+| `properties/` | the property-editing model of §14, with `TypeEdit` for the Custom Types editor (enums and their values, classes and their members, which are edited with the same `Change`s as properties); what each map document's Properties panel inspects (`Inspected::Map`, `Layers`, `Objects`, or while the tileset editor is open `Tileset` and `Tiles`), following the last thing chosen as Tiled's current object does; `attribute_rows`, `property_rows` and `member_rows` |
 
 **Carried selections** are explicit state, as §4 designs them, but without a `TileSelection`
 type: the selection holds `carried: Option<Carried { base, tiles, layers }>` beside its cells. A
@@ -95,11 +95,19 @@ The intents added: `RunPalette`, `CreateMap`, `CreateTileset`, `ResizeMap`, `Off
 `Stroke`, `Fill`, `ShapeFill`, `PickFromMap`, `Capture`, `SetFillShape`, `SetSelectionMode`,
 `SelectObjects`, `InsertObject`, `ObjectStroke`, `PasteObjects`, `MoveObjectsToLayer`,
 `SetObjectVisible`, `CenterOnObject`, `ReorderObjects`, `SelectNodes`, `InsertNode`,
-`Observed`, `ChangeSettings`. The effects added: `Show(Dialog)` (New Map, New Tileset,
-Preferences, the palette, Move Objects to Layer, Resize Map, Offset Map), `PickFile` of a
-tileset image or an external tileset, `PasteAtPointer`, `ReloadImages`, `WriteSettings`, the view
+`ChangeProperties`, `SetAttribute`, `EditCustomTypes`, `Observed`, `ChangeSettings`. The three
+property intents carry a run number: the edits of one run of typing fold into one step, so no
+event has to say the field was left (the design's single `EditProperties` is these three). The effects added: `Show(Dialog)` (New Map, New Tileset,
+Preferences, the palette, Move Objects to Layer, Resize Map, Offset Map, Custom Types),
+`PickFile` of a tileset image, an external tileset or a property's file, `PasteAtPointer`, `ReloadImages`, `WriteSettings`, the view
 requests `CenterOnCell` and `CenterOn`, and the question `Conflict` (a file changed on disk
 while unsaved) answered `KeepMine` or `Reload`.
+
+**Custom types** live in the project asset only. Without a project file an untitled project
+holds them for the run, as Tiled's `ProjectManager` does, and it is never in the quit prompt; a
+project found later replaces it, with a warning when it held types. Types edits are steps of the
+current document's history; Save, Save All and the quit prompt write a changed project file.
+The project file is not watched yet (§18).
 
 The crate now depends on `bt-edit` too.
 

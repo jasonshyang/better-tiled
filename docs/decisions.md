@@ -624,3 +624,19 @@ had.
 **Instead of:** Tiled, which can leave two-node polygons and lets a size reach zero.
 **Why:** a two-node polygon or an object without a size draws as nothing a user can select
 again.
+
+## 2026-10-10 — The Properties panel and the Custom Types editor
+
+**Decided:** the Properties panel sits below the Tiles panel and shows what was chosen last:
+the selected objects ("Nothing is selected" when none are), the layers chosen in the Layers or
+Objects panel or by Layer Properties, the map by Map Properties, and the tileset editor's tiles
+or tileset while it is open. Typing in a field is one step per run of typing. A text object's
+text is edited there. The Custom Types editor is a dialog that needs an open document, whose
+history holds its steps, and the project file is written when a document is saved.
+**Instead of:** Tiled's panel, which keeps showing the last object when the selection empties;
+the design's text edited on the canvas; Tiled's types editor, which works without a document
+and writes the project on every change.
+**Why:** an empty selection showing someone else's properties invites edits to the wrong
+thing; one field for every kind of text keeps one way to edit it; types edits that undo with
+the rest of the work, and a file written when the user saves, are how every other change
+behaves here.

@@ -794,6 +794,15 @@ designs, recorded in `decisions.md`: far zoom draws squares of layer runs instea
 per chunk, and the macOS quit guard, reviewed, is the workspace's one `unsafe` code. The window
 keeps 120 Hz at every zoom on a pack's map and on the budget map (`03-rendering.md`, §11).
 
+M2 was built on 2026-10-10; `04-editing-operations.md` and the M2 parts of `05-editor-core.md`
+and `06-application.md` (their §1.2), `01-data-model.md` (the object geometry, §13.6) and
+`13-testing.md` are as built. Its measure is a window test, `a_level_is_built_from_scratch_in_the_window`:
+a new map, a tileset made from an image, painting and filling, an object layer with a rectangle,
+a collision shape drawn in the tileset editor, and Save As, the file read back as a Tiled map
+holding all of it. Building it changed designs recorded in `decisions.md`, among them a map's
+tilesets edited in place of the map, Tiled's modifiers with ⌘ for its Ctrl, one Insert Polygon
+tool, and carried tiles held in the selection.
+
 ## 18. Glossary
 
 - **Asset**: a loaded map, tileset, template, world or project, with a path and a dirty state.

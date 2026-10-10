@@ -105,6 +105,13 @@ M2 made the window edit. What it added:
   for the selected layers (one step per drag). Objects: each object layer's objects in the order they are
   drawn, a filter by name, class, kind or id, an eye per object, a double-click centres the view,
   dragging reorders. Tiles: a click or a dragged rectangle makes the brush; Edit Tileset.
+  Properties, below Tiles (alone on the right in a tileset's tab): the built-in attributes with
+  Tiled's labels and the custom properties, mixed values shown as mixed, values inherited from
+  a class, a template or a tile dimmed until set and reset with a button; a field per type
+  (text, numbers, a checkbox, a colour with "none", a file typed or chosen, an object's id, an
+  enum's combo or flags, a class's members, a list edited in place); Add with a name and a type,
+  and a row's menu with Remove, Rename, Convert To, Copy, Paste and Reset. Escape in a field puts
+  its value back. A text object's text is edited here, on one line, rather than on the canvas.
 - **The tileset editor** (`tileset_editor/`): shown in place of a map, or in a tileset's tab,
   with Tiles, Collision and Animation. Collision draws a one-cell map of the tile and its shapes
   on a canvas of its own (`CanvasRole::Collision`: no cells to select, its own camera) and edits
@@ -113,8 +120,10 @@ M2 made the window edit. What it added:
   tileset is edited in its place, the left panels wait.
 - **Dialogs** (`dialogs/`): the command palette (⇧⌘P), New Map, New Tileset (an image picked
   through the file dialog), Preferences (General, Interface, Keyboard with search and a recorded
-  key, Theme), Resize Map (a preview whose old map drags to set the offset), Offset Map, and
-  Move Objects to Layer.
+  key, Theme), Resize Map (a preview whose old map drags to set the offset), Offset Map, Move
+  Objects to Layer, and the Custom Types editor (View ▸ Custom Types Editor: enums with their
+  values, storage and flags; classes with their members, "use as" and colour; it needs an open
+  document, whose history holds its steps).
 - **Files** (`files/`): the watcher (a thread polling the files the editor names every 800 ms,
   reporting only what changed), the file dialogs' filters (images, tilesets).
 
