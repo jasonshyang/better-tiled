@@ -18,6 +18,7 @@ mod error;
 mod ids;
 mod lattice;
 mod layer_ops;
+mod map_ops;
 mod region;
 mod report;
 mod select;
@@ -40,6 +41,9 @@ pub use layer_ops::{
     group_layers, layer_order, layer_via_copy, layer_via_cut, locate, lower_layers,
     merge_layers_down, move_layers, new_layer, offset_layers, other_layers, raise_layers,
     remove_layers, toggle_locked, toggle_visible, ungroup_layers,
+};
+pub use map_ops::{
+    autocrop, autocrop_to_layer, crop_to, make_finite, make_infinite, offset_map, resize_map,
 };
 pub use region::{SelectionMode, TileRegion};
 pub use report::{

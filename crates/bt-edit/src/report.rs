@@ -3,7 +3,7 @@
 
 use bt_core::{LayerId, ObjectId, TilesetRef, TilesetSlot};
 use bt_utils::IRect;
-use glam::DVec2;
+use glam::{DVec2, IVec2};
 
 /// The cells of a layer an operation may have changed: the bounding rectangle of what it wrote.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -41,6 +41,8 @@ pub struct EraseReport {
 pub struct ResizeReport {
     /// The objects removed because they ended up outside the map.
     pub removed_objects: Vec<ObjectId>,
+    /// How far the tiles moved, in tiles: what a tile selection moves by to stay on them.
+    pub tile_offset: IVec2,
     /// How far objects and image layers moved, in pixels.
     pub pixel_offset: DVec2,
 }
