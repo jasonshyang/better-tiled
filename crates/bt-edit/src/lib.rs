@@ -82,7 +82,7 @@ pub use objects::nodes::{
 pub use objects::order::{
     lower_objects, lower_objects_in, lower_objects_to_bottom, lower_objects_to_bottom_in,
     move_objects_down, move_objects_down_in, move_objects_up, move_objects_up_in, raise_objects,
-    raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, render_order,
+    raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, render_order, reorder_objects,
 };
 pub use objects::resize::{
     Resize, ResizeHandle, resize_objects, resize_objects_in, resize_quad, resize_quad_in,

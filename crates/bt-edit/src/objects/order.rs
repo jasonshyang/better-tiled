@@ -2,17 +2,21 @@
 //! change it (`reference/tiled/src/tiled/raiselowerhelper.cpp` for Raise, Lower, Raise to Top and
 //! Lower to Bottom; `MapDocument::moveObjectsUp` and `moveObjectsDown` in `mapdocument.cpp` for
 //! the Objects view's Move Up and Down; `ObjectGroup::moveObjects` in
-//! `reference/tiled/src/libtiled/objectgroup.cpp`).
+//! `reference/tiled/src/libtiled/objectgroup.cpp`). Dragging objects to a place in a list, which
+//! Tiled's Objects view does not offer, moves them the way `ReparentLayers`
+//! (`tiled/reparentlayers.cpp`) moves layers.
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use bt_core::{DrawOrder, Map, MapGeometry, MapObject, ObjectId, ObjectLayer};
+use bt_core::{DrawOrder, LayerId, Map, MapGeometry, MapObject, ObjectId, ObjectLayer};
 
 use crate::error::EditError;
 use crate::report::ObjectsReport;
 
-use super::find::{ids_by_layer, indices_in, object_layer, on_layers_holding};
+use super::find::{
+    ids_by_layer, in_given_order, indices_in, object_layer, object_layer_mut, on_layers_holding,
+};
 use super::space::ObjectSpace;
 
 /// The objects of a list in the order they are drawn, bottom first: the list's order, or on a
@@ -207,6 +211,79 @@ pub fn move_objects_down_in(
     }))
 }
 
+/// Drag and drop in an objects list: moves the objects to the place `index` of the object layer
+/// `layer`'s list, counted from the bottom among its objects before the move. They go one after
+/// the other in the order they are drawn in (by layer in draw order, then by place in each
+/// list), so they keep it wherever they came from; objects from other layers leave theirs,
+/// keeping their ids and everything else. Reports the objects whose layer or place changed, in
+/// the order given; nothing when they were there already, leaving the lists shared.
+pub fn reorder_objects(
+    map: &mut Map,
+    ids: &[ObjectId],
+    layer: LayerId,
+    index: usize,
+) -> Result<ObjectsReport, EditError> {
+    let target = object_layer(map, layer)?;
+    let len = target.objects.len();
+    if index > len {
+        return Err(EditError::IndexOutOfRange { index, len });
+    }
+    let groups = ids_by_layer(map, ids)?;
+    let moving_ids: HashSet<ObjectId> = groups
+        .iter()
+        .flat_map(|group| group.ids.iter().copied())
+        .collect();
+    // The moving objects in the order they are drawn: layer by layer, each list in its order.
+    let mut moving: Vec<MapObject> = Vec::with_capacity(moving_ids.len());
+    for group in &groups {
+        let mine: HashSet<ObjectId> = group.ids.iter().copied().collect();
+        moving.extend(
+            object_layer(map, group.layer)?
+                .objects
+                .iter()
+                .filter(|o| mine.contains(&o.id))
+                .cloned(),
+        );
+    }
+    // The target's list without them, and the place counted again without those below it.
+    let target = object_layer(map, layer)?;
+    let below = target
+        .objects
+        .iter()
+        .take(index)
+        .filter(|o| moving_ids.contains(&o.id))
+        .count();
+    let mut list: Vec<MapObject> = target
+        .objects
+        .iter()
+        .filter(|o| !moving_ids.contains(&o.id))
+        .cloned()
+        .collect();
+    let at = (index - below).min(list.len());
+    list.splice(at..at, moving);
+    let before: Vec<ObjectId> = target.objects.iter().map(|o| o.id).collect();
+    let changed: Vec<ObjectId> = list
+        .iter()
+        .enumerate()
+        .filter(|(place, object)| {
+            moving_ids.contains(&object.id) && before.get(*place) != Some(&object.id)
+        })
+        .map(|(_, object)| object.id)
+        .collect();
+    if changed.is_empty() {
+        return Ok(ObjectsReport::default());
+    }
+    for group in groups.iter().filter(|group| group.layer != layer) {
+        let leaving: HashSet<ObjectId> = group.ids.iter().copied().collect();
+        Arc::make_mut(&mut object_layer_mut(map, group.layer)?.objects)
+            .retain(|o| !leaving.contains(&o.id));
+    }
+    *Arc::make_mut(&mut object_layer_mut(map, layer)?.objects) = list;
+    Ok(ObjectsReport {
+        changed: in_given_order(changed, ids),
+    })
+}
+
 /// Refuses when a layer holding some of `ids` draws top-down, where list order cannot raise or
 /// lower anything (Tiled offers the commands only on layers drawn in list order).
 fn in_index_order(map: &Map, ids: &[ObjectId]) -> Result<(), EditError> {
@@ -355,6 +432,7 @@ mod tests {
     use glam::UVec2;
 
     use super::*;
+    use crate::objects::find::find_object;
     use crate::testutil::{assert_valid, ids_of, rect_object};
 
     fn ids(list: &[u32]) -> Vec<ObjectId> {
@@ -435,6 +513,92 @@ mod tests {
         move_objects_down(&mut map, &ids(&[2, 5])).unwrap();
         assert_eq!(order(&map), [2, 3, 5, 4, 1]);
         assert_valid(&map);
+    }
+
+    #[test]
+    fn dragging_puts_objects_at_a_place_counted_before_the_move() {
+        let mut map = stack();
+        let layer = LayerId(1);
+        // Place 3 is between 3 and 4: 2 leaves from below it, 4 from above.
+        let report = reorder_objects(&mut map, &ids(&[4, 2]), layer, 3).unwrap();
+        assert_eq!(order(&map), [1, 3, 2, 4, 5]);
+        assert_eq!(report.changed, ids(&[2]), "4 is where it was");
+        reorder_objects(&mut map, &ids(&[2, 4]), layer, 5).unwrap();
+        assert_eq!(order(&map), [1, 3, 5, 2, 4], "to the top, in their order");
+        reorder_objects(&mut map, &ids(&[4, 1]), layer, 0).unwrap();
+        assert_eq!(
+            order(&map),
+            [1, 4, 3, 5, 2],
+            "to the bottom, in their order"
+        );
+        let shared = Arc::clone(&map.layers[0].as_object_layer().unwrap().objects);
+        for place in [1, 2, 3] {
+            assert!(
+                reorder_objects(&mut map, &ids(&[4, 3]), layer, place)
+                    .unwrap()
+                    .changed
+                    .is_empty(),
+                "already at {place}"
+            );
+        }
+        assert!(Arc::ptr_eq(
+            &shared,
+            &map.layers[0].as_object_layer().unwrap().objects
+        ));
+        assert_valid(&map);
+    }
+
+    #[test]
+    fn dragging_into_another_layer_keeps_the_drawing_order() {
+        let mut map = MapBuilder::new(UVec2::splat(16), UVec2::splat(8))
+            .object_layer(
+                "a",
+                vec![
+                    rect_object(0.0, 0.0, 8.0, 8.0),
+                    rect_object(8.0, 0.0, 8.0, 8.0),
+                ],
+            )
+            .object_layer("b", vec![rect_object(16.0, 0.0, 8.0, 8.0)])
+            .tile_layer("ground", "")
+            .build()
+            .unwrap();
+        let list = |map: &Map, layer: u32| {
+            ids_of(
+                map.layer(LayerId(layer))
+                    .unwrap()
+                    .as_object_layer()
+                    .unwrap(),
+            )
+        };
+        // 3 from the layer above and 1 from this one go between 2 and the top: 1 first, as it
+        // is drawn first.
+        let report = reorder_objects(&mut map, &ids(&[3, 1]), LayerId(1), 2).unwrap();
+        assert_eq!(list(&map, 1), [2, 1, 3]);
+        assert!(list(&map, 2).is_empty());
+        assert_eq!(report.changed, ids(&[3, 1]));
+        assert_eq!(
+            find_object(&map, ObjectId(3)).unwrap().layer,
+            LayerId(1),
+            "with its id"
+        );
+        reorder_objects(&mut map, &ids(&[2]), LayerId(2), 0).unwrap();
+        assert_eq!((list(&map, 1), list(&map, 2)), (vec![1, 3], vec![2]));
+        assert_valid(&map);
+
+        let before = map.clone();
+        assert_eq!(
+            reorder_objects(&mut map, &ids(&[1]), LayerId(2), 2),
+            Err(EditError::IndexOutOfRange { index: 2, len: 1 })
+        );
+        assert_eq!(
+            reorder_objects(&mut map, &ids(&[1]), LayerId(3), 0),
+            Err(EditError::NotAnObjectLayer(LayerId(3)))
+        );
+        assert_eq!(
+            reorder_objects(&mut map, &ids(&[9]), LayerId(2), 0),
+            Err(EditError::NoSuchObject(ObjectId(9)))
+        );
+        assert_eq!(map, before, "nothing moves when one is refused");
     }
 
     #[test]
