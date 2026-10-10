@@ -278,11 +278,47 @@ fn highlands_full_run_stays_under_its_time_bound() {
     )
     .unwrap();
     let load = start.elapsed();
-    println!("Highlands: loading the rules {load:?}; a full run on the 60×60 scene {full:?}");
+    // The scene's platforms repeated 8×8 times: anchors keep a run proportional to the tiles
+    // the rules look for, not to the rules times the cells.
+    let large = repeated(&map, 8);
+    let start = Instant::now();
+    let report = pack.rules.apply(&mut large.clone(), None, 1);
+    let large_run = start.elapsed();
+    println!(
+        "Highlands: loading the rules {load:?}; a full run on the 60×60 scene {full:?}, on a \
+         480×480 map {large_run:?} ({} matches)",
+        report.matches
+    );
     if !cfg!(debug_assertions) {
-        assert!(full < Duration::from_millis(20), "full run {full:?}");
-        assert!(load < Duration::from_millis(250), "loading {load:?}");
+        assert!(full < Duration::from_millis(10), "full run {full:?}");
+        assert!(load < Duration::from_millis(100), "loading {load:?}");
+        assert!(
+            large_run < Duration::from_millis(400),
+            "large run {large_run:?}"
+        );
     }
+}
+
+/// `map` with its `walls` repeated `times`×`times` over a map that many times larger.
+fn repeated(map: &Map, times: u32) -> Map {
+    let mut large = map.clone();
+    large.width = map.width * times;
+    large.height = map.height * times;
+    let size = glam::UVec2::new(large.width, large.height);
+    let walls = tiles(map, "walls").clone();
+    large.layers.retain(|l| l.name == "walls");
+    let mut repeated = TileLayer::finite(size);
+    let step = IVec2::new(map.width as i32, map.height as i32);
+    for placed in walls.cells() {
+        for j in 0..times as i32 {
+            for i in 0..times as i32 {
+                let at = placed.at + IVec2::new(i, j) * step;
+                repeated.set_cell(at, placed.cell).unwrap();
+            }
+        }
+    }
+    *walls_mut(&mut large) = repeated;
+    large
 }
 
 /// The Desert and Ancient Ruins packs: every rule map loads and is used, the only problems are
