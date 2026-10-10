@@ -41,6 +41,7 @@ impl App {
                     canvas.apply_view_request(request, map);
                 }
             }
+            Effect::Show(dialog) => log::warn!("the {dialog:?} dialog is not built yet"),
             Effect::WriteSnapshot(snapshot) => self.writer.write_snapshot(snapshot),
             Effect::DeleteSnapshot(path) => self.writer.delete_snapshot(path),
             Effect::Quit => {

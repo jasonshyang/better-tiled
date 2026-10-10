@@ -25,8 +25,23 @@ pub enum Effect {
     WriteSnapshot(Snapshot),
     /// Delete a recovery snapshot and its description.
     DeleteSnapshot(PathBuf),
+    /// Show a dialog of the window's; it reports back with intents.
+    Show(Dialog),
     /// Close the window: nothing unsaved is left, or the user chose to lose it.
     Quit,
+}
+
+/// A dialog of the window's.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Dialog {
+    /// New Map.
+    NewMap,
+    /// New Tileset.
+    NewTileset,
+    /// The preferences.
+    Preferences,
+    /// The command palette.
+    SearchActions,
 }
 
 /// A file to ask for.

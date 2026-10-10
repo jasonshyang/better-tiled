@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use super::chord::Chord;
-use super::table::{ACTIONS, ActionId, Context};
+use super::table::{ACTIONS, ActionId};
 
 /// A binding in settings that does not name a command or a chord.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -135,7 +135,7 @@ impl Keymap {
         ACTIONS
             .iter()
             .filter(|spec| spec.id != id)
-            .filter(|spec| overlap(spec.context, context))
+            .filter(|spec| spec.context.overlaps(context))
             .filter(|spec| self.chords(spec.id).contains(&chord))
             .map(|spec| spec.id)
             .collect()
@@ -149,12 +149,6 @@ impl Keymap {
             .map(|spec| spec.id)
             .collect()
     }
-}
-
-/// Whether two contexts can both be active.
-fn overlap(_a: Context, _b: Context) -> bool {
-    // Every context so far holds whenever a document is open.
-    true
 }
 
 #[cfg(test)]

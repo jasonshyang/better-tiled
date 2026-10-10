@@ -6,6 +6,7 @@
 )]
 mod document;
 mod documents;
+mod selecting;
 mod selection;
 
 pub use document::{Document, DocumentId, ViewState, ViewToggles};

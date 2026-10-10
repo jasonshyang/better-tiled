@@ -16,14 +16,16 @@ mod recovery;
 mod session;
 mod settings;
 mod store;
+mod tools;
 
 pub use actions::{
-    ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Key, Keymap, KeymapError, Modifiers,
+    ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
+    Modifiers, tool_action,
 };
 pub use document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
-pub use editor::{Editor, EditorBuilder, Enabled};
+pub use editor::{Editor, EditorBuilder};
 pub use effect::{
-    Choice, Decision, DecisionId, Effect, FileRequest, Purpose, Question, ViewRequest,
+    Choice, Decision, DecisionId, Dialog, Effect, FileRequest, Purpose, Question, ViewRequest,
 };
 pub use error::EditError;
 pub use files::{LoadJob, Loaded};
@@ -42,3 +44,4 @@ pub use settings::{
     Settings, SettingsError, Theme, data_folder,
 };
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
+pub use tools::{MAX_BRUSH_SIZE, ToolFamily, ToolKind, ToolState};

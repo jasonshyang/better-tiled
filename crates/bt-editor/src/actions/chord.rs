@@ -25,6 +25,11 @@ impl Modifiers {
         alt: false,
         control: false,
     };
+    /// Shift.
+    pub const SHIFT: Modifiers = Modifiers {
+        shift: true,
+        ..Modifiers::NONE
+    };
     /// ⌘ or Ctrl.
     pub const COMMAND: Modifiers = Modifiers {
         command: true,

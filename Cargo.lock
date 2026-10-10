@@ -570,6 +570,7 @@ name = "bt-editor"
 version = "0.1.0"
 dependencies = [
  "bt-core",
+ "bt-edit",
  "bt-test-data",
  "bt-tmx",
  "bt-utils",

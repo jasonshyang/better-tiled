@@ -8,9 +8,9 @@ use std::sync::Arc;
 use bt_core::{LayerId, LayerKind, Map};
 use bt_tmx::WriteRequest;
 
-use crate::actions::{ActionId, Context, Keymap, KeymapError};
+use crate::actions::{Keymap, KeymapError};
 use crate::document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
-use crate::effect::{Effect, FileRequest, ViewRequest};
+use crate::effect::Effect;
 use crate::error::EditError;
 use crate::files::Files;
 use crate::history::{Gesture, History};
@@ -20,15 +20,7 @@ use crate::recovery::{RecoveryPlan, Snapshot, SnapshotMeta};
 use crate::session::Session;
 use crate::settings::Settings;
 use crate::store::{AssetId, AssetStore, NewAsset, Root};
-
-/// Whether a command can run now.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Enabled {
-    /// It can.
-    Enabled,
-    /// It cannot; the reason, when a key that does nothing would otherwise be a mystery.
-    Disabled(Option<String>),
-}
+use crate::tools::ToolState;
 
 /// Sets up an [`Editor`].
 #[derive(Clone, Debug)]
@@ -83,6 +75,7 @@ impl EditorBuilder {
             documents: Documents::default(),
             gesture: None,
             keymap,
+            tools: ToolState::default(),
             files: Files {
                 home: self.home,
                 ..Files::default()
@@ -103,6 +96,7 @@ pub struct Editor {
     pub(crate) documents: Documents,
     pub(crate) gesture: Option<Gesture>,
     pub(crate) keymap: Keymap,
+    pub(crate) tools: ToolState,
     pub(crate) files: Files,
     pub(crate) recovery: RecoveryPlan,
     pub(crate) session: Session,
@@ -158,10 +152,7 @@ impl Editor {
             }
             Intent::CloseDocument(doc) => self.close_document(doc),
             Intent::SelectLayer { doc, layer } => {
-                if let Some(document) = self.documents.get_mut(doc) {
-                    document.selection = Selection::of_layer(layer);
-                }
-                self.session_changed();
+                self.select_layer(doc, layer);
                 Vec::new()
             }
             Intent::SetLayerVisible {
@@ -188,118 +179,6 @@ impl Editor {
             }
             Intent::Recoverable(orphans) => self.offer_recovery(orphans),
             Intent::Tick { now_ms } => self.tick(now_ms),
-        }
-    }
-
-    /// Runs a command.
-    fn run(&mut self, id: ActionId) -> Vec<Effect> {
-        if let Enabled::Disabled(reason) = self.enabled(id) {
-            return reason
-                .map(|r| Effect::Notify(Notice::info(r)))
-                .into_iter()
-                .collect();
-        }
-        let current = self.documents.current();
-        let on_document = |editor: &mut Editor, f: fn(&mut Editor, DocumentId) -> Vec<Effect>| {
-            current.map(|doc| f(editor, doc)).unwrap_or_default()
-        };
-        match id {
-            ActionId::Open => vec![Effect::PickFile(FileRequest::Open)],
-            ActionId::Save => on_document(self, Editor::save),
-            ActionId::SaveAs => on_document(self, |editor, doc| vec![editor.save_as_request(doc)]),
-            ActionId::SaveAll => {
-                let mut effects = self.save_all();
-                let untitled = self
-                    .documents
-                    .in_order()
-                    .find(|d| {
-                        self.store
-                            .get(d.asset())
-                            .is_some_and(|a| a.is_dirty() && a.path().is_none())
-                    })
-                    .map(|d| d.id());
-                if let Some(doc) = untitled {
-                    effects.push(self.save_as_request(doc));
-                }
-                effects
-            }
-            ActionId::Close => on_document(self, Editor::close_document),
-            ActionId::Quit => self.quit(),
-            ActionId::Undo => on_document(self, |editor, doc| {
-                editor.undo(doc).err().map(warn).into_iter().collect()
-            }),
-            ActionId::Redo => on_document(self, |editor, doc| {
-                editor.redo(doc).err().map(warn).into_iter().collect()
-            }),
-            ActionId::ZoomIn => vec![Effect::View(ViewRequest::ZoomIn)],
-            ActionId::ZoomOut => vec![Effect::View(ViewRequest::ZoomOut)],
-            ActionId::ZoomNormal => vec![Effect::View(ViewRequest::ZoomNormal)],
-            ActionId::FitInView => vec![Effect::View(ViewRequest::Fit)],
-            ActionId::ShowGrid => {
-                self.toggle_view(|view| view.grid = !view.grid);
-                Vec::new()
-            }
-            ActionId::HighlightCurrentLayer => {
-                self.toggle_view(|view| {
-                    view.highlight_current_layer = !view.highlight_current_layer
-                });
-                Vec::new()
-            }
-            ActionId::NextDocument | ActionId::PreviousDocument => {
-                let step = if id == ActionId::NextDocument { 1 } else { -1 };
-                if let Some(doc) = self.documents.neighbour(step) {
-                    self.documents.set_current(doc);
-                    self.session_changed();
-                }
-                Vec::new()
-            }
-        }
-    }
-
-    /// Whether a command can run now.
-    pub fn enabled(&self, id: ActionId) -> Enabled {
-        let document = self
-            .documents
-            .current()
-            .and_then(|doc| self.documents.get(doc));
-        if id.spec().context == Context::Document && document.is_none() {
-            return Enabled::Disabled(None);
-        }
-        let history = document.map(Document::history);
-        match id {
-            ActionId::Undo if history.is_none_or(|h| h.undoable().is_none()) => {
-                Enabled::Disabled(Some("There is nothing to undo".to_owned()))
-            }
-            ActionId::Redo if history.is_none_or(|h| h.redoable().is_none()) => {
-                Enabled::Disabled(Some("There is nothing to redo".to_owned()))
-            }
-            ActionId::NextDocument | ActionId::PreviousDocument if self.documents.len() < 2 => {
-                Enabled::Disabled(None)
-            }
-            _ => Enabled::Enabled,
-        }
-    }
-
-    /// Whether a toggle is on; `None` for commands that are not toggles.
-    pub fn checked(&self, id: ActionId) -> Option<bool> {
-        let view = self
-            .documents
-            .current()
-            .and_then(|doc| self.documents.get(doc))
-            .map(Document::view)
-            .unwrap_or_default();
-        match id {
-            ActionId::ShowGrid => Some(view.grid),
-            ActionId::HighlightCurrentLayer => Some(view.highlight_current_layer),
-            _ => None,
-        }
-    }
-
-    fn toggle_view(&mut self, toggle: impl FnOnce(&mut ViewToggles)) {
-        if let Some(doc) = self.documents.current()
-            && let Some(document) = self.documents.get_mut(doc)
-        {
-            toggle(&mut document.view);
         }
     }
 
@@ -420,6 +299,11 @@ impl Editor {
     /// The key bindings.
     pub fn keymap(&self) -> &Keymap {
         &self.keymap
+    }
+
+    /// The tool and its options.
+    pub fn tools(&self) -> &ToolState {
+        &self.tools
     }
 
     /// The preferences.
@@ -543,7 +427,7 @@ impl Default for Editor {
     }
 }
 
-fn warn(error: EditError) -> Effect {
+pub(crate) fn warn(error: EditError) -> Effect {
     Effect::Notify(Notice::warning(error.to_string()))
 }
 

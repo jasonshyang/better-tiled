@@ -1,0 +1,205 @@
+//! Selecting: the current layer, everything the selected layers hold, nothing, or the rest. A
+//! change of selection alone is not a step of the history.
+
+use bt_core::{LayerKind, Map};
+use bt_edit::{TileRegion, invert};
+use bt_utils::IRect;
+
+use super::document::{DocumentId, ViewToggles};
+use super::selection::Selection;
+use crate::editor::Editor;
+use crate::effect::Effect;
+use crate::tools::ToolFamily;
+
+impl Editor {
+    /// Makes `layer` current and the only selected layer; the selected tiles and objects stay,
+    /// as in Tiled. The tool follows the layer's family.
+    pub(crate) fn select_layer(&mut self, doc: DocumentId, layer: bt_core::LayerId) {
+        let family = self
+            .map_of(doc)
+            .and_then(|map| map.layer(layer))
+            .map(|l| match l.kind {
+                LayerKind::Tile(_) => ToolFamily::Tile,
+                LayerKind::Object(_) => ToolFamily::Object,
+                LayerKind::Image(_) | LayerKind::Group(_) => ToolFamily::Any,
+            });
+        if let Some(document) = self.documents.get_mut(doc) {
+            document.selection = document.selection.with_current_layer(layer);
+        }
+        self.tools.follow_layer(family);
+        self.session_changed();
+    }
+
+    /// Select All: the cells of every selected unlocked tile layer (the map on a finite map, the
+    /// allocated chunks on an infinite one) and the objects of every selected unlocked object
+    /// layer (Tiled's `selectAll`).
+    pub(crate) fn select_all(&mut self, doc: DocumentId) -> Vec<Effect> {
+        let Some(map) = self.map_of(doc).cloned() else {
+            return Vec::new();
+        };
+        self.change_selection(doc, |selection| {
+            let mut tiles = TileRegion::new();
+            let mut objects = Vec::new();
+            for id in &selection.layers {
+                let unlocked = map.effective_layer(*id).is_some_and(|l| !l.locked);
+                let Some(layer) = map.layer(*id).filter(|_| unlocked) else {
+                    continue;
+                };
+                match &layer.kind {
+                    LayerKind::Tile(cells) => {
+                        tiles = tiles.union(&TileRegion::from_rect(layer_area(&map, cells)));
+                    }
+                    LayerKind::Object(group) => objects.extend(group.objects.iter().map(|o| o.id)),
+                    LayerKind::Image(_) | LayerKind::Group(_) => {}
+                }
+            }
+            selection.tiles = tiles;
+            selection.objects = objects;
+        });
+        Vec::new()
+    }
+
+    /// Select None: no tiles and no objects.
+    pub(crate) fn select_none(&mut self, doc: DocumentId) -> Vec<Effect> {
+        self.change_selection(doc, |selection| {
+            selection.tiles = TileRegion::new();
+            selection.objects.clear();
+        });
+        Vec::new()
+    }
+
+    /// Invert Selection on the current layer: the cells of a tile layer's area that are not
+    /// selected, or the objects of an object layer that are not.
+    pub(crate) fn invert_selection(&mut self, doc: DocumentId) -> Vec<Effect> {
+        let Some(map) = self.map_of(doc).cloned() else {
+            return Vec::new();
+        };
+        self.change_selection(doc, |selection| {
+            let Some(layer) = selection.current_layer.and_then(|id| map.layer(id)) else {
+                return;
+            };
+            match &layer.kind {
+                LayerKind::Tile(cells) => {
+                    selection.tiles = invert(&selection.tiles, layer_area(&map, cells));
+                }
+                LayerKind::Object(group) => {
+                    selection.objects = group
+                        .objects
+                        .iter()
+                        .map(|o| o.id)
+                        .filter(|id| !selection.objects.contains(id))
+                        .collect();
+                }
+                LayerKind::Image(_) | LayerKind::Group(_) => {}
+            }
+        });
+        Vec::new()
+    }
+
+    /// Changes a document's selection outside any transaction.
+    fn change_selection(&mut self, doc: DocumentId, change: impl FnOnce(&mut Selection)) {
+        if let Some(document) = self.documents.get_mut(doc) {
+            change(&mut document.selection);
+        }
+    }
+
+    /// Flips one of the current document's View switches.
+    pub(crate) fn toggle_view(&mut self, toggle: impl FnOnce(&mut ViewToggles)) {
+        if let Some(doc) = self.documents.current()
+            && let Some(document) = self.documents.get_mut(doc)
+        {
+            toggle(&mut document.view);
+        }
+    }
+}
+
+/// A tile layer's area: the map's cells on a finite map, the allocated chunks on an infinite
+/// one.
+fn layer_area(map: &Map, cells: &bt_core::TileLayer) -> IRect {
+    if map.infinite {
+        cells.chunk_bounds().unwrap_or_default()
+    } else {
+        map.tile_bounding_rect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bt_core::{LayerId, MapObject, ObjectId};
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use glam::UVec2;
+
+    use crate::actions::ActionId;
+    use crate::editor::Editor;
+    use crate::intent::Intent;
+    use crate::tools::ToolKind;
+
+    fn editor_with_map() -> (Editor, crate::document::DocumentId) {
+        let atlas = Atlas::builder().build_embedded().unwrap();
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::new(4, 3))
+            .tileset(atlas.tileset)
+            .tile_layer("ground", "1 1 1 1\n1 1 1 1\n1 1 1 1")
+            .object_layer("things", vec![MapObject::default(), MapObject::default()])
+            .build()
+            .unwrap();
+        let mut editor = Editor::new();
+        let doc = editor.open_new_map(map);
+        (editor, doc)
+    }
+
+    #[test]
+    fn select_all_takes_the_selected_layers_contents_and_invert_the_rest() {
+        let (mut editor, doc) = editor_with_map();
+        editor.apply(Intent::SelectLayer {
+            doc,
+            layer: LayerId(1),
+        });
+        editor.apply(Intent::Run(ActionId::SelectAll));
+        let selection = editor.document(doc).unwrap().selection().clone();
+        assert_eq!(selection.tiles.len(), 12);
+        assert!(
+            selection.objects.is_empty(),
+            "the object layer is not selected"
+        );
+        editor.apply(Intent::Run(ActionId::InvertSelection));
+        assert!(editor.document(doc).unwrap().selection().tiles.is_empty());
+
+        editor.apply(Intent::SelectLayer {
+            doc,
+            layer: LayerId(2),
+        });
+        editor.apply(Intent::Run(ActionId::SelectAll));
+        let selection = editor.document(doc).unwrap().selection().clone();
+        assert_eq!(selection.objects, [ObjectId(1), ObjectId(2)]);
+        editor.apply(Intent::Run(ActionId::SelectNone));
+        assert!(editor.document(doc).unwrap().selection().objects.is_empty());
+    }
+
+    #[test]
+    fn the_tool_follows_the_current_layers_family() {
+        let (mut editor, doc) = editor_with_map();
+        editor.apply(Intent::SelectLayer {
+            doc,
+            layer: LayerId(1),
+        });
+        editor.apply(Intent::Run(ActionId::EraserTool));
+        assert_eq!(editor.tools().tool(), ToolKind::Eraser);
+        editor.apply(Intent::SelectLayer {
+            doc,
+            layer: LayerId(2),
+        });
+        assert_eq!(editor.tools().tool(), ToolKind::SelectObjects);
+        // The Brush's key on an object layer says why it does nothing.
+        let effects = editor.apply(Intent::Run(ActionId::BrushTool));
+        assert_eq!(editor.tools().tool(), ToolKind::SelectObjects);
+        assert!(
+            matches!(&effects[..], [crate::effect::Effect::Notify(n)] if n.text == "Brush works on tile layers: “things” is an object layer"),
+            "{effects:?}"
+        );
+        editor.apply(Intent::SelectLayer {
+            doc,
+            layer: LayerId(1),
+        });
+        assert_eq!(editor.tools().tool(), ToolKind::Eraser);
+    }
+}
