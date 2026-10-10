@@ -9,12 +9,21 @@
 //! `bt-edit`, `bt-terrain` and `bt-automap`, which port Tiled's editor code, and is
 //! GPL-3.0-or-later with them.
 
+mod context;
+mod error;
 mod history;
+mod names;
 mod report;
 mod script;
 mod words;
 
+pub use context::{Context, Selection};
+pub use error::{Error, NameKind};
 pub use history::{EditToKeep, History, HistoryError, KEPT_PER_MAP, KeptEdit, fingerprint};
+pub use names::{
+    Ground, GroupPart, MaterialPart, NamedTerrain, Names, Piece, PieceObjects, Sprite, TileGroup,
+    object_type,
+};
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
 };
