@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use bt_core::{Cell, Frame, LayerId, MapObject, ObjectId, PlacedCell, TileId, TilesetSlot};
 use bt_edit::{FillShape, LayerLocation, Node, SelectionMode, TileRegion};
 use bt_utils::IRect;
-use glam::{DVec2, IVec2};
+use glam::{DVec2, IVec2, UVec2};
 
 use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, TilesetMode, ViewState};
@@ -27,6 +27,18 @@ pub enum Intent {
     RunPalette(PaletteTarget),
     /// Make a new map and open it.
     CreateMap(NewMap),
+    /// Resize Map (the dialog's OK): the map becomes `size` cells with its contents moved by
+    /// `offset` cells, as one step.
+    ResizeMap {
+        /// The map's document.
+        doc: DocumentId,
+        /// The new size, in cells.
+        size: UVec2,
+        /// How far the contents move, in cells.
+        offset: IVec2,
+        /// Whether objects that end up outside the map are removed.
+        remove_objects_outside: bool,
+    },
     /// Add a new tileset to a map.
     CreateTileset {
         /// The map's document.

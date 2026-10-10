@@ -149,6 +149,12 @@ impl Editor {
             Intent::Run(id) => self.run(id),
             Intent::RunPalette(target) => self.run_palette(target),
             Intent::CreateMap(new) => self.create_map(&new),
+            Intent::ResizeMap {
+                doc,
+                size,
+                offset,
+                remove_objects_outside,
+            } => self.resize_map_to(doc, size, offset, remove_objects_outside),
             Intent::CreateTileset { doc, tileset } => self.create_tileset(doc, &tileset),
             Intent::Open(path) => self.open(&path),
             Intent::Loaded(loaded) => {

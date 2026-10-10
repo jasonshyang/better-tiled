@@ -347,6 +347,29 @@ impl TestWindow {
         self.settle();
     }
 
+    /// Types `text` over the number in the field labelled `label` (the last one, which a modal
+    /// draws over the panels), as a person who clicks it and types does.
+    pub(crate) fn enter_value(&mut self, label: &str, text: &str) {
+        let role = egui::accesskit::Role::SpinButton;
+        let node = self.harness.query_all_by_role_and_label(role, label).last();
+        let Some(node) = node else {
+            panic!("no number field is labelled “{label}”");
+        };
+        node.focus();
+        self.settle();
+        self.type_text(text);
+    }
+
+    /// Drags the widget labelled `label` from its middle by `by` points with the primary
+    /// button.
+    pub(crate) fn drag_widget(&mut self, label: &str, by: egui::Vec2) {
+        let Some(node) = self.harness.query_by_label(label) else {
+            panic!("no widget is labelled “{label}”");
+        };
+        let start = node.rect().center();
+        self.drag_on_screen(start, start + by, egui::Modifiers::NONE);
+    }
+
     /// Types text into the focused text field.
     pub(crate) fn type_text(&mut self, text: &str) {
         self.harness.event(egui::Event::Text(text.to_owned()));

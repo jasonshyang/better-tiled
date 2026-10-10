@@ -51,6 +51,8 @@ pub enum Dialog {
     SearchActions,
     /// The object layers the selected objects can move to.
     MoveObjectsToLayer(DocumentId),
+    /// Resize Map, for the map of a document.
+    ResizeMap(DocumentId),
 }
 
 /// A file to ask for.

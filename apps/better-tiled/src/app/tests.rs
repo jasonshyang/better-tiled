@@ -1308,3 +1308,55 @@ fn edit_polygons_moves_adds_and_removes_nodes() {
     let fewer = [v(40.0, 40.0), v(80.0, 40.0), v(120.0, 120.0)];
     assert!(near(&points(&window), &fewer), "{:?}", points(&window));
 }
+
+#[test]
+fn resize_map_moves_the_map_where_its_preview_is_dragged() {
+    use bt_core::{MapObject, ObjectId};
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::Key;
+    use glam::{DVec2, UVec2};
+
+    let scratch = Scratch::new("window-resize-map").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let empty_row = [". "; 8].concat();
+    let ground = format!("1 . . . . . . .\n{}", vec![empty_row; 5].join("\n"));
+    let thing = MapObject {
+        pos: DVec2::new(4.0, 4.0),
+        size: DVec2::splat(8.0),
+        ..MapObject::default()
+    };
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(8, 6))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", &ground)
+        .object_layer("things", vec![thing])
+        .build()
+        .unwrap();
+    let path = scratch.join("resize.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+
+    run_command(&mut window, "resize map");
+    assert!(window.has_modal(), "Resize Map asks");
+    window.enter_value("Width", "10");
+    window.enter_value("Height", "9");
+    // Dragged far right and down, the old map goes as far as the new bounds let it.
+    window.drag_widget("Map preview", egui::vec2(300.0, 300.0));
+    window.click("OK");
+    assert!(!window.has_modal());
+    let map = window.editor().map_of(doc).unwrap();
+    assert_eq!((map.width, map.height), (10, 9));
+    let ground = map.layers[0].as_tile_layer().unwrap();
+    assert!(ground.cell(IVec2::ZERO).is_empty());
+    assert!(!ground.cell(IVec2::new(2, 3)).is_empty(), "moved by (2, 3)");
+    assert_eq!(map.object(ObjectId(1)).unwrap().pos, DVec2::new(36.0, 52.0));
+
+    window.press(command(), Key::Z);
+    let map = window.editor().map_of(doc).unwrap();
+    assert_eq!((map.width, map.height), (8, 6), "one step");
+}

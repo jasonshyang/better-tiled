@@ -12,6 +12,7 @@ use super::new_map::NewMapDialog;
 use super::new_tileset::{DialogRequest, NewTilesetDialog};
 use super::palette::PaletteDialog;
 use super::preferences::PreferencesDialog;
+use super::resize_map::ResizeMapDialog;
 
 /// Something modal.
 #[derive(Clone, Debug, PartialEq)]
@@ -30,6 +31,8 @@ pub(crate) enum Modal {
     Preferences(Box<PreferencesDialog>),
     /// The layer the selected objects move to.
     ChooseLayer(ChooseLayerDialog),
+    /// Resize Map.
+    ResizeMap(ResizeMapDialog),
 }
 
 /// The open modals; the last is shown.
@@ -95,6 +98,7 @@ impl Modals {
             Modal::NewTileset(dialog) => dialog.show(ctx, out, requests),
             Modal::Preferences(dialog) => dialog.show(ctx, out),
             Modal::ChooseLayer(dialog) => dialog.show(ctx, editor, out),
+            Modal::ResizeMap(dialog) => dialog.show(ctx, out),
         };
         if closed {
             self.stack.pop();

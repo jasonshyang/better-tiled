@@ -7,6 +7,7 @@ use bt_editor::{Dialog, Effect, Intent, Notice};
 use super::frame::App;
 use crate::dialogs::{
     ChooseLayerDialog, Modal, NewMapDialog, NewTilesetDialog, PaletteDialog, PreferencesDialog,
+    ResizeMapDialog,
 };
 use crate::style::apply_theme;
 
@@ -60,6 +61,13 @@ impl App {
             Effect::Show(Dialog::MoveObjectsToLayer(doc)) => self
                 .modals
                 .push(Modal::ChooseLayer(ChooseLayerDialog::new(doc))),
+            Effect::Show(Dialog::ResizeMap(doc)) => {
+                if let Some(map) = self.editor.map_of(doc) {
+                    let size = glam::UVec2::new(map.width, map.height);
+                    self.modals
+                        .push(Modal::ResizeMap(ResizeMapDialog::new(doc, size)));
+                }
+            }
             Effect::PasteAtPointer(doc) => {
                 let in_tileset = self
                     .editor

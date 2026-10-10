@@ -179,6 +179,10 @@ impl Editor {
                 }
             }
             ActionId::CropToSelection if !has_tiles => Enabled::Disabled(None),
+            ActionId::ResizeMap => match here.map.and_then(crate::map_commands::resize_refusal) {
+                Some(reason) => Enabled::Disabled(Some(reason)),
+                None => Enabled::Enabled,
+            },
             ActionId::MergeLayerDown
                 if !here
                     .document

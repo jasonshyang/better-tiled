@@ -18,8 +18,7 @@ use crate::settings::Snapping;
 pub(crate) fn pending(id: ActionId) -> bool {
     matches!(
         id,
-        ActionId::ResizeMap
-            | ActionId::OffsetMap
+        ActionId::OffsetMap
             | ActionId::AddExternalTileset
             | ActionId::MapProperties
             | ActionId::LayerProperties
@@ -311,8 +310,10 @@ impl Editor {
             ActionId::ToggleLockOtherLayers => {
                 on_document(self, &|editor, doc| editor.toggle_other_layers(doc, true))
             }
-            ActionId::ResizeMap
-            | ActionId::OffsetMap
+            ActionId::ResizeMap => {
+                on_document(self, &|_, doc| vec![Effect::Show(Dialog::ResizeMap(doc))])
+            }
+            ActionId::OffsetMap
             | ActionId::AddExternalTileset
             | ActionId::MapProperties
             | ActionId::LayerProperties => Vec::new(),
