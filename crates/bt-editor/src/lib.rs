@@ -41,7 +41,7 @@ pub use history::{
 };
 pub use intent::Intent;
 pub use notice::{Notice, Severity};
-pub use objects::{ObjectFrame, ObjectStroke, ObjectStrokeKind};
+pub use objects::{ObjectFrame, ObjectStroke, ObjectStrokeKind, SnapToggle};
 pub use properties::{
     Attribute, AttributeRow, AttributeValue, Change, ListEdit, Op, Origin, PropertyError,
     PropertySet, Shown, Step, Target, TargetId, ValueType, conversions, convert, layer_attributes,

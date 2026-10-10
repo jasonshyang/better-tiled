@@ -87,7 +87,7 @@ fn a_drag_moves_from_where_it_started_snaps_and_is_one_step() {
     for x in [3.0, 9.0, 21.0] {
         editor.apply(Intent::ObjectStroke(ObjectStroke::Move {
             delta: DVec2::new(x, 5.0),
-            free: false,
+            snap: bt_editor::SnapToggle::Keep,
         }));
     }
     editor.apply(Intent::ObjectStroke(ObjectStroke::End));

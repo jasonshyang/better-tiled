@@ -8,6 +8,7 @@ use bt_core::{LayerId, Map, ObjectId};
 use bt_edit::{Pivot, move_anchor, move_objects, rotate_objects, snap_delta};
 use glam::DVec2;
 
+use super::snapping::SnapToggle;
 use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
 use crate::effect::Effect;
@@ -24,12 +25,12 @@ pub enum ObjectStroke {
         kind: ObjectStrokeKind,
     },
     /// The objects are `delta` (the map's screen space) from where they started, snapped as the
-    /// preference says unless `free`.
+    /// preference, changed by `snap`, says.
     Move {
         /// How far.
         delta: DVec2,
-        /// Snapping is off for this move (the modifier that toggles it is held).
-        free: bool,
+        /// How the modifiers held change snapping.
+        snap: SnapToggle,
     },
     /// The objects are turned by `degrees` (clockwise) around `center` (pixel space) from how
     /// they started.
@@ -95,12 +96,8 @@ impl Editor {
                 });
                 Vec::new()
             }
-            ObjectStroke::Move { delta, free } => {
-                let snapping = if free {
-                    bt_edit::SnapMode::None
-                } else {
-                    self.snap_mode()
-                };
+            ObjectStroke::Move { delta, snap } => {
+                let snapping = self.snap_mode(snap);
                 self.reapply(|map, ids| {
                     let geometry = map.geometry();
                     let pixel_delta =

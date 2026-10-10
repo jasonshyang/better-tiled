@@ -7,15 +7,13 @@
 use std::collections::HashSet;
 
 use bt_core::{LayerId, LayerKind, Map, ObjectId};
-use bt_edit::{
-    ObjectSpace, RectMode, SnapMode, layer_order, object_bounds, objects_at, objects_in_quad, snap,
-};
+use bt_edit::{ObjectSpace, RectMode, layer_order, object_bounds, objects_at, objects_in_quad};
 use bt_utils::DRect;
 use glam::DVec2;
 
 use crate::document::DocumentId;
 use crate::editor::Editor;
-use crate::settings::{ObjectSelection, Snapping};
+use crate::settings::ObjectSelection;
 
 /// Where a selected object is on screen: the corners of its bounds, around it.
 #[derive(Clone, Debug, PartialEq)]
@@ -123,24 +121,6 @@ impl Editor {
                 .iter()
                 .flat_map(|frame| frame.corners),
         )
-    }
-
-    /// `pixel` snapped as the snapping preference says.
-    pub fn snapped(&self, doc: DocumentId, pixel: DVec2) -> DVec2 {
-        match self.map_of(doc) {
-            Some(map) => snap(&map.geometry(), pixel, self.snap_mode()),
-            None => pixel,
-        }
-    }
-
-    /// The snapping preference as the object commands take it.
-    pub(crate) fn snap_mode(&self) -> SnapMode {
-        match self.settings.behaviour.snapping {
-            Snapping::None => SnapMode::None,
-            Snapping::Grid => SnapMode::Grid,
-            Snapping::FineGrid => SnapMode::FineGrid(self.settings.interface.fine_grid_divisions),
-            Snapping::Pixels => SnapMode::Pixels,
-        }
     }
 
     /// The object layers a click may pick from, the first tried first: shown and unlocked ones,

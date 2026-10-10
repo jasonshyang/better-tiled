@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use bt_core::{Layer, LayerId, Map, TileLayer};
-use bt_editor::{DocumentId, Editor, Intent, Selection, ToolKind};
+use bt_editor::{DocumentId, Editor, Intent, Selection, SnapToggle, ToolKind};
 use bt_render::{PreviewTile, VectorItem};
 use glam::DVec2;
 
@@ -62,6 +62,16 @@ impl ToolContext<'_> {
         } else {
             "Ctrl"
         }
+    }
+}
+
+/// How the modifiers held change snapping for a gesture, as Tiled's `SnapHelper` reads them:
+/// Command toggles grid snapping, Command with Shift the fine grid.
+pub(crate) fn snap_toggle(modifiers: egui::Modifiers) -> SnapToggle {
+    match (modifiers.command, modifiers.shift) {
+        (true, true) => SnapToggle::FineGrid,
+        (true, false) => SnapToggle::Grid,
+        (false, _) => SnapToggle::Keep,
     }
 }
 

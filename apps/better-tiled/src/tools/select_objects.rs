@@ -11,7 +11,7 @@ use bt_utils::DRect;
 use egui::PointerButton;
 use glam::DVec2;
 
-use super::tool::{Overlay, Tool, ToolContext};
+use super::tool::{Overlay, Tool, ToolContext, snap_toggle};
 use crate::canvas::{Gesture, Pointer};
 
 /// How near an object's outline a click picks it, in screen points.
@@ -113,7 +113,7 @@ impl Tool for SelectObjects {
                 match &mut press.drag {
                     Some(DragKind::Move) => cx.out.push(Intent::ObjectStroke(ObjectStroke::Move {
                         delta: drag.at.world - press.at.world,
-                        free: drag.modifiers.command,
+                        snap: snap_toggle(drag.modifiers),
                     })),
                     Some(DragKind::Band { to }) => *to = drag.at.world,
                     None => {}

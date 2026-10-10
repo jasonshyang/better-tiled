@@ -3,9 +3,11 @@
 
 mod commands;
 mod picking;
+mod snapping;
 mod stroke;
 
 pub(crate) use commands::Restack;
 pub use picking::ObjectFrame;
+pub use snapping::SnapToggle;
 pub(crate) use stroke::ObjectStrokeState;
 pub use stroke::{ObjectStroke, ObjectStrokeKind};

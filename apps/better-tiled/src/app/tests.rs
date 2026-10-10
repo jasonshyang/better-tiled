@@ -706,3 +706,58 @@ fn a_selection_drags_mirrors_and_lets_go_of_its_tiles() {
     );
     assert_eq!(at(&window, 2, 2), first);
 }
+
+#[test]
+fn new_objects_follow_the_pointer_and_command_toggles_snapping() {
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::{DVec2, UVec2};
+
+    let scratch = Scratch::new("window-insert").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let empty_row = [". "; 8].concat();
+    let ground = format!("1 . . . . . . .\n{}", vec![empty_row; 5].join("\n"));
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(8, 6))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", &ground)
+        .object_layer("things", Vec::new())
+        .build()
+        .unwrap();
+    let path = scratch.join("insert.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let primary = PointerButton::Primary;
+
+    // The ground's first tile becomes the brush, through the picker.
+    window.press(command(), Key::PageDown);
+    window.press(Modifiers::NONE, Key::I);
+    window.click_cell(IVec2::ZERO, primary, Modifiers::NONE);
+    window.press(command(), Key::PageUp);
+
+    // T places the tile with its image centred on the pointer: bottom-left at (32, 48).
+    window.press(Modifiers::NONE, Key::T);
+    window.click_world(DVec2::new(40.0, 40.0), primary, Modifiers::NONE);
+    // I with Command snaps to the grid, though the preference is not to snap.
+    window.press(Modifiers::NONE, Key::I);
+    window.click_world(DVec2::new(37.0, 43.0), primary, command());
+    let map = window.editor().map_of(doc).unwrap();
+    let things = map.layers[1].as_object_layer().unwrap();
+    let placed: Vec<_> = things
+        .objects
+        .iter()
+        .map(|o| (o.pos, o.size, o.tile.is_some()))
+        .collect();
+    assert_eq!(
+        placed,
+        [
+            (DVec2::new(32.0, 48.0), DVec2::splat(16.0), true),
+            (DVec2::new(32.0, 48.0), DVec2::ZERO, false),
+        ]
+    );
+}

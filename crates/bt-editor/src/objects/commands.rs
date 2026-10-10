@@ -11,6 +11,7 @@ use bt_edit::{
 };
 use glam::DVec2;
 
+use super::snapping::SnapToggle;
 use super::stroke::unlocked_objects;
 use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
@@ -199,7 +200,12 @@ impl Editor {
                 .collect();
         }
         let offset = match at {
-            Some(cursor) => paste_offset(&map.geometry(), &clip, cursor, self.snap_mode()),
+            Some(cursor) => paste_offset(
+                &map.geometry(),
+                &clip,
+                cursor,
+                self.snap_mode(SnapToggle::Keep),
+            ),
             None => DVec2::ZERO,
         };
         let result = self.transact(doc, "Paste Objects", |tx| {
