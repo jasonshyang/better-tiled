@@ -86,3 +86,49 @@ fn automap_runs_from_its_key_and_the_panel_says_what_it_did() {
     window.press(egui::Modifiers::COMMAND, egui::Key::Z);
     assert!(!top(&window, IVec2::new(0, 0)), "one step to undo");
 }
+
+#[test]
+fn live_automap_binds_the_rules_to_the_layer_painted_on_from_the_panel() {
+    let scratch = Scratch::new("window-live-automap").unwrap();
+    // As in the Highlands pack: the rules read and write `walls`, the map paints on `plat1`.
+    let map = write_tiles_map(
+        scratch.path(),
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("walls", ". . .\n. . ."), ("plat1", "0 . 0\n. . .")],
+    );
+    write_tiles_map(
+        scratch.path(),
+        "platforms.tmx",
+        UVec2::new(1, 1),
+        &[("input_walls", "0"), ("output_walls", "6")],
+    );
+    std::fs::write(scratch.join("rules.txt"), "platforms.tmx\n").unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&map);
+    let doc = window.editor().current().unwrap();
+
+    window.click("AutoMap");
+    window.click("Live AutoMap");
+    assert!(window.editor().document(doc).unwrap().automap().is_some());
+    assert!(window.shows("reads and writes walls"));
+    assert!(window.shows("empty"), "the rules read an empty layer");
+
+    window.click_last("reads and writes walls");
+    window.click_last("plat1");
+    let shown = window.editor().shown_map(doc).unwrap();
+    let plat1 = shown.layer(LayerId(2)).unwrap().as_tile_layer().unwrap();
+    assert_eq!(
+        plat1.cell(IVec2::new(0, 0)).tile().0,
+        6,
+        "the rules ran on plat1"
+    );
+    assert!(!window.shows("empty"));
+    let painted = window.editor().map_of(doc).unwrap();
+    let plat1 = painted.layer(LayerId(2)).unwrap().as_tile_layer().unwrap();
+    assert_eq!(
+        plat1.cell(IVec2::new(0, 0)).tile().0,
+        0,
+        "what was painted stays"
+    );
+}

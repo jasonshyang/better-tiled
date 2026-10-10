@@ -505,7 +505,9 @@ impl App {
     }
 
     fn show_canvas(&mut self, ui: &mut egui::Ui, doc: DocumentId) {
-        let Some(map) = self.editor.map_of(doc).cloned() else {
+        // What is shown: AutoMap layers' result while they are on. Tools read it too, so what
+        // is outlined is what is drawn; their edits go to what was painted.
+        let Some(map) = self.editor.shown_map(doc).cloned() else {
             return;
         };
         let Some(document) = self.editor.document(doc) else {

@@ -8,6 +8,9 @@ use bt_automap::{Area, Problem, RuleSet, Severity};
 use bt_editor::{ActionId, AutoMapRules, DocumentId, Editor, Intent, LastRun};
 use bt_utils::text::{and_list, plural};
 
+use super::automap_live::show_live;
+use super::problem_line::problem_line;
+
 /// The AutoMap panel (it keeps nothing of its own: sections fold as egui remembers).
 #[derive(Default)]
 pub(crate) struct AutoMapPanel;
@@ -37,7 +40,13 @@ impl AutoMapPanel {
             ui.weak("Looking for the map's rules…");
             return;
         };
-        egui::ScrollArea::vertical().show(ui, |ui| show_rules(ui, rules));
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            show_rules(ui, rules);
+            if rules.rules().is_some() {
+                ui.separator();
+                show_live(ui, editor, doc, out);
+            }
+        });
     }
 }
 
@@ -208,18 +217,6 @@ fn show_last_run(ui: &mut egui::Ui, run: &LastRun, rules_dir: Option<&Path>) {
                 problem_line(ui, problem);
             }
         });
-}
-
-fn problem_line(ui: &mut egui::Ui, problem: &Problem) {
-    let (mark, color) = match problem.severity() {
-        Severity::Error => ("⛔", ui.visuals().error_fg_color),
-        Severity::Warning => ("⚠", ui.visuals().warn_fg_color),
-        Severity::Note => ("ℹ", ui.visuals().weak_text_color()),
-    };
-    ui.horizontal_wrapped(|ui| {
-        ui.colored_label(color, mark);
-        ui.label(&problem.text);
-    });
 }
 
 /// A rule map's path from the rules file's folder, or its file name.

@@ -2,9 +2,11 @@
 //! tileset is shown, a name being edited) and returns intents; none changes the editor.
 
 mod automap;
+mod automap_live;
 mod custom_rows;
 mod layers;
 mod objects;
+mod problem_line;
 mod properties;
 mod terrains;
 mod tile_grid;
