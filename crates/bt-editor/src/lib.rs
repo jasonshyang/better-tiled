@@ -41,8 +41,8 @@ pub use recovery::{
 };
 pub use session::{FileViewState, Session};
 pub use settings::{
-    Behaviour, General, Interface, MajorGrid, MigrateError, SETTINGS_VERSION, SettingColor,
-    Settings, SettingsError, Theme, data_folder,
+    Behaviour, General, Interface, MajorGrid, MigrateError, ObjectSelection, SETTINGS_VERSION,
+    SettingColor, Settings, SettingsError, Snapping, Theme, data_folder,
 };
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
 pub use tools::{MAX_BRUSH_SIZE, ToolFamily, ToolKind, ToolState};

@@ -10,6 +10,7 @@ use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
 use super::new_map::NewMapDialog;
 use super::new_tileset::{DialogRequest, NewTilesetDialog};
 use super::palette::PaletteDialog;
+use super::preferences::PreferencesDialog;
 
 /// Something modal.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,6 +25,8 @@ pub(crate) enum Modal {
     NewMap(NewMapDialog),
     /// New Tileset.
     NewTileset(NewTilesetDialog),
+    /// The preferences.
+    Preferences(Box<PreferencesDialog>),
 }
 
 /// The open modals; the last is shown.
@@ -87,6 +90,7 @@ impl Modals {
             Modal::Palette(palette) => palette.show(ctx, editor, out),
             Modal::NewMap(dialog) => dialog.show(ctx, out),
             Modal::NewTileset(dialog) => dialog.show(ctx, out, requests),
+            Modal::Preferences(dialog) => dialog.show(ctx, out),
         };
         if closed {
             self.stack.pop();

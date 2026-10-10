@@ -171,7 +171,9 @@ impl TestWindow {
         let Some(node) = node else {
             panic!("no widget is labelled “{label}”");
         };
-        node.click();
+        // Through accessibility, as a screen reader clicks: a pointer click at the node's
+        // middle misses widgets inside a scroll area of a modal.
+        node.click_accesskit();
         self.settle();
     }
 

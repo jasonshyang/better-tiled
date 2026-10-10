@@ -8,7 +8,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use bt_editor::{Snapshot, delete_snapshot, remove_heartbeat, touch_heartbeat};
+use bt_editor::{Settings, Snapshot, delete_snapshot, remove_heartbeat, touch_heartbeat};
 use bt_utils::atomic_write::{WriteMode, write_file};
 
 /// How often the heartbeat is touched (a run counts as alive for a minute after).
@@ -18,7 +18,14 @@ const HEARTBEAT_EVERY: Duration = Duration::from_secs(10);
 enum WriteJob {
     Snapshot(Snapshot),
     DeleteSnapshot(PathBuf),
-    Session { path: PathBuf, text: String },
+    Session {
+        path: PathBuf,
+        text: String,
+    },
+    Settings {
+        path: PathBuf,
+        settings: Box<Settings>,
+    },
 }
 
 /// Where the run's heartbeat goes.
@@ -68,6 +75,14 @@ impl BackgroundWriter {
     /// Writes the session.
     pub(crate) fn write_session(&self, path: PathBuf, text: String) {
         self.send(WriteJob::Session { path, text });
+    }
+
+    /// Writes the preferences.
+    pub(crate) fn write_settings(&self, path: PathBuf, settings: Settings) {
+        self.send(WriteJob::Settings {
+            path,
+            settings: Box::new(settings),
+        });
     }
 
     /// What went wrong since the last call.
@@ -167,6 +182,9 @@ fn carry_out(job: WriteJob) -> Result<(), String> {
                 )
             })
         }
+        WriteJob::Settings { path, settings } => settings
+            .save(&path)
+            .map_err(|error| format!("The preferences could not be saved: {error}")),
     }
 }
 

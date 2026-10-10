@@ -93,6 +93,11 @@ struct KeyPress {
     repeat: bool,
 }
 
+/// The chord a key press is, in the editor's terms; `None` for a key the editor has no name for.
+pub(crate) fn chord_of(key: egui::Key, modifiers: egui::Modifiers, mac: bool) -> Option<Chord> {
+    Some(Chord::with(modifiers_of(modifiers, mac), key_of(key)?))
+}
+
 /// The editor's modifiers for the toolkit's: ⌘ is the command key on macOS, Ctrl elsewhere.
 fn modifiers_of(modifiers: egui::Modifiers, mac: bool) -> Modifiers {
     if mac {

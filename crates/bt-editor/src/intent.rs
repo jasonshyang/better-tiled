@@ -11,6 +11,7 @@ use crate::document::{DocumentId, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
 use crate::recovery::Orphan;
+use crate::settings::Settings;
 use crate::watch::Observation;
 
 /// A request to the editor.
@@ -107,6 +108,8 @@ pub enum Intent {
     Recoverable(Vec<Orphan>),
     /// What the watched files hold now (`Editor::watched`).
     Observed(Vec<Observation>),
+    /// The preferences changed (the Preferences dialog's OK).
+    ChangeSettings(Box<Settings>),
     /// Time passed: the recovery schedule runs.
     Tick {
         /// Milliseconds since some fixed point (monotonic).

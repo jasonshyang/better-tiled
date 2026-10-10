@@ -52,6 +52,8 @@ pub struct General {
     pub recovery: bool,
     /// The most transactions a document's history keeps.
     pub history_limit: usize,
+    /// Notice files changed by other programs: reload them, or ask when they hold unsaved work.
+    pub watch_files: bool,
 }
 
 impl Default for General {
@@ -61,6 +63,7 @@ impl Default for General {
             safe_writing: true,
             recovery: true,
             history_limit: crate::history::DEFAULT_HISTORY_LIMIT,
+            watch_files: true,
         }
     }
 }
@@ -87,6 +90,8 @@ pub struct Interface {
     pub fade_color: SettingColor,
     /// The width of object outlines in points.
     pub object_line_width: f32,
+    /// How many parts the fine grid splits a cell into, for Snap to Fine Grid.
+    pub fine_grid_divisions: u32,
 }
 
 impl Default for Interface {
@@ -96,6 +101,7 @@ impl Default for Interface {
             major_grid: MajorGrid::default(),
             fade_color: SettingColor(Color::BLACK),
             object_line_width: 2.0,
+            fine_grid_divisions: 4,
         }
     }
 }
@@ -106,12 +112,54 @@ impl Default for Interface {
 pub struct Behaviour {
     /// The mouse wheel zooms (else it scrolls, and ⌘ or Ctrl with it zooms).
     pub wheel_zooms: bool,
+    /// Where objects go when they are placed or moved.
+    pub snapping: Snapping,
+    /// Which layers a click selects objects on.
+    pub object_selection: ObjectSelection,
+    /// A rubber band selects only the objects it encloses (else those it touches).
+    pub select_enclosed: bool,
+    /// A tool's own key pressed again goes back to the tool before it.
+    pub tool_key_returns: bool,
 }
 
 impl Default for Behaviour {
     fn default() -> Behaviour {
-        Behaviour { wheel_zooms: true }
+        Behaviour {
+            wheel_zooms: true,
+            snapping: Snapping::None,
+            object_selection: ObjectSelection::PreferCurrentLayer,
+            select_enclosed: false,
+            tool_key_returns: false,
+        }
     }
+}
+
+/// Where objects go (View ▸ Snapping).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Snapping {
+    /// Where they are put.
+    #[default]
+    None,
+    /// To the tile grid.
+    Grid,
+    /// To the fine grid.
+    FineGrid,
+    /// To whole pixels.
+    Pixels,
+}
+
+/// Which layers a click selects objects on (Tiled's object selection behaviour).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectSelection {
+    /// Any visible, unlocked object layer.
+    AnyLayer,
+    /// The current layer's objects first, then any layer's.
+    #[default]
+    PreferCurrentLayer,
+    /// The current layer only.
+    CurrentLayerOnly,
 }
 
 /// The look of the window.

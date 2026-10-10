@@ -195,6 +195,7 @@ impl Editor {
             }
             Intent::Recoverable(orphans) => self.offer_recovery(orphans),
             Intent::Observed(observations) => self.observe(observations),
+            Intent::ChangeSettings(settings) => self.change_settings(*settings),
             Intent::Tick { now_ms } => self.tick(now_ms),
         }
     }
@@ -316,6 +317,30 @@ impl Editor {
     /// The key bindings.
     pub fn keymap(&self) -> &Keymap {
         &self.keymap
+    }
+
+    /// Takes new preferences: the key bindings must name commands and keys. The window writes
+    /// them out.
+    pub(crate) fn change_settings(&mut self, settings: Settings) -> Vec<Effect> {
+        let keymap = match Keymap::from_settings(&settings.keymap, self.keymap.is_mac()) {
+            Ok(keymap) => keymap,
+            Err(error) => {
+                return vec![Effect::Notify(Notice::error(format!(
+                    "The preferences were not changed: {error}"
+                )))];
+            }
+        };
+        if settings == self.settings {
+            return Vec::new();
+        }
+        self.keymap = keymap;
+        self.settings = settings;
+        for document in self.documents.iter_mut() {
+            document
+                .history
+                .set_limit(self.settings.general.history_limit);
+        }
+        vec![Effect::WriteSettings(Box::new(self.settings.clone()))]
     }
 
     /// The tool and its options.

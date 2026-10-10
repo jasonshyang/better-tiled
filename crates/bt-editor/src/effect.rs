@@ -27,6 +27,8 @@ pub enum Effect {
     DeleteSnapshot(PathBuf),
     /// Images changed on disk: decode them again.
     ReloadImages(Vec<PathBuf>),
+    /// Write the preferences to `settings.toml`.
+    WriteSettings(Box<crate::settings::Settings>),
     /// Show a dialog of the window's; it reports back with intents.
     Show(Dialog),
     /// Close the window: nothing unsaved is left, or the user chose to lose it.

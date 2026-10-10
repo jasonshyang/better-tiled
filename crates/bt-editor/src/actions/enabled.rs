@@ -6,6 +6,7 @@ use bt_core::{Layer, LayerKind, Map};
 use super::table::{ActionId, ActionKind, ActionSpec, Context};
 use crate::document::Document;
 use crate::editor::Editor;
+use crate::settings::Snapping;
 
 /// Whether a command can run now.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -98,6 +99,12 @@ impl Editor {
             ActionId::ShowGrid => Some(view.grid),
             ActionId::HighlightCurrentLayer => Some(view.highlight_current_layer),
             ActionId::RandomMode => Some(self.tools.random()),
+            ActionId::SnapNone => Some(self.settings.behaviour.snapping == Snapping::None),
+            ActionId::SnapToGrid => Some(self.settings.behaviour.snapping == Snapping::Grid),
+            ActionId::SnapToFineGrid => {
+                Some(self.settings.behaviour.snapping == Snapping::FineGrid)
+            }
+            ActionId::SnapToPixels => Some(self.settings.behaviour.snapping == Snapping::Pixels),
             _ => None,
         }
     }

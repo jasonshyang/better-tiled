@@ -298,6 +298,48 @@ fn the_selection_tools_select_on_the_map() {
 }
 
 #[test]
+fn preferences_change_settings_and_keys_and_are_saved() {
+    let scratch = Scratch::new("window-preferences").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let data = scratch.join("data");
+    let mut window = TestWindow::with_data(&data);
+    window.drop_file(&path);
+    let open_preferences = |window: &mut TestWindow| {
+        window.press(command() | egui::Modifiers::SHIFT, egui::Key::P);
+        window.type_text("preferences");
+        window.press(egui::Modifiers::NONE, egui::Key::Enter);
+        assert!(window.has_modal(), "the preferences are open");
+    };
+    open_preferences(&mut window);
+    window.click("Interface");
+    window.click("The mouse wheel zooms");
+    window.click("OK");
+    assert!(!window.editor().settings().behaviour.wheel_zooms);
+
+    // A key recorded for Show Grid runs it.
+    open_preferences(&mut window);
+    window.click("Keyboard");
+    window.type_text("show grid");
+    window.click("Record");
+    window.press(egui::Modifiers::NONE, egui::Key::F5);
+    window.click("OK");
+    let grid = window.editor().checked(ActionId::ShowGrid);
+    window.press(egui::Modifiers::NONE, egui::Key::F5);
+    assert_eq!(
+        window.editor().checked(ActionId::ShowGrid),
+        grid.map(|on| !on)
+    );
+
+    // Both were written to settings.toml, which the next start reads.
+    window.exit();
+    let saved = bt_editor::Settings::load(&data.join("settings.toml")).unwrap();
+    assert!(!saved.behaviour.wheel_zooms);
+    assert_eq!(saved.keymap.get("show_grid"), Some(&vec!["f5".to_owned()]));
+}
+
+#[test]
 fn closing_with_unsaved_work_asks_first() {
     let scratch = Scratch::new("window-close-unsaved").unwrap();
     let Some(path) = desert(&scratch) else {

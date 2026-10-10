@@ -5,7 +5,8 @@
 use bt_editor::{Dialog, Effect, Intent, Notice};
 
 use super::frame::App;
-use crate::dialogs::{Modal, NewMapDialog, NewTilesetDialog, PaletteDialog};
+use crate::dialogs::{Modal, NewMapDialog, NewTilesetDialog, PaletteDialog, PreferencesDialog};
+use crate::style::apply_theme;
 
 impl App {
     /// Carries out effects in order.
@@ -54,7 +55,17 @@ impl App {
                 self.modals
                     .push(Modal::NewTileset(NewTilesetDialog::new(doc, tile_size)));
             }
-            Effect::Show(dialog) => log::warn!("the {dialog:?} dialog is not built yet"),
+            Effect::Show(Dialog::Preferences) => {
+                self.modals
+                    .push(Modal::Preferences(Box::new(PreferencesDialog::new(
+                        &self.editor,
+                    ))))
+            }
+            Effect::WriteSettings(settings) => {
+                apply_theme(ctx, &settings.theme);
+                self.writer
+                    .write_settings(self.settings_path.clone(), *settings);
+            }
             Effect::ReloadImages(paths) => {
                 if let Some(gpu) = &self.gpu {
                     gpu.forget_image_files(&paths);

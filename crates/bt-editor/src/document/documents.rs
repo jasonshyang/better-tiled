@@ -58,6 +58,11 @@ impl Documents {
         self.docs.get_mut(&id)
     }
 
+    /// Every document, to change, in no particular order.
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Document> {
+        self.docs.values_mut()
+    }
+
     /// The documents in tab order.
     pub fn in_order(&self) -> impl Iterator<Item = &Document> {
         self.order.iter().filter_map(|id| self.docs.get(id))

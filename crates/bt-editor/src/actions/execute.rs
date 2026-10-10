@@ -7,22 +7,18 @@ use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
 use crate::effect::{Dialog, Effect, FileRequest, ViewRequest};
 use crate::notice::Notice;
+use crate::settings::Snapping;
 
 /// The commands whose operations are still being built in this milestone: disabled, and
 /// running them does nothing. The list empties as they arrive.
 pub(crate) fn pending(id: ActionId) -> bool {
     matches!(
         id,
-        ActionId::Preferences
-            | ActionId::Cut
+        ActionId::Cut
             | ActionId::Copy
             | ActionId::Paste
             | ActionId::PasteInPlace
             | ActionId::Delete
-            | ActionId::SnapNone
-            | ActionId::SnapToGrid
-            | ActionId::SnapToFineGrid
-            | ActionId::SnapToPixels
             | ActionId::ResizeMap
             | ActionId::OffsetMap
             | ActionId::CropToSelection
@@ -64,6 +60,13 @@ pub(crate) fn pending(id: ActionId) -> bool {
 }
 
 impl Editor {
+    /// Chooses where objects snap; the preference is kept.
+    fn set_snapping(&mut self, snapping: Snapping) -> Vec<Effect> {
+        let mut settings = self.settings.clone();
+        settings.behaviour.snapping = snapping;
+        self.change_settings(settings)
+    }
+
     /// Runs a command; a disabled one only says why, when it has a reason.
     pub(crate) fn run(&mut self, id: ActionId) -> Vec<Effect> {
         if let Enabled::Disabled(reason) = self.enabled(id) {
@@ -139,6 +142,10 @@ impl Editor {
                 }
                 Vec::new()
             }
+            ActionId::SnapNone => self.set_snapping(Snapping::None),
+            ActionId::SnapToGrid => self.set_snapping(Snapping::Grid),
+            ActionId::SnapToFineGrid => self.set_snapping(Snapping::FineGrid),
+            ActionId::SnapToPixels => self.set_snapping(Snapping::Pixels),
             ActionId::RandomMode => {
                 self.tools.random = !self.tools.random;
                 Vec::new()
@@ -175,10 +182,6 @@ impl Editor {
             | ActionId::Paste
             | ActionId::PasteInPlace
             | ActionId::Delete
-            | ActionId::SnapNone
-            | ActionId::SnapToGrid
-            | ActionId::SnapToFineGrid
-            | ActionId::SnapToPixels
             | ActionId::ResizeMap
             | ActionId::OffsetMap
             | ActionId::CropToSelection

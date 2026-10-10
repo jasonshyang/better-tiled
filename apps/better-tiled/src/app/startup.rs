@@ -32,6 +32,8 @@ pub(crate) struct Startup {
     pub(crate) session_problem: Option<String>,
     /// Where the session is written.
     pub(crate) session_path: PathBuf,
+    /// Where the preferences are written.
+    pub(crate) settings_path: PathBuf,
     /// Where recovery snapshots go.
     pub(crate) recovery_folder: PathBuf,
     /// This run's process id, which names its recovery snapshots and heartbeat.
@@ -48,7 +50,8 @@ impl Startup {
 
     /// The start with the settings and session of `data`.
     pub(crate) fn from_folder(cli: Cli, data: &Path) -> Result<Startup, String> {
-        let settings = Settings::load(&data.join(SETTINGS_FILE)).map_err(|error| {
+        let settings_path = data.join(SETTINGS_FILE);
+        let settings = Settings::load(&settings_path).map_err(|error| {
             format!("{error}\n(fix the file, or move it away to start with the defaults)")
         })?;
         let session_path = data.join(SESSION_FILE);
@@ -80,6 +83,7 @@ impl Startup {
             session,
             session_problem,
             session_path,
+            settings_path,
             recovery_folder: data.join(RECOVERY_FOLDER),
             pid: std::process::id(),
             outcome: RunOutcome::default(),

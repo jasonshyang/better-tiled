@@ -53,6 +53,8 @@ pub(crate) struct App {
     pub(super) writer: BackgroundWriter,
     /// Looks at the files on disk for changes.
     watcher: Watcher,
+    /// Where the preferences are written.
+    pub(super) settings_path: PathBuf,
     /// When the watcher was last told which files to look at.
     watch_listed: Instant,
     /// Whether intents were applied since then, so the list may be out of date.
@@ -207,6 +209,7 @@ impl App {
             file_dialogs: FileDialogs::System,
             writer,
             watcher: Watcher::new(),
+            settings_path: startup.settings_path.clone(),
             watch_listed: Instant::now(),
             watch_list_stale: true,
             gpu: None,
@@ -585,7 +588,9 @@ impl eframe::App for App {
                 other => self.intents.push(other),
             }
         }
-        if let Some(observed) = self.watcher.take_observations() {
+        if let Some(observed) = self.watcher.take_observations()
+            && self.editor.settings().general.watch_files
+        {
             self.intents.push(Intent::Observed(observed));
         }
         let now_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
