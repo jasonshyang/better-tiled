@@ -10,7 +10,7 @@ use bt_automap::{
 };
 use bt_core::{Cell, Flip, Map};
 use bt_editor::{CellExplanation, DocumentId, Editor, ExplainedRun};
-use bt_utils::text::plural;
+use bt_utils::text::{and_list, plural};
 
 use super::problem_line::problem_line;
 
@@ -151,13 +151,40 @@ fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation) {
             }
         });
     }
-    let others = explanation.attempts.len() - applied.len() - close.len() - held_back.len();
-    if others > 0 {
-        ui.weak(format!(
-            "{} could write here too, but nothing here is what {} for",
-            plural(others, "other rule", "other rules"),
-            if others == 1 { "it looks" } else { "they look" }
-        ));
+    let others: Vec<&RuleAttempt> = explanation
+        .attempts
+        .iter()
+        .filter(|a| {
+            !matches!(a.outcome, AttemptOutcome::Applied { .. })
+                && !close.iter().any(|c| std::ptr::eq(*c, *a))
+                && !held_back.iter().any(|h| std::ptr::eq(*h, *a))
+        })
+        .collect();
+    if !others.is_empty() {
+        let rules = plural(others.len(), "other rule", "other rules");
+        ui.weak(match nothing_to_read(&others) {
+            Some(Unread { layers, missing }) => {
+                let lacks = if missing {
+                    "which the map lacks"
+                } else if layers.len() == 1 {
+                    "which is empty here"
+                } else {
+                    "which are empty here"
+                };
+                format!(
+                    "{rules} could write here too, but they need tiles on {}, {lacks}",
+                    and_list(&layers)
+                )
+            }
+            None => format!(
+                "{rules} could write here too, but nothing here is what {} for",
+                if others.len() == 1 {
+                    "it looks"
+                } else {
+                    "they look"
+                }
+            ),
+        });
     }
     for unnamed in &explanation.unnamed {
         ui.weak(format!(
@@ -166,6 +193,33 @@ fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation) {
             words.cell(unnamed.tile)
         ));
     }
+}
+
+/// Layers the failing rules needed tiles on and found nothing: the reason they fail.
+struct Unread {
+    /// The layers, each once.
+    layers: Vec<String>,
+    /// Whether the map lacks every one of them.
+    missing: bool,
+}
+
+/// When every condition that failed in `attempts` asked for a tile and found the cell empty:
+/// the layers they read. `None` when some failed on a tile that was there.
+fn nothing_to_read(attempts: &[&RuleAttempt]) -> Option<Unread> {
+    let mut layers: Vec<String> = Vec::new();
+    let mut missing = true;
+    let mut any = false;
+    for check in attempts.iter().flat_map(|a| &a.checks).filter(|c| !c.holds) {
+        if !check.found.is_empty() || check.condition != Condition::AnyOf {
+            return None;
+        }
+        any = true;
+        missing &= !check.layer_present;
+        if !layers.contains(&check.layer) {
+            layers.push(check.layer.clone());
+        }
+    }
+    any.then_some(Unread { layers, missing })
 }
 
 /// How cells, tiles and rules of an explanation are put in words.

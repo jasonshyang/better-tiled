@@ -409,6 +409,7 @@ impl App {
             Some(DevRun::Screenshot(ScreenshotRun::new(
                 path,
                 startup.screenshot_actions.clone(),
+                startup.screenshot_explain,
             )))
         } else if startup.bench {
             Some(DevRun::Bench(BenchRun::new()))
@@ -832,6 +833,12 @@ impl App {
             DevStep::Continue => ctx.request_repaint(),
             DevStep::Run(actions) => {
                 self.intents.extend(actions.into_iter().map(Intent::Run));
+                ctx.request_repaint();
+            }
+            DevStep::Explain(cell) => {
+                if let Some(doc) = self.editor.current() {
+                    self.intents.push(Intent::ExplainCell { doc, cell });
+                }
                 ctx.request_repaint();
             }
             DevStep::TakeScreenshot => {

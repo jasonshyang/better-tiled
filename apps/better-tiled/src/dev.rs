@@ -67,6 +67,8 @@ pub(crate) enum DevStep {
     Continue,
     /// Run these commands, then wait for the window to settle again.
     Run(Vec<ActionId>),
+    /// Explain this cell of the current map with the Explain tool, then wait again.
+    Explain(glam::IVec2),
     /// Take a picture of the window.
     TakeScreenshot,
     /// The check is over: quit, having failed when there is a reason.
@@ -83,11 +85,18 @@ pub(crate) struct ScreenshotRun {
     requested: bool,
     /// Commands still to run before the picture.
     actions: Vec<ActionId>,
+    /// The cell to explain before the commands run, if any.
+    explain: Option<glam::IVec2>,
 }
 
 impl ScreenshotRun {
-    /// A screenshot to `path`, after running `actions` once the window has settled.
-    pub(crate) fn new(path: PathBuf, actions: Vec<ActionId>) -> ScreenshotRun {
+    /// A screenshot to `path`, after explaining `explain` and running `actions` once the window
+    /// has settled.
+    pub(crate) fn new(
+        path: PathBuf,
+        actions: Vec<ActionId>,
+        explain: Option<glam::IVec2>,
+    ) -> ScreenshotRun {
         ScreenshotRun {
             path,
             started: Instant::now(),
@@ -95,6 +104,7 @@ impl ScreenshotRun {
             settled_since: None,
             requested: false,
             actions,
+            explain,
         }
     }
 
@@ -133,6 +143,11 @@ impl ScreenshotRun {
         }
         let settled_for = self.settled_since.map(|since| now.duration_since(since));
         if self.settled >= SETTLED_FRAMES && settled_for.is_some_and(|t| t >= SETTLE_TIME) {
+            if let Some(cell) = self.explain.take() {
+                self.settled = 0;
+                self.settled_since = None;
+                return DevStep::Explain(cell);
+            }
             if !self.actions.is_empty() {
                 self.settled = 0;
                 self.settled_since = None;
@@ -177,6 +192,25 @@ pub(crate) fn screenshot_tabs(value: Option<&str>) -> Result<Vec<PanelTab>, Stri
                 .ok_or_else(|| format!("BT_SCREENSHOT_TABS names no panel tab “{name}”"))
         })
         .collect()
+}
+
+/// The cell `BT_SCREENSHOT_EXPLAIN` names, as `x,y`; anything else stops the run.
+pub(crate) fn screenshot_explain(value: Option<&str>) -> Result<Option<glam::IVec2>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let parts: Vec<&str> = value.split(',').map(str::trim).collect();
+    let [x, y] = parts.as_slice() else {
+        return Err(format!(
+            "BT_SCREENSHOT_EXPLAIN is not a cell x,y: “{value}”"
+        ));
+    };
+    match (x.parse::<i32>(), y.parse::<i32>()) {
+        (Ok(x), Ok(y)) => Ok(Some(glam::IVec2::new(x, y))),
+        _ => Err(format!(
+            "BT_SCREENSHOT_EXPLAIN is not a cell x,y: “{value}”"
+        )),
+    }
 }
 
 /// Saves the window's picture as a PNG.
@@ -464,7 +498,7 @@ mod tests {
 
     #[test]
     fn a_screenshot_waits_until_the_window_has_settled() {
-        let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), Vec::new());
+        let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), Vec::new(), None);
         let start = Instant::now();
         let at = |ms: u64| start + Duration::from_millis(ms);
         let busy = Readiness {
@@ -489,7 +523,8 @@ mod tests {
 
     #[test]
     fn commands_run_before_the_picture_and_the_window_settles_again() {
-        let mut run = ScreenshotRun::new(PathBuf::from("unused.png"), vec![ActionId::ShowGrid]);
+        let mut run =
+            ScreenshotRun::new(PathBuf::from("unused.png"), vec![ActionId::ShowGrid], None);
         let start = Instant::now();
         let at = |ms: u64| start + Duration::from_millis(ms);
         let ready = Readiness {
@@ -518,5 +553,10 @@ mod tests {
         assert!(screenshot_actions(Some("no_such_thing")).is_err());
         assert_eq!(screenshot_tabs(Some("automap, Terrains")).unwrap().len(), 2);
         assert!(screenshot_tabs(Some("no_such_tab")).is_err());
+        assert_eq!(
+            screenshot_explain(Some("3, 4")),
+            Ok(Some(glam::IVec2::new(3, 4)))
+        );
+        assert!(screenshot_explain(Some("3")).is_err());
     }
 }

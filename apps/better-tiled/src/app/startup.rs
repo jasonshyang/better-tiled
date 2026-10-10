@@ -26,6 +26,8 @@ pub(crate) struct Startup {
     pub(crate) screenshot_actions: Vec<bt_editor::ActionId>,
     /// The panel tabs `BT_SCREENSHOT_TABS` names, brought forward for the picture.
     pub(crate) screenshot_tabs: Vec<super::frame::PanelTab>,
+    /// The cell `BT_SCREENSHOT_EXPLAIN` names, explained before the picture.
+    pub(crate) screenshot_explain: Option<glam::IVec2>,
     /// `--bench`.
     pub(crate) bench: bool,
     /// The preferences.
@@ -88,21 +90,20 @@ impl Startup {
                 )),
             ),
         };
-        let (screenshot_actions, screenshot_tabs) = if cli.screenshot.is_some() {
-            let actions = std::env::var("BT_SCREENSHOT_ACTIONS").ok();
-            let tabs = std::env::var("BT_SCREENSHOT_TABS").ok();
-            (
-                crate::dev::screenshot_actions(actions.as_deref())?,
-                crate::dev::screenshot_tabs(tabs.as_deref())?,
-            )
-        } else {
-            (Vec::new(), Vec::new())
-        };
+        let checking = cli.screenshot.is_some();
+        let variable = |name: &str| checking.then(|| std::env::var(name).ok()).flatten();
+        let screenshot_actions =
+            crate::dev::screenshot_actions(variable("BT_SCREENSHOT_ACTIONS").as_deref())?;
+        let screenshot_tabs =
+            crate::dev::screenshot_tabs(variable("BT_SCREENSHOT_TABS").as_deref())?;
+        let screenshot_explain =
+            crate::dev::screenshot_explain(variable("BT_SCREENSHOT_EXPLAIN").as_deref())?;
         Ok(Startup {
             files: cli.files,
             screenshot: cli.screenshot,
             screenshot_actions,
             screenshot_tabs,
+            screenshot_explain,
             bench: cli.bench,
             settings,
             session,
