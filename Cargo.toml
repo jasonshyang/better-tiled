@@ -24,9 +24,13 @@ bt-tmx = { path = "crates/bt-tmx" }
 bt-utils = { path = "crates/bt-utils" }
 
 # Others, pinned here so every crate takes the same version and only the features it uses.
+# Binaries only: their errors as one chain of reasons.
+anyhow = "1.0"
 base64 = "0.23"
 bitflags = "2.13"
 bytemuck = { version = "1.25", features = ["derive"] }
+# bt's command table.
+clap = { version = "4.6", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions"] }
 # The window: eframe, egui and egui-wgpu move together, and wgpu is the version egui-wgpu uses.
 eframe = { version = "0.36.2", default-features = false }
 egui = "0.36.2"

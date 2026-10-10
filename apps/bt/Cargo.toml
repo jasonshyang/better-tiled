@@ -1,0 +1,28 @@
+[package]
+name = "bt"
+description = "bt: Tiled maps for agents and scripts on the command line, alone or with the running editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "GPL-3.0-or-later"
+publish = false
+
+[[bin]]
+name = "bt"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+bt-core.workspace = true
+bt-script.workspace = true
+bt-tmx.workspace = true
+bt-utils.workspace = true
+clap = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+
+[lints]
+workspace = true
