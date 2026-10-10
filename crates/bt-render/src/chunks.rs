@@ -147,13 +147,6 @@ impl ChunkCache {
         visible
     }
 
-    /// A cached chunk's instances, in draw order.
-    pub(crate) fn instances(&self, key: &ChunkKey) -> &[KeyedInstance] {
-        self.entries
-            .get(key)
-            .map_or(&[], |entry| entry.instances.as_slice())
-    }
-
     /// Drops every chunk not drawn in `frame`.
     pub(crate) fn trim_unused(&mut self, frame: u64) {
         self.entries.retain(|_, entry| entry.last_used >= frame);

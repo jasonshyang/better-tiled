@@ -1,71 +1,182 @@
 //! Far zoom. Zoomed far out, a large map shows millions of cells and no instance count stays
-//! inside the frame's budget, so below a threshold each visible chunk of a tile layer is drawn
-//! as one quad: an impostor, a picture of the chunk the renderer draws into impostor pages from
-//! the chunk's own instances. An impostor of `k` pixels per cell serves zooms up to
-//! `k / tile size`, and `k` is the power of two that meets the screen's resolution, so an
-//! impostor is never blurrier than drawing the tiles would be. Impostors are drawn at the frame
-//! time they were made (animations do not move at that zoom) and evicted least recently used.
+//! inside a frame's budget. Below a threshold, runs of tile layers are drawn from impostors:
+//! pictures of world-aligned squares of a run, [`SQUARE_TEXELS`] a side. A run is a stretch of
+//! tile layers that composite plainly with nothing drawn between them (`draw_list.rs` decides);
+//! an impostor holds every layer of its run with its offset, opacity and tint, drawn from the
+//! chunks' own instances in Tiled's order and clipped to its square, so squares meet exactly and
+//! an oversized tile stacks across them as Tiled stacks it.
+//!
+//! The resolution is the power of two (device pixels per world pixel) that meets the screen's,
+//! so an impostor is never blurrier than drawing the tiles would be, unless the pages cannot hold
+//! the squares in view, when it steps down. The squares a view shows are bounded by the screen's
+//! area, not the map's. An impostor is valid while its run's chunks, attributes and tilesets are
+//! the ones it was drawn from: the run's chunks are held, so an address is never reused while
+//! it is compared. At most [`DRAW_BUDGET`] instances a frame are drawn into impostors, the
+//! squares nearest the view's centre first; until a square is drawn it shows its last picture,
+//! or nothing, and the frame reports it pending.
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::ops::Range;
+use std::sync::Arc;
 
+use bt_core::{Chunk, LayerId, TileLayer};
 use bt_utils::DRect;
-use glam::UVec2;
+use glam::{DVec2, IVec2, UVec2};
 
-use crate::chunks::ChunkKey;
-use crate::pages::{Region, ShelfPacker};
+use crate::chunks::{ChunkCache, ChunkContext, tiles_for_view};
+use crate::draw_list::LayerParams;
+use crate::instance::{Instance, plain};
+use crate::pages::Region;
 use crate::sprites::Sprites;
 
 /// Cells smaller than this on screen (device pixels) are drawn through impostors.
 pub(crate) const IMPOSTOR_CELL_PX: f64 = 8.0;
 
+/// The side of an impostor, in texels.
+pub(crate) const SQUARE_TEXELS: u32 = 256;
+
 /// The side of an impostor page.
 const PAGE_SIDE: u32 = 2048;
 
-/// A chunk's impostor at one resolution.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct ImpostorKey {
-    pub(crate) chunk: ChunkKey,
-    /// Pixels per cell.
-    pub(crate) level: u32,
+/// Impostors a page side holds.
+const SQUARES_PER_SIDE: u32 = PAGE_SIDE / SQUARE_TEXELS;
+
+/// The most instances drawn into impostors in one frame.
+pub(crate) const DRAW_BUDGET: usize = 100_000;
+
+/// The coarsest resolution a run steps down to: 2^-16 device pixels per world pixel.
+const COARSEST_LEVEL: i32 = -16;
+
+/// One tile layer of a run, as its impostors hold it.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct RunLayer<'m> {
+    /// The layer.
+    pub(crate) id: LayerId,
+    /// Its cells.
+    pub(crate) tiles: &'m TileLayer,
+    /// Its offset (without parallax, which moves the whole run), opacity and tint.
+    pub(crate) params: LayerParams,
 }
 
-/// An impostor drawn or planned.
+impl RunLayer<'_> {
+    fn offset(&self) -> DVec2 {
+        DVec2::new(
+            f64::from(self.params.offset[0]),
+            f64::from(self.params.offset[1]),
+        )
+    }
+}
+
+/// A run to draw over a view.
+pub(crate) struct RunView<'r, 'm> {
+    /// The run's layers, bottom first.
+    pub(crate) layers: &'r [RunLayer<'m>],
+    /// The world rectangle in view, in the run's space (before its parallax shift).
+    pub(crate) view_rect: DRect,
+    /// Device pixels per world pixel.
+    pub(crate) zoom_px: f64,
+}
+
+/// Identifies an impostor: its run, its resolution and its square.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ImpostorKey {
+    run: u64,
+    level: i32,
+    square: IVec2,
+}
+
+/// A place for one impostor in the pages.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct Slot {
+    page: u32,
+    index: u32,
+}
+
+impl Slot {
+    fn region(self) -> Region {
+        Region {
+            page: self.page,
+            origin: UVec2::new(
+                (self.index % SQUARES_PER_SIDE) * SQUARE_TEXELS,
+                (self.index / SQUARES_PER_SIDE) * SQUARE_TEXELS,
+            ),
+            size: UVec2::splat(SQUARE_TEXELS),
+        }
+    }
+}
+
+/// An impostor drawn (or being drawn this frame).
 #[derive(Clone, Debug)]
 struct Impostor {
-    sprite: u32,
-    page: u32,
+    slot: Slot,
+    content: u64,
     last_used: u64,
     /// Drawn while some of its images were still being decoded: drawn again.
     complete: bool,
 }
 
-/// A picture to draw into the impostor pages: a chunk, the world rectangle it covers, the scale
-/// and where it goes.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ImpostorJob {
-    pub(crate) chunk: ChunkKey,
-    pub(crate) bounds: DRect,
-    pub(crate) scale: f64,
-    pub(crate) region: Region,
-    key: ImpostorKey,
+/// What a run's impostors were drawn from: a hash of its layers and the chunks it holds.
+#[derive(Clone, Debug)]
+struct RunRecord {
+    content: u64,
+    _held: Vec<Arc<Chunk>>,
+    last_used: u64,
 }
 
-/// A page of impostors.
-#[derive(Clone, Debug)]
-struct ImpostorPage {
-    packer: ShelfPacker,
-    last_used: u64,
+/// A picture to draw into the pages: where, from which world square, at which scale, and the
+/// layers' instances (ranges of [`ImpostorWork::instances`]) with their parameters.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ImpostorJob {
+    pub(crate) region: Region,
+    pub(crate) square: DRect,
+    pub(crate) scale: f64,
+    pub(crate) layers: Vec<JobLayer>,
+}
+
+/// A layer of a job.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct JobLayer {
+    pub(crate) params: LayerParams,
+    pub(crate) instances: Range<u32>,
 }
 
 /// The impostor pages and what is in them.
 pub(crate) struct Impostors {
     array_view: wgpu::TextureView,
     layer_views: Vec<wgpu::TextureView>,
-    pages: Vec<ImpostorPage>,
+    slot_sprites: HashMap<u32, u32>,
+    free: Vec<Slot>,
     entries: HashMap<ImpostorKey, Impostor>,
+    runs: HashMap<u64, RunRecord>,
     jobs: Vec<ImpostorJob>,
-    /// Pages emptied for reuse, to clear before drawing into them.
-    to_clear: Vec<u32>,
+    job_keys: Vec<ImpostorKey>,
+    instances: Vec<Instance>,
+    budget_left: usize,
+    used_this_frame: usize,
+    pending: usize,
+}
+
+/// What draws a run's squares: the chunks and their context.
+pub(crate) struct RunSources<'s, 'c> {
+    pub(crate) chunks: &'s mut ChunkCache,
+    pub(crate) cx: &'s ChunkContext<'c>,
+    pub(crate) frame: u64,
+}
+
+/// A square shown this frame and the slot its picture is in.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct PlacedSquare {
+    rect: DRect,
+    slot: Slot,
+}
+
+/// What a square already has.
+#[derive(Copy, Clone, Debug)]
+struct Existing {
+    slot: Slot,
+    valid: bool,
 }
 
 impl Impostors {
@@ -104,18 +215,24 @@ impl Impostors {
                 })
             })
             .collect();
+        let per_page = (side / SQUARE_TEXELS).pow(2);
+        let free = (0..count)
+            .flat_map(|page| (0..per_page).map(move |index| Slot { page, index }))
+            .rev()
+            .collect();
         Impostors {
             array_view,
             layer_views,
-            pages: (0..count)
-                .map(|_| ImpostorPage {
-                    packer: ShelfPacker::new(side),
-                    last_used: 0,
-                })
-                .collect(),
+            slot_sprites: HashMap::new(),
+            free,
             entries: HashMap::new(),
+            runs: HashMap::new(),
             jobs: Vec::new(),
-            to_clear: (0..count).collect(),
+            job_keys: Vec::new(),
+            instances: Vec::new(),
+            budget_left: DRAW_BUDGET,
+            used_this_frame: 0,
+            pending: 0,
         }
     }
 
@@ -127,127 +244,300 @@ impl Impostors {
         self.layer_views.get(page as usize)
     }
 
-    /// The level for cells `cell_px` device pixels across: the smallest power of two at least as
-    /// fine.
-    pub(crate) fn level_for(cell_px: f64) -> u32 {
-        (cell_px.max(1.0).ceil() as u32).next_power_of_two()
+    /// Starts a frame: a fresh drawing budget and no squares used yet.
+    pub(crate) fn begin_frame(&mut self) {
+        self.budget_left = DRAW_BUDGET;
+        self.used_this_frame = 0;
+        self.pending = 0;
+        self.jobs.clear();
+        self.job_keys.clear();
+        self.instances.clear();
     }
 
-    /// The sprite of a chunk's impostor, planning its drawing when it has none (or an
-    /// incomplete one). `None` when no page has room this frame.
-    pub(crate) fn sprite_for(
+    /// The squares showing `run` over its view, planning the drawing of those that need it.
+    pub(crate) fn draw_run(
         &mut self,
-        key: ImpostorKey,
-        bounds: DRect,
-        tile_px: f64,
-        sprites: &mut Sprites,
-        frame: u64,
-    ) -> Option<u32> {
-        if let Some(entry) = self.entries.get_mut(&key)
-            && entry.complete
-        {
-            entry.last_used = frame;
-            if let Some(page) = self.pages.get_mut(entry.page as usize) {
-                page.last_used = frame;
-            }
-            return Some(entry.sprite);
-        }
-        let scale = f64::from(key.level) / tile_px.max(1.0);
-        let size = (bounds.size() * scale)
-            .ceil()
-            .max(glam::DVec2::ONE)
-            .as_uvec2();
-        let region = self.allocate(size, sprites, frame)?;
-        let sprite = sprites.impostor_sprite(region);
-        if let Some(old) = self.entries.insert(
-            key.clone(),
-            Impostor {
-                sprite,
-                page: region.page,
-                last_used: frame,
-                complete: true,
-            },
-        ) {
-            sprites.free_sprite(old.sprite);
-        }
-        self.jobs.push(ImpostorJob {
-            chunk: key.chunk.clone(),
-            bounds,
-            scale,
-            region,
-            key,
+        run: &RunView<'_, '_>,
+        sources: &mut RunSources<'_, '_>,
+    ) -> Vec<PlacedSquare> {
+        let run_key = run_key(run.layers, sources.cx);
+        let content = self.record_run(run_key, run.layers, sources);
+        let level = self.level_for(run.view_rect, run.zoom_px);
+        let side = square_side(level);
+        let mut squares = squares_in(run.view_rect, side);
+        let center = (run.view_rect.min + run.view_rect.max) * 0.5;
+        squares.sort_by(|a, b| {
+            let da =
+                (square_rect(*a, side).min + DVec2::splat(side * 0.5) - center).length_squared();
+            let db =
+                (square_rect(*b, side).min + DVec2::splat(side * 0.5) - center).length_squared();
+            da.total_cmp(&db)
         });
-        Some(sprite)
+        let mut placed = Vec::with_capacity(squares.len());
+        for square in squares {
+            let key = ImpostorKey {
+                run: run_key,
+                level,
+                square,
+            };
+            let rect = square_rect(square, side);
+            let existing = self.entries.get(&key).map(|entry| Existing {
+                slot: entry.slot,
+                valid: entry.content == content && entry.complete,
+            });
+            let slot = match existing {
+                Some(existing) if existing.valid => Some(existing.slot),
+                _ if self.budget_left > 0 => self.plan(&key, rect, content, run, sources),
+                _ => {
+                    self.pending += 1;
+                    // A stale picture until the square is drawn again; nothing when there is none.
+                    existing.map(|existing| existing.slot)
+                }
+            };
+            let Some(slot) = slot else {
+                self.pending += 1;
+                continue;
+            };
+            if let Some(entry) = self.entries.get_mut(&key) {
+                entry.last_used = sources.frame;
+            }
+            self.used_this_frame += 1;
+            placed.push(PlacedSquare { rect, slot });
+        }
+        placed
     }
 
-    /// A place on a page with room, or on the least recently used page not drawn from in
-    /// `frame`, emptied.
-    fn allocate(&mut self, size: UVec2, sprites: &mut Sprites, frame: u64) -> Option<Region> {
-        for (index, page) in (0u32..).zip(self.pages.iter_mut()) {
-            if let Some(origin) = page.packer.allocate(size) {
-                page.last_used = frame;
-                return Some(Region {
-                    page: index,
-                    origin,
-                    size,
+    /// The instances drawing `placed` squares from their pictures.
+    pub(crate) fn quads(
+        &mut self,
+        placed: &[PlacedSquare],
+        sprites: &mut Sprites,
+    ) -> Vec<Instance> {
+        placed
+            .iter()
+            .map(|square| plain(square.rect, self.sprite_of(square.slot, sprites), [255; 4]))
+            .collect()
+    }
+
+    /// Plans the drawing of a square; its slot, or `None` when no slot can be had this frame.
+    fn plan(
+        &mut self,
+        key: &ImpostorKey,
+        rect: DRect,
+        content: u64,
+        run: &RunView<'_, '_>,
+        sources: &mut RunSources<'_, '_>,
+    ) -> Option<Slot> {
+        let slot = match self.entries.get(key) {
+            Some(entry) => entry.slot,
+            None => self.allocate(sources.frame)?,
+        };
+        let scale = f64::from(SQUARE_TEXELS) / (rect.max.x - rect.min.x);
+        let mut layers = Vec::with_capacity(run.layers.len());
+        for layer in run.layers {
+            let cells = tiles_for_view(&sources.cx.geometry, sources.cx.map, rect, layer.offset());
+            let start = self.instances.len() as u32;
+            sources.chunks.collect(
+                layer.tiles,
+                cells,
+                sources.cx,
+                sources.frame,
+                &mut self.instances,
+            );
+            let end = self.instances.len() as u32;
+            if end > start {
+                layers.push(JobLayer {
+                    params: layer.params,
+                    instances: start..end,
                 });
             }
+            self.budget_left = self.budget_left.saturating_sub((end - start) as usize);
         }
-        let oldest = (0u32..)
-            .zip(self.pages.iter())
-            .filter(|(_, page)| page.last_used < frame)
-            .min_by_key(|(_, page)| page.last_used)
-            .map(|(index, _)| index)?;
-        let gone: Vec<ImpostorKey> = self
+        self.jobs.push(ImpostorJob {
+            region: slot.region(),
+            square: rect,
+            scale,
+            layers,
+        });
+        self.job_keys.push(key.clone());
+        self.entries.insert(
+            key.clone(),
+            Impostor {
+                slot,
+                content,
+                last_used: sources.frame,
+                complete: true,
+            },
+        );
+        Some(slot)
+    }
+
+    /// A free slot, or the slot of the impostor least recently used before `frame`.
+    fn allocate(&mut self, frame: u64) -> Option<Slot> {
+        if let Some(slot) = self.free.pop() {
+            return Some(slot);
+        }
+        let oldest = self
             .entries
             .iter()
-            .filter(|(_, entry)| entry.page == oldest)
-            .map(|(key, _)| key.clone())
-            .collect();
-        for key in gone {
-            if let Some(entry) = self.entries.remove(&key) {
-                sprites.free_sprite(entry.sprite);
+            .filter(|(_, entry)| entry.last_used < frame)
+            .min_by_key(|(_, entry)| entry.last_used)
+            .map(|(key, _)| key.clone())?;
+        self.entries.remove(&oldest).map(|entry| entry.slot)
+    }
+
+    /// The resolution for a run over `view_rect`: the power of two meeting `zoom_px`, coarser while
+    /// its squares would not fit the slots this frame has left.
+    fn level_for(&self, view_rect: DRect, zoom_px: f64) -> i32 {
+        let mut level = zoom_px.max(f64::MIN_POSITIVE).log2().ceil() as i32;
+        let total = self.free.len() + self.entries.len();
+        let left = total.saturating_sub(self.used_this_frame) as u64;
+        while level > COARSEST_LEVEL && square_count(view_rect, square_side(level)) > left {
+            level -= 1;
+        }
+        level
+    }
+
+    /// Notes what a run is now; its content hash. A run whose chunks or attributes changed holds
+    /// its new chunks instead of the old.
+    fn record_run(
+        &mut self,
+        run_key: u64,
+        layers: &[RunLayer<'_>],
+        sources: &RunSources<'_, '_>,
+    ) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        run_key.hash(&mut hasher);
+        for layer in layers {
+            hash_params(&layer.params, &mut hasher);
+            for chunk in layer.tiles.chunks() {
+                chunk.pos.hash(&mut hasher);
+                (Arc::as_ptr(chunk.chunk) as usize).hash(&mut hasher);
             }
         }
-        self.to_clear.push(oldest);
-        let page = self.pages.get_mut(oldest as usize)?;
-        page.packer.clear();
-        page.last_used = frame;
-        page.packer.allocate(size).map(|origin| Region {
-            page: oldest,
-            origin,
-            size,
-        })
+        let content = hasher.finish();
+        let frame = sources.frame;
+        match self.runs.get_mut(&run_key) {
+            Some(record) if record.content == content => record.last_used = frame,
+            _ => {
+                let held = layers
+                    .iter()
+                    .flat_map(|layer| layer.tiles.chunks().map(|chunk| Arc::clone(chunk.chunk)))
+                    .collect();
+                self.runs.insert(
+                    run_key,
+                    RunRecord {
+                        content,
+                        _held: held,
+                        last_used: frame,
+                    },
+                );
+            }
+        }
+        content
     }
 
-    /// The pictures to draw this frame and the pages to clear first.
+    fn sprite_of(&mut self, slot: Slot, sprites: &mut Sprites) -> u32 {
+        let id = slot.page * SQUARES_PER_SIDE * SQUARES_PER_SIDE + slot.index;
+        *self
+            .slot_sprites
+            .entry(id)
+            .or_insert_with(|| sprites.impostor_sprite(slot.region()))
+    }
+
+    /// The pictures to draw this frame, with their instances.
     pub(crate) fn take_work(&mut self) -> ImpostorWork {
         ImpostorWork {
-            clear: std::mem::take(&mut self.to_clear),
             jobs: std::mem::take(&mut self.jobs),
+            keys: std::mem::take(&mut self.job_keys),
+            instances: std::mem::take(&mut self.instances),
         }
     }
 
-    /// Marks the impostors of `jobs` as drawn while images were missing, to draw them again.
-    pub(crate) fn mark_incomplete(&mut self, jobs: &[ImpostorJob]) {
-        for job in jobs {
-            if let Some(entry) = self.entries.get_mut(&job.key) {
+    /// Marks the impostors of `work` as drawn while images were missing, to draw them again.
+    pub(crate) fn mark_incomplete(&mut self, work: &ImpostorWork) {
+        for key in &work.keys {
+            if let Some(entry) = self.entries.get_mut(key) {
                 entry.complete = false;
             }
         }
     }
 
-    /// The impostors in use.
+    /// Lets go of the runs not drawn since `frame` (their chunks are no longer held).
+    pub(crate) fn forget_runs_before(&mut self, frame: u64) {
+        self.runs.retain(|_, record| record.last_used >= frame);
+    }
+
+    /// The impostors kept.
     pub(crate) fn count(&self) -> usize {
         self.entries.len()
+    }
+
+    /// The squares in view that are not drawn yet (the drawing budget ran out).
+    pub(crate) fn pending(&self) -> usize {
+        self.pending
     }
 }
 
 /// What to draw into the impostor pages before the frame.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ImpostorWork {
-    pub(crate) clear: Vec<u32>,
     pub(crate) jobs: Vec<ImpostorJob>,
+    keys: Vec<ImpostorKey>,
+    pub(crate) instances: Vec<Instance>,
+}
+
+/// A run's identity: its layers, the grid and the tilesets' sprites.
+fn run_key(layers: &[RunLayer<'_>], cx: &ChunkContext<'_>) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    cx.geometry.hash(&mut hasher);
+    cx.tilesets.hash(&mut hasher);
+    for layer in layers {
+        layer.id.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn hash_params(params: &LayerParams, hasher: &mut DefaultHasher) {
+    for value in params.offset {
+        value.to_bits().hash(hasher);
+    }
+    params.opacity.to_bits().hash(hasher);
+    params.tinted.hash(hasher);
+    for value in params.tint {
+        value.to_bits().hash(hasher);
+    }
+}
+
+/// The world side of a square at `level` (2^level device pixels per world pixel).
+fn square_side(level: i32) -> f64 {
+    f64::from(SQUARE_TEXELS) / 2f64.powi(level)
+}
+
+fn square_rect(square: IVec2, side: f64) -> DRect {
+    DRect::from_min_size(square.as_dvec2() * side, DVec2::splat(side))
+}
+
+/// How many squares of `side` meet `rect`.
+fn square_count(rect: DRect, side: f64) -> u64 {
+    let first = (rect.min / side).floor();
+    let last = (rect.max / side).ceil();
+    let across = (last - first).max(DVec2::ZERO);
+    (across.x.min(1e9) as u64).saturating_mul(across.y.min(1e9) as u64)
+}
+
+/// The squares of `side` meeting `rect`.
+fn squares_in(rect: DRect, side: f64) -> Vec<IVec2> {
+    let first = (rect.min / side).floor();
+    let last = (rect.max / side).ceil() - DVec2::ONE;
+    let clamp = |v: f64| v.clamp(f64::from(i32::MIN / 2), f64::from(i32::MAX / 2)) as i32;
+    let mut squares = Vec::new();
+    for y in clamp(first.y)..=clamp(last.y) {
+        for x in clamp(first.x)..=clamp(last.x) {
+            squares.push(IVec2::new(x, y));
+        }
+    }
+    squares
 }
 
 #[cfg(test)]
@@ -255,9 +545,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn levels_meet_the_screen() {
-        assert_eq!(Impostors::level_for(0.3), 1);
-        assert_eq!(Impostors::level_for(2.0), 2);
-        assert_eq!(Impostors::level_for(5.5), 8);
+    fn squares_tile_the_view_at_the_resolution() {
+        assert_eq!(square_side(0), 256.0);
+        assert_eq!(square_side(-2), 1024.0);
+        let view = DRect::from_min_size(DVec2::new(-10.0, 0.0), DVec2::new(300.0, 256.0));
+        let squares = squares_in(view, 256.0);
+        assert_eq!(square_count(view, 256.0), 3);
+        assert_eq!(
+            squares,
+            [IVec2::new(-1, 0), IVec2::new(0, 0), IVec2::new(1, 0)]
+        );
+        assert_eq!(
+            square_rect(IVec2::new(-1, 2), 256.0).min,
+            DVec2::new(-256.0, 512.0)
+        );
+        let slot = Slot { page: 1, index: 9 };
+        assert_eq!(slot.region().origin, UVec2::new(256, 256));
     }
 }

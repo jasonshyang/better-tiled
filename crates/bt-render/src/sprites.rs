@@ -472,7 +472,7 @@ impl Sprites {
         pending
     }
 
-    /// A sprite for an impostor in `region` of the impostor pages.
+    /// A sprite for an impostor slot in `region` of the impostor pages (kept for the slot).
     pub(crate) fn impostor_sprite(&mut self, region: Region) -> u32 {
         let sprite = self.allocate(1);
         self.set(
@@ -490,12 +490,6 @@ impl Sprites {
             },
         );
         sprite
-    }
-
-    /// Frees a sprite allocated alone (an impostor's).
-    pub(crate) fn free_sprite(&mut self, sprite: u32) {
-        self.set(sprite, GpuSprite::default());
-        self.release(sprite, 1);
     }
 
     /// Waits for every image asked for and not yet decoded (headless renders).

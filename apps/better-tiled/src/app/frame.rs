@@ -417,7 +417,9 @@ impl App {
             .unwrap_or_default();
         let readiness = Readiness {
             busy: self.workers.is_busy() || !self.intents.is_empty(),
-            pending_images: stats.pending_images > 0 || self.tile_images.take_pending(),
+            pending_images: stats.pending_images > 0
+                || stats.pending_impostors > 0
+                || self.tile_images.take_pending(),
             has_document: self.editor.current().is_some(),
             expects_document: self.expects_document,
         };

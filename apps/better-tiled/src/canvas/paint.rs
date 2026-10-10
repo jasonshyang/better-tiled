@@ -103,6 +103,10 @@ impl CallbackTrait for CanvasCallback {
         };
         match prepared {
             Ok(stats) => {
+                // Squares of a far view not drawn yet are drawn next frame.
+                if stats.pending_impostors > 0 {
+                    self.waker.request_repaint();
+                }
                 // An animation asks for the frame that shows its next step, and no sooner.
                 if let Some(next) = stats.next_frame_ms {
                     let delay = next.saturating_sub(self.time_ms).max(1);

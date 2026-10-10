@@ -13,8 +13,11 @@ pub struct RenderStats {
     pub draws: usize,
     /// Texture pages in use.
     pub pages: usize,
-    /// Chunks drawn as impostors.
+    /// Impostors kept: pictures of squares of tile layers, drawn far out.
     pub impostors: usize,
+    /// Squares in view not drawn yet: the frame's budget for drawing impostors ran out, and
+    /// another frame will show them.
+    pub pending_impostors: usize,
     /// Images still being decoded: the frame lacks them and another frame will show them.
     pub pending_images: usize,
     /// Whether anything on screen animates.

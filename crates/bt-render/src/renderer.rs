@@ -16,12 +16,18 @@ use crate::draw_list::{
 use crate::error::RenderError;
 use crate::impostors::{ImpostorWork, Impostors};
 use crate::input::FrameInput;
-use crate::instance::INSTANCE_SIZE;
+use crate::instance::{INSTANCE_SIZE, solid};
 use crate::pages::Pages;
 use crate::sprites::{SPRITE_SIZE, Sprites};
 use crate::stats::RenderStats;
 use crate::supply::ImageSupply;
 use crate::vector::VECTOR_VERTEX_SIZE;
+
+/// One layer of an impostor: its parameters' entry and its instances.
+struct LayerDraw {
+    params: u32,
+    instances: std::ops::Range<u32>,
+}
 
 /// The stride of dynamic uniform entries (the alignment every device accepts).
 const UNIFORM_STRIDE: u64 = 256;
@@ -125,6 +131,7 @@ impl MapRenderer {
         self.frame += 1;
         let frame = self.frame;
         self.data.clear();
+        self.impostors.begin_frame();
         for view in views {
             for tileset in &view.map.tilesets {
                 self.sprites
@@ -153,9 +160,10 @@ impl MapRenderer {
         let uploaded = self.upload();
         let work = self.impostors.take_work();
         if pending > 0 {
-            self.impostors.mark_incomplete(&work.jobs);
+            self.impostors.mark_incomplete(&work);
         }
-        self.draw_impostors(&work);
+        self.draw_impostors(work);
+        self.impostors.forget_runs_before(frame);
         self.chunks.trim(frame);
         self.sprites.release_unused(frame);
         self.stats = RenderStats {
@@ -164,6 +172,7 @@ impl MapRenderer {
             draws: self.data.views.iter().map(|view| view.steps.len()).sum(),
             pages: self.pages.count(),
             impostors: self.impostors.count(),
+            pending_impostors: self.impostors.pending(),
             pending_images: pending,
             animating: next_frame_ms.is_some(),
             next_frame_ms,
@@ -304,33 +313,43 @@ impl MapRenderer {
     }
 
     /// Draws the impostors planned this frame into their pages, page by page.
-    fn draw_impostors(&mut self, work: &ImpostorWork) {
-        if work.clear.is_empty() && work.jobs.is_empty() {
+    /// Draws this frame's impostors into their slots: each slot cleared, then its run's layers
+    /// with their parameters, clipped to the slot.
+    fn draw_impostors(&mut self, work: ImpostorWork) {
+        if work.jobs.is_empty() {
             return;
         }
-        let mut instances = Vec::new();
-        let mut ranges = Vec::with_capacity(work.jobs.len());
+        let mut instances = work.instances;
         let mut globals = Vec::with_capacity(work.jobs.len());
+        // The clear's parameters first, then each job's layers'.
+        let mut params = vec![LayerParams::plain(glam::DVec2::ZERO, 1.0)];
+        let mut clears = Vec::with_capacity(work.jobs.len());
+        let mut layer_draws: Vec<Vec<LayerDraw>> = Vec::with_capacity(work.jobs.len());
         for job in &work.jobs {
-            let start = instances.len() as u32;
-            instances.extend(
-                self.chunks
-                    .instances(&job.chunk)
-                    .iter()
-                    .map(|keyed| keyed.instance),
-            );
-            ranges.push(start..instances.len() as u32);
             globals.push(Globals {
-                origin: [job.bounds.min.x as f32, job.bounds.min.y as f32],
+                origin: [job.square.min.x as f32, job.square.min.y as f32],
                 zoom: job.scale as f32,
                 pad0: 0.0,
                 viewport: [job.region.size.x as f32, job.region.size.y as f32],
                 pad1: [0.0; 2],
             });
+            clears.push(instances.len() as u32);
+            instances.push(solid(job.square, bt_core::Color::rgba(0, 0, 0, 0)));
+            let mut draws = Vec::with_capacity(job.layers.len());
+            for layer in &job.layers {
+                draws.push(LayerDraw {
+                    params: params.len() as u32,
+                    instances: layer.instances.clone(),
+                });
+                params.push(layer.params);
+            }
+            layer_draws.push(draws);
         }
         let gpu = &mut self.gpu;
         gpu.impostor_globals
             .write_strided(&self.device, &self.queue, &globals);
+        gpu.impostor_params
+            .write_strided(&self.device, &self.queue, &params);
         gpu.impostor_instances
             .write_all(&self.device, &self.queue, &instances);
         gpu.rebind_impostor_pass(&self.device, &self.pages);
@@ -339,11 +358,6 @@ impl MapRenderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("bt impostors"),
             });
-        for page in &work.clear {
-            if let Some(view) = self.impostors.layer_view(*page) {
-                drop(begin_pass(&mut encoder, view, true));
-            }
-        }
         let pipelines = gpu.offscreen.as_ref().unwrap_or(&gpu.target);
         let mut pages: Vec<u32> = work.jobs.iter().map(|job| job.region.page).collect();
         pages.sort_unstable();
@@ -359,18 +373,11 @@ impl MapRenderer {
                 continue;
             };
             let mut pass = begin_pass(&mut encoder, view, false);
-            pass.set_pipeline(&pipelines.sprite);
             pass.set_vertex_buffer(0, gpu.impostor_instances.buffer.slice(..));
-            pass.set_bind_group(1, group1, &[0]);
-            for (index, job) in work
-                .jobs
-                .iter()
-                .enumerate()
-                .filter(|(_, job)| job.region.page == page)
-            {
-                let Some(range) = ranges.get(index) else {
+            for (index, job) in work.jobs.iter().enumerate() {
+                if job.region.page != page {
                     continue;
-                };
+                }
                 let region = job.region;
                 pass.set_viewport(
                     region.origin.x as f32,
@@ -387,7 +394,20 @@ impl MapRenderer {
                     region.size.y,
                 );
                 pass.set_bind_group(0, group0, &[(index as u64 * UNIFORM_STRIDE) as u32]);
-                pass.draw(0..6, range.clone());
+                if let Some(clear) = clears.get(index) {
+                    pass.set_pipeline(&pipelines.replace);
+                    pass.set_bind_group(1, group1, &[0]);
+                    pass.draw(0..6, *clear..*clear + 1);
+                }
+                pass.set_pipeline(&pipelines.sprite);
+                for draw in layer_draws.get(index).map_or(&[][..], Vec::as_slice) {
+                    pass.set_bind_group(
+                        1,
+                        group1,
+                        &[(u64::from(draw.params) * UNIFORM_STRIDE) as u32],
+                    );
+                    pass.draw(0..6, draw.instances.clone());
+                }
             }
         }
         self.queue.submit([encoder.finish()]);
@@ -564,6 +584,8 @@ fn create_buffer(
 struct Pipelines {
     sprite: wgpu::RenderPipeline,
     vector: wgpu::RenderPipeline,
+    /// Sprites that replace what is under them (clearing an impostor's slot).
+    replace: wgpu::RenderPipeline,
 }
 
 /// What the bind groups were made from, to remake them when it changes.
@@ -595,7 +617,7 @@ struct Gpu {
     bound: Option<BoundTo>,
     impostor_globals: GrowingBuffer,
     impostor_instances: GrowingBuffer,
-    impostor_params: wgpu::Buffer,
+    impostor_params: GrowingBuffer,
     impostor_group0: Option<wgpu::BindGroup>,
     impostor_group1: Option<wgpu::BindGroup>,
     impostor_bound: Option<BoundTo>,
@@ -676,25 +698,6 @@ impl Gpu {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..wgpu::TextureViewDescriptor::default()
         });
-        // The impostor pass draws tiles as they are; the frame applies the layer to the impostor.
-        let neutral = LayerParams {
-            offset: [0.0; 2],
-            opacity: 1.0,
-            tinted: 0,
-            tint: [1.0; 4],
-        };
-        let mut contents = vec![0u8; UNIFORM_STRIDE as usize];
-        if let Some(target) = contents.get_mut(..std::mem::size_of::<LayerParams>()) {
-            target.copy_from_slice(bytemuck::bytes_of(&neutral));
-        }
-        let impostor_params = wgpu::util::DeviceExt::create_buffer_init(
-            device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("bt impostor params"),
-                contents: &contents,
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        );
         Gpu {
             layout0,
             layout1,
@@ -747,7 +750,12 @@ impl Gpu {
                 wgpu::BufferUsages::VERTEX,
                 INSTANCE_SIZE * 4096,
             ),
-            impostor_params,
+            impostor_params: GrowingBuffer::new(
+                device,
+                "bt impostor params",
+                wgpu::BufferUsages::UNIFORM,
+                UNIFORM_STRIDE * 16,
+            ),
             impostor_group0: None,
             impostor_group1: None,
             impostor_bound: None,
@@ -829,9 +837,12 @@ impl Gpu {
             globals: self.impostor_globals.generation,
             sprites: self.sprites.generation,
             remap: self.remap.generation,
-            params: 0,
+            params: self.impostor_params.generation,
         };
-        if self.impostor_bound == Some(now) && self.impostor_group0.is_some() {
+        if self.impostor_bound == Some(now)
+            && self.impostor_group0.is_some()
+            && self.impostor_group1.is_some()
+        {
             return;
         }
         self.impostor_group0 = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -864,20 +875,18 @@ impl Gpu {
                 },
             ],
         }));
-        if self.impostor_group1.is_none() {
-            self.impostor_group1 = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("bt impostor layer"),
-                layout: &self.layout1,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &self.impostor_params,
-                        offset: 0,
-                        size: NonZeroU64::new(std::mem::size_of::<LayerParams>() as u64),
-                    }),
-                }],
-            }));
-        }
+        self.impostor_group1 = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bt impostor layer"),
+            layout: &self.layout1,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &self.impostor_params.buffer,
+                    offset: 0,
+                    size: NonZeroU64::new(std::mem::size_of::<LayerParams>() as u64),
+                }),
+            }],
+        }));
         self.impostor_bound = Some(now);
     }
 }
@@ -909,33 +918,41 @@ fn pipelines(
         blend: Some(OVER),
         write_mask: wgpu::ColorWrites::ALL,
     })];
-    let sprite = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("bt sprites"),
-        layout: Some(&layout),
-        vertex: wgpu::VertexState {
-            module: &sprite_shader,
-            entry_point: Some("vs_main"),
-            buffers: &[Some(wgpu::VertexBufferLayout {
-                array_stride: INSTANCE_SIZE,
-                step_mode: wgpu::VertexStepMode::Instance,
-                attributes: &wgpu::vertex_attr_array![
-                    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Unorm8x4
-                ],
-            })],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        },
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &sprite_shader,
-            entry_point: Some("fs_main"),
-            targets: &target,
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        }),
-        multiview_mask: None,
-        cache: None,
-    });
+    let sprite_pipeline = |label: &str, blend: wgpu::BlendState| {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &sprite_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: INSTANCE_SIZE,
+                    step_mode: wgpu::VertexStepMode::Instance,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Unorm8x4
+                    ],
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &sprite_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(blend),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            multiview_mask: None,
+            cache: None,
+        })
+    };
+    let sprite = sprite_pipeline("bt sprites", OVER);
+    let replace = sprite_pipeline("bt sprites replacing", wgpu::BlendState::REPLACE);
     let vector = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("bt vectors"),
         layout: Some(&layout),
@@ -963,5 +980,9 @@ fn pipelines(
         multiview_mask: None,
         cache: None,
     });
-    Pipelines { sprite, vector }
+    Pipelines {
+        sprite,
+        vector,
+        replace,
+    }
 }

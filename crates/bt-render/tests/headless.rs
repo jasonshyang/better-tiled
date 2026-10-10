@@ -206,7 +206,7 @@ fn animations_show_their_frame_and_say_when_the_next_is_due() {
 }
 
 #[test]
-fn far_out_chunks_are_drawn_as_impostors_that_match_the_tiles() {
+fn far_out_tile_layers_are_drawn_as_impostors_that_match_the_tiles() {
     let Some(device) = device() else { return };
     let atlas = Atlas::builder()
         .tile_size(16, 16)
@@ -227,7 +227,7 @@ fn far_out_chunks_are_drawn_as_impostors_that_match_the_tiles() {
         .build()
         .unwrap();
     let map = Arc::new(map);
-    // 16-pixel cells at a quarter: 4 pixels on screen, drawn through impostors of 4 per cell.
+    // 16-pixel cells at a quarter: 4 pixels on screen, drawn through impostors at that scale.
     let far = Render::of(Arc::clone(&map))
         .scale(0.25)
         .run(device)
@@ -282,6 +282,52 @@ fn far_out_chunks_are_drawn_as_impostors_that_match_the_tiles() {
         .prepare(&mut store, std::slice::from_ref(&frame))
         .unwrap();
     let stats = renderer.prepare(&mut store, &[frame]).unwrap();
-    assert_eq!(stats.impostors, 16, "one per chunk");
-    assert_eq!(stats.instances, 16);
+    // The map is 1024 world pixels a side: one square of 256 texels at a quarter.
+    assert_eq!(stats.impostors, 1, "one per square");
+    assert_eq!(stats.instances, 1);
+    assert_eq!(stats.pending_impostors, 0);
+}
+
+#[test]
+fn far_out_squares_stack_oversized_tiles_across_their_edges_as_tiled_does() {
+    let Some(device) = device() else { return };
+    let ground = Atlas::builder().name("ground").build_embedded().unwrap();
+    let tall = Atlas::builder()
+        .name("tall")
+        .tile_size(16, 32)
+        .grid(4, 2)
+        .build_embedded()
+        .unwrap();
+    // At a quarter, a square is 1024 world pixels: 64 cells. A tall tile of the lower layer in
+    // the first row of the second square reaches up into the first square, where a tile of the
+    // upper layer must stay on top of it.
+    let grid = |row: usize, cell: &str| -> String {
+        (0..70)
+            .map(|y| {
+                if y == row {
+                    format!(". {cell} . .")
+                } else {
+                    ". . . .".to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let map = MapBuilder::new(UVec2::new(16, 16), UVec2::new(4, 70))
+        .tileset(ground.tileset.clone())
+        .tileset(tall.tileset.clone())
+        .tile_layer("low", &grid(64, "5@1"))
+        .tile_layer("high", &grid(63, "1"))
+        .build()
+        .unwrap();
+    let picture = Render::of(Arc::new(map)).scale(0.25).run(device).unwrap();
+    let high = Atlas::tile_color(bt_core::TileId(1));
+    let low = Atlas::tile_color(bt_core::TileId(5));
+    // Row 63 is pixels 252..256, row 64 is 256..260; column 1 is pixels 4..8.
+    assert_eq!(
+        picture.pixel(6, 254),
+        Some(high),
+        "the upper layer stays on top"
+    );
+    assert_eq!(picture.pixel(6, 258), Some(low), "the tall tile's own cell");
 }

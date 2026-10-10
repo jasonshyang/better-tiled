@@ -319,13 +319,17 @@ impl Render {
         if let Some(previews) = &self.previews {
             input = input.previews(previews.layer, Arc::clone(&previews.tiles));
         }
-        // Everything the frame needs is asked for, waited for, then drawn.
+        // Everything the frame needs is asked for, waited for, then drawn; far out, the squares
+        // of tile layers are drawn a frame's budget at a time until none is left.
         renderer.prepare(images, std::slice::from_ref(&input))?;
         renderer.wait_for_images(images);
-        let stats = renderer.prepare(images, std::slice::from_ref(&input))?;
+        let mut stats = renderer.prepare(images, std::slice::from_ref(&input))?;
         if stats.pending_images > 0 {
             renderer.wait_for_images(images);
-            renderer.prepare(images, std::slice::from_ref(&input))?;
+            stats = renderer.prepare(images, std::slice::from_ref(&input))?;
+        }
+        while stats.pending_impostors > 0 {
+            stats = renderer.prepare(images, std::slice::from_ref(&input))?;
         }
         let target = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("bt picture"),

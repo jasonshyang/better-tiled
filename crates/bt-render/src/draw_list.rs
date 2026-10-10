@@ -16,7 +16,7 @@ use glam::{DVec2, UVec2};
 
 use crate::chunks::{ChunkCache, ChunkContext, tiles_for_view};
 use crate::error::RenderError;
-use crate::impostors::{IMPOSTOR_CELL_PX, ImpostorKey, Impostors};
+use crate::impostors::{IMPOSTOR_CELL_PX, Impostors, RunLayer, RunSources, RunView};
 use crate::input::FrameInput;
 use crate::instance::{Instance, cell_instance, marker, object_instance, plain, solid};
 use crate::objects::{object_color, shape_vectors};
@@ -32,6 +32,11 @@ const DIMMED: f64 = 0.4;
 const FADE: f64 = 0.6;
 /// The most copies of a repeated image layer drawn along an axis.
 const MAX_REPEATS: i64 = 1024;
+/// Cells smaller than this on screen (device pixels) are drawn through impostors when a view
+/// shows more than [`FAR_CELLS`] of them; smaller than [`IMPOSTOR_CELL_PX`], always.
+const FAR_CELL_PX: f64 = 16.0;
+/// The cells (summed over tile layers) above which a view of small cells uses impostors.
+const FAR_CELLS: u64 = 100_000;
 
 /// A view's camera as the shaders read it.
 #[repr(C)]
@@ -55,7 +60,7 @@ pub(crate) struct LayerParams {
 }
 
 impl LayerParams {
-    fn plain(offset: DVec2, opacity: f64) -> LayerParams {
+    pub(crate) fn plain(offset: DVec2, opacity: f64) -> LayerParams {
         LayerParams {
             offset: [offset.x as f32, offset.y as f32],
             opacity: opacity as f32,
@@ -64,7 +69,7 @@ impl LayerParams {
         }
     }
 
-    fn tinted(offset: DVec2, opacity: f64, tint: Option<Color>) -> LayerParams {
+    pub(crate) fn tinted(offset: DVec2, opacity: f64, tint: Option<Color>) -> LayerParams {
         let mut params = LayerParams::plain(offset, opacity);
         if let Some(tint) = tint.filter(|t| *t != Color::WHITE) {
             params.tinted = 1;
@@ -184,6 +189,31 @@ pub(crate) fn check_layers(input: &FrameInput) -> Result<(), RenderError> {
     Ok(())
 }
 
+/// The cells of the visible tile layers a view of `view_rect` may show, summed over the layers
+/// (an estimate of the instances drawing them would take).
+fn visible_cells(map: &Map, geometry: &MapGeometry, view_rect: DRect) -> u64 {
+    let mut cells = 0u64;
+    map.for_each_layer(|layer, _| {
+        let LayerKind::Tile(tiles) = &layer.kind else {
+            return;
+        };
+        let Some(effective) = map.effective_layer(layer.id) else {
+            return;
+        };
+        let Some(used) = tiles.chunk_bounds() else {
+            return;
+        };
+        if !effective.visible {
+            return;
+        }
+        let shown = tiles_for_view(geometry, map, view_rect, effective.offset).intersection(used);
+        if !shown.is_empty() {
+            cells += u64::from(shown.w.unsigned_abs()) * u64::from(shown.h.unsigned_abs());
+        }
+    });
+    cells
+}
+
 /// A hash of the sprites the map's tilesets have, for the chunk caches.
 fn tileset_signature(map: &Map, sprites: &Sprites) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -224,11 +254,18 @@ pub(crate) fn build_view(input: &FrameInput, data: &mut FrameData, res: &mut Res
             }
         });
     }
+    let tile_px = f64::from(map.tile_width.max(map.tile_height));
+    let cell_px = tile_px * camera.zoom;
+    let far = cell_px < IMPOSTOR_CELL_PX
+        || (cell_px < FAR_CELL_PX && visible_cells(map, &geometry, view_rect) > FAR_CELLS);
     let mut walk = Walk {
         input,
         map,
         geometry,
         view_rect,
+        far,
+        run: Vec::new(),
+        run_shift: DVec2::ZERO,
         tilesets: tileset_signature(map, res.sprites),
         data,
         res,
@@ -268,6 +305,12 @@ struct Walk<'w, 'r, 'a> {
     map: &'w Map,
     geometry: MapGeometry,
     view_rect: DRect,
+    /// Tile layers are drawn through impostors.
+    far: bool,
+    /// Tile layers waiting to be drawn as one run of impostors.
+    run: Vec<RunLayer<'w>>,
+    /// How far parallax moves the waiting run.
+    run_shift: DVec2,
     tilesets: u64,
     data: &'w mut FrameData,
     res: &'w mut Resources<'r>,
@@ -289,6 +332,8 @@ where
     }
 
     fn push_step(&mut self, kind: StepKind, start: u32, end: u32, params: u32) {
+        // Whatever is drawn next goes above the run of tile layers waiting to be drawn.
+        self.flush_run();
         if start == end {
             return;
         }
@@ -327,6 +372,7 @@ where
     }
 
     fn close_group(&mut self) {
+        self.flush_run();
         let end = self.draws.steps.len();
         if end > self.group_start {
             self.draws.groups.push(Group {
@@ -373,6 +419,9 @@ where
                 LayerKind::Group(children) => {
                     self.layers(children, effective, selected);
                 }
+                LayerKind::Tile(tiles) if self.far => {
+                    self.add_to_run(layer, tiles, &effective, opacity);
+                }
                 LayerKind::Tile(tiles) => {
                     self.begin_group(layer.blend_mode);
                     let params = self.params(LayerParams::tinted(offset, opacity, effective.tint));
@@ -406,52 +455,78 @@ where
         }
     }
 
-    /// A tile layer's cells from the chunk caches, or far out its chunks' impostors.
+    /// A tile layer's cells from the chunk caches.
     fn tile_layer(&mut self, tiles: &TileLayer, offset: DVec2, params: u32) {
         let tiles_rect = tiles_for_view(&self.geometry, self.map, self.view_rect, offset);
-        let tile_px = f64::from(self.map.tile_width.max(self.map.tile_height));
-        let cell_px = tile_px * self.input.camera.zoom;
         let cx = ChunkContext {
             map: self.map,
             geometry: self.geometry,
             sprites: self.res.sprites,
             tilesets: self.tilesets,
         };
-        if cell_px >= IMPOSTOR_CELL_PX {
-            let start = self.data.instances.len() as u32;
-            self.res.chunks.collect(
-                tiles,
-                tiles_rect,
-                &cx,
-                self.res.frame,
-                &mut self.data.instances,
-            );
-            let end = self.data.instances.len() as u32;
-            self.push_step(StepKind::Sprites, start, end, params);
+        let start = self.data.instances.len() as u32;
+        self.res.chunks.collect(
+            tiles,
+            tiles_rect,
+            &cx,
+            self.res.frame,
+            &mut self.data.instances,
+        );
+        let end = self.data.instances.len() as u32;
+        self.push_step(StepKind::Sprites, start, end, params);
+    }
+
+    /// Adds a tile layer to the run of impostors waiting to be drawn, drawing the waiting run
+    /// first when the layer cannot join it (a blend mode, another parallax).
+    fn add_to_run(
+        &mut self,
+        layer: &'w Layer,
+        tiles: &'w TileLayer,
+        effective: &EffectiveLayer,
+        opacity: f64,
+    ) {
+        let shift = self.parallax_offset(effective) - effective.offset;
+        if !self.run.is_empty()
+            && (shift != self.run_shift || layer.blend_mode != BlendMode::Normal)
+        {
+            self.flush_run();
+        }
+        self.begin_group(layer.blend_mode);
+        self.run.push(RunLayer {
+            id: layer.id,
+            tiles,
+            params: LayerParams::tinted(effective.offset, opacity, effective.tint),
+        });
+        self.run_shift = shift;
+    }
+
+    /// Draws the waiting run of tile layers from its impostors.
+    fn flush_run(&mut self) {
+        if self.run.is_empty() {
             return;
         }
-        let visible = self
-            .res
-            .chunks
-            .visible(tiles, tiles_rect, &cx, self.res.frame);
-        let level = Impostors::level_for(cell_px);
-        let mut instances = Vec::with_capacity(visible.len());
-        for chunk in visible {
-            let key = ImpostorKey {
-                chunk: chunk.key,
-                level,
-            };
-            let sprite = self.res.impostors.sprite_for(
-                key,
-                chunk.bounds,
-                tile_px,
-                self.res.sprites,
-                self.res.frame,
-            );
-            if let Some(sprite) = sprite {
-                instances.push(plain(chunk.bounds, sprite, [255; 4]));
-            }
-        }
+        let layers = std::mem::take(&mut self.run);
+        let shift = self.run_shift;
+        let cx = ChunkContext {
+            map: self.map,
+            geometry: self.geometry,
+            sprites: self.res.sprites,
+            tilesets: self.tilesets,
+        };
+        let placed = self.res.impostors.draw_run(
+            &RunView {
+                layers: &layers,
+                view_rect: self.view_rect.translated(-shift),
+                zoom_px: self.input.camera.zoom,
+            },
+            &mut RunSources {
+                chunks: self.res.chunks,
+                cx: &cx,
+                frame: self.res.frame,
+            },
+        );
+        let instances = self.res.impostors.quads(&placed, self.res.sprites);
+        let params = self.params(LayerParams::plain(shift, 1.0));
         self.push_instances(params, &instances);
     }
 
