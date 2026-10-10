@@ -247,3 +247,72 @@ reads what it understands and says so once, in a note. The current version is 1.
 | Godot section | reads into its fields with defaults, writes back as read, keeps unknown keys in nested entries |
 | Concurrent writes | two processes (and two threads with separate handles) editing different entries of one file lose nothing |
 | Moves | Save As moves an entry within a file and across files; `--out` leaves the original; orphans are listed |
+
+## 11. As built at M3
+
+M3 built the whole crate, and `runtime_dir()` in `bt-utils::paths` for its locks. What exists:
+
+| Module | What it holds |
+|---|---|
+| `file` | `ProjectFile::{find, location, load, edit, move_entry}`, `EntryPlace { file, key }` with `for_map`, `FILE_NAME`; the lock |
+| `paths` | `key(file, path)`, `resolve(file, key)`, `tileset_key(tileset)` |
+| `schema` | `Document` (`from_json`, `to_json`, `version`, `version_note`, `entry`, `keys`, `automap`, `set_automap`, `remove_automap`, `godot`, `set_godot`, `remove_godot`, `move_entry`, `remove_entry`, `orphans`), `MapEntry`, `Note` |
+| `automap` | `AutoMapRecord`, `RunRecord`, `BindingRecord`, `PaintedRecord`: public fields, `unknown` in each |
+| `rows` | `encode`, `decode`, `RowCell::{Empty, Tile { tileset, tile, flip }}`, `RowError::{CountTooLarge, UnknownFlag, Malformed}` |
+| `checksum` | `tile_layer(map, layer)`, `objects(map, objects)` |
+| `godot` | `GodotSetup` and its `PhysicsLayerSetup`, `NavigationLayerSetup`, `OcclusionLayerSetup` |
+| `error` | `Error`, with `refused()` for a read-only file or folder |
+
+Where it differs from the text above, or says more:
+
+- **The user's folders are values.** `find(map, home)` and `location(map, open_project, home)`
+  take the home folder, as `search_up` and the editor's builder do, and `edit(path,
+  lock_folder, change)` and `move_entry` take the lock folder; the programs pass
+  `std::env::home_dir()` and `runtime_dir()`, tests folders of their own (`13-testing.md`,
+  §1). `find` and `location` return a `Result`: a relative map path is made absolute against
+  the working folder. `location` returns the file `find` finds when there is one, so a writer
+  calls it alone; whether the map's search reaches the open project's folder is decided with
+  links followed, and the file's path stays in the map's form.
+- **The lock** is `project-<16 hex digits>.lock` in the lock folder, from FNV-1a of the project
+  file's canonical path (its folder's, for a file not made yet), so programs reaching one file
+  through different links take one lock; it is `std::fs::File::lock`, which the system releases
+  when a program dies. Lock files stay.
+- **Writes.** An edit whose document equals what was read writes nothing, so a missing file
+  whose change leaves it empty is not made. The empty document is `{"betterTiled": 1, "maps":
+  {}}`. A move across files inserts into the new file first and removes from the old one after,
+  and only while the entry is still what was copied, so a failure leaves it in both files.
+- **Unknown keys of a replaced record.** `set_automap` and `set_godot` keep the replaced
+  record's unknown top-level keys that the new one does not set, so an older version's save
+  keeps what a newer one added there. Unknown keys of nested records (runs, bindings, painted
+  entries, layer setups) are the caller's to carry: only `bt-automap` knows which new run is
+  which old one.
+- **Sorted keys** means every object's keys, known and unknown alike, by their text (painted
+  rows by number), so two versions write a file in the same order.
+- **Tileset keys** read `\` as `/` and fold `.` and `..`, so Tiled rewriting a reference as
+  `../tiles/a.tsx` does not change a checksum; a reference not written yet is keyed by its
+  resolved path.
+- **Rows.** `decode` reads any spelling of the same cells (flags in any order, a count of one,
+  trailing empty cells, several spaces); a repeated or empty flag list, flags on `.` and a count
+  of zero are malformed. `encode` splits runs over a million.
+- **Checksums** hash reals as their decimal form with six significant digits (`-0` as `0`): the
+  precision Tiled's XML writes, so a layer checksummed before a save matches it read back. The
+  objects' checksum also covers opacity, the template and the fields an instance sets, which
+  Tiled 1.12 edits too. Pinned values guard the stream.
+- **The newer-version note** is `Document::version_note()`; `load` returns the document alone.
+- **The Godot setup** keeps every key, the layer masks included, as an `Option`, so a file is
+  written back as read; `collision_layer_or_default()` and the others give Godot's 1.
+- **Dependencies** add `thiserror` (`00-high-level-design.md`, §2.2).
+- **`runtime_dir()`** is `11-live-link.md`, §4: `/tmp/better-tiled-<uid>`, the uid from `rustix`
+  (no `unsafe`), made `0700` and checked on every call; a link, a non-folder or another user's
+  folder is `bt_utils::Error::NotPrivate`, and a wider mode is narrowed. On Windows it is
+  `better-tiled` in `%TEMP%`, the user's own temporary folder.
+
+Tests: unit tests in each module, and `tests/` (`finding`, `round_trip`, `moves`,
+`concurrent_writes`) for the table of §10 through files. The concurrent writes are three writers
+in two processes (the test binary run again as a child) and two threads, one through a link,
+and an edit shown waiting for another's lock; each fails with the lock taken out. Randomised:
+rows, and random edits on documents with unknown keys everywhere checked against a plain JSON
+model (`BT_FUZZ_SEED`, `BT_FUZZ_CASES`).
+
+Not here yet: the callers. The editor's and `bt`'s reads and writes, the Issues panel's orphans,
+`bt check` and the records' meanings come with `bt-automap`, `bt-godot` and their milestones.
