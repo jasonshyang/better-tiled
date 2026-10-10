@@ -184,3 +184,36 @@ pub fn assert_needs_are_missing(terrain: &Terrain, needed: &[Needed]) {
         );
     }
 }
+
+/// Every two neighbouring cells a preview places agree where they touch (square grids).
+pub fn assert_preview_consistent(preview: &bt_terrain::Preview, terrain: &Terrain, what: &str) {
+    let placed: std::collections::HashMap<IVec2, Cell> =
+        preview.cells.iter().map(|c| (c.at, c.cell)).collect();
+    let mask: [bool; 8] = match terrain.kind() {
+        WangSetType::Corner => [false, true, false, true, false, true, false, true],
+        WangSetType::Edge => [true, false, true, false, true, false, true, false],
+        WangSetType::Mixed => [true; 8],
+    };
+    for (&p, &cell) in &placed {
+        let a = terrain.wang_of_cell(cell).lanes();
+        for (offset, touching) in [
+            (IVec2::new(1, 0), [(2, 6), (1, 7), (3, 5)]),
+            (IVec2::new(0, 1), [(4, 0), (5, 7), (3, 1)]),
+        ] {
+            let Some(&other) = placed.get(&(p + offset)) else {
+                continue;
+            };
+            let b = terrain.wang_of_cell(other).lanes();
+            for (mine, theirs) in touching {
+                if mask[mine] {
+                    assert_eq!(
+                        a[mine],
+                        b[theirs],
+                        "{what}: {p} lane {mine} against {} lane {theirs}",
+                        p + offset
+                    );
+                }
+            }
+        }
+    }
+}
