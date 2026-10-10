@@ -41,6 +41,8 @@ pub enum ToolKind {
     InsertText,
     /// Edits the points of polygons and polylines.
     EditPolygons,
+    /// Explains what the AutoMap rules did at a cell.
+    Explain,
 }
 
 /// The layers a tool works on.
@@ -67,7 +69,7 @@ impl ToolKind {
             | ToolKind::RectSelect
             | ToolKind::MagicWand
             | ToolKind::SameTile => ToolFamily::Tile,
-            ToolKind::OffsetLayers => ToolFamily::Any,
+            ToolKind::OffsetLayers | ToolKind::Explain => ToolFamily::Any,
             ToolKind::SelectObjects
             | ToolKind::InsertRectangle
             | ToolKind::InsertEllipse

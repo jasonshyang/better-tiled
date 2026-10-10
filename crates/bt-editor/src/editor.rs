@@ -341,6 +341,7 @@ impl Editor {
             Intent::Observed(observations) => self.observe(observations),
             Intent::RulesLoaded(loaded) => self.finish_reading_rules(*loaded),
             Intent::EditLive { doc, edit } => self.edit_live(doc, edit),
+            Intent::ExplainCell { doc, cell } => self.explain_cell(doc, cell),
             Intent::ChangeSettings(settings) => self.change_settings(*settings),
             Intent::Tick { now_ms } => self.tick(now_ms),
         };

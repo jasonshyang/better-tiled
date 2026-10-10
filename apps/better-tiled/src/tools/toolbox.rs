@@ -5,6 +5,7 @@ use bt_editor::{DocumentId, Intent, ToolKind};
 use super::brush::BrushTool;
 use super::edit_polygons::EditPolygons;
 use super::eraser::Eraser;
+use super::explain::ExplainTool;
 use super::fills::{BucketFill, ShapeFill};
 use super::insert_objects::{InsertKind, InsertObject};
 use super::insert_polygon::InsertPolygon;
@@ -45,6 +46,7 @@ impl Default for ToolBox {
                 Box::new(LikeTiles::magic_wand()),
                 Box::new(LikeTiles::same_tile()),
                 Box::new(OffsetLayers::default()),
+                Box::new(ExplainTool::default()),
                 Box::new(SelectObjects::default()),
                 Box::new(EditPolygons::default()),
                 Box::new(InsertObject::new(InsertKind::Rectangle)),

@@ -33,6 +33,8 @@ pub(crate) struct AutoMapState {
     /// The map as its file holds it, for each document opened with AutoMap layers, until the
     /// first result is checked against it.
     pub(crate) saved: HashMap<DocumentId, Arc<Map>>,
+    /// The cell the Explain tool chose in each document.
+    pub(crate) explaining: HashMap<DocumentId, glam::IVec2>,
 }
 
 impl Default for AutoMapState {
@@ -44,6 +46,7 @@ impl Default for AutoMapState {
             types_seen: None,
             live: HashMap::new(),
             saved: HashMap::new(),
+            explaining: HashMap::new(),
         }
     }
 }

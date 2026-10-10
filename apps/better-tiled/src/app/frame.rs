@@ -424,6 +424,10 @@ impl App {
             self.watch_list_stale = true;
             let intents = std::mem::take(&mut self.intents);
             for intent in intents {
+                // What the Explain tool clicked is explained in the AutoMap panel.
+                if matches!(intent, Intent::ExplainCell { .. }) {
+                    self.left_tab = LeftTab::AutoMap;
+                }
                 let effects = self.editor.apply(intent);
                 self.carry_out_all(ctx, effects);
             }

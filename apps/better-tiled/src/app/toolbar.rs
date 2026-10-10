@@ -57,7 +57,11 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
             Some(ToolFamily::Object) => &OBJECT_TOOLS,
             Some(ToolFamily::Any) | None => &[],
         };
-        let map_tools = (!in_tileset).then_some(&ToolKind::OffsetLayers);
+        let map_tools: &[ToolKind] = if in_tileset {
+            &[]
+        } else {
+            &[ToolKind::OffsetLayers, ToolKind::Explain]
+        };
         for &tool in tools.iter().chain(map_tools) {
             // The collision editor's shapes are never tiles or text, as in Tiled.
             if in_tileset && matches!(tool, ToolKind::InsertTile | ToolKind::InsertText) {

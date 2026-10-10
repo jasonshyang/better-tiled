@@ -589,6 +589,11 @@ action_table! {
         .on(Map)
         .keys(&[plain('m')])
         .tool(ToolKind::OffsetLayers),
+    /// Explain: what the AutoMap rules did at a cell.
+    ExplainTool => ActionSpec::new(ActionId::ExplainTool, "explain_tool", "Explain", "automap rules why inspect cell tool")
+        .on(Map)
+        .keys(&[plain('a')])
+        .tool(ToolKind::Explain),
     /// Select Objects.
     SelectObjectsTool => ActionSpec::new(ActionId::SelectObjectsTool, "select_objects_tool", "Select Objects", "move resize rotate tool")
         .on(ObjectLayer)
@@ -649,6 +654,7 @@ pub fn tool_action(tool: ToolKind) -> ActionId {
         ToolKind::MagicWand => ActionId::MagicWandTool,
         ToolKind::SameTile => ActionId::SameTileTool,
         ToolKind::OffsetLayers => ActionId::OffsetLayersTool,
+        ToolKind::Explain => ActionId::ExplainTool,
         ToolKind::SelectObjects => ActionId::SelectObjectsTool,
         ToolKind::InsertRectangle => ActionId::InsertRectangleTool,
         ToolKind::InsertEllipse => ActionId::InsertEllipseTool,

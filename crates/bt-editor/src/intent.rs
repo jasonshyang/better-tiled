@@ -63,6 +63,13 @@ pub enum Intent {
     Loaded(Box<Loaded>),
     /// A read of a map's rules the editor asked for finished.
     RulesLoaded(Box<RulesLoaded>),
+    /// Explain what the AutoMap rules did at a cell of a document's map (the Explain tool).
+    ExplainCell {
+        /// The document.
+        doc: DocumentId,
+        /// The cell.
+        cell: IVec2,
+    },
     /// Change a document's AutoMap layers (one step).
     EditLive {
         /// The document.

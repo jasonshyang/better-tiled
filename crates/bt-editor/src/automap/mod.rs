@@ -3,6 +3,7 @@
 //! over the selection or the whole map as one step and says what they did, or why nothing.
 
 mod command;
+mod explaining;
 mod job;
 mod live;
 mod reading;

@@ -46,3 +46,5 @@ pub(crate) fn cells_after(from: IVec2, to: IVec2) -> Vec<IVec2> {
 
 /// The colour of what is erased.
 pub(crate) const ERASE_COLOR: Color = Color::rgba(230, 70, 70, 255);
+/// The outline of the cell the Explain tool explains.
+pub(crate) const EXPLAIN_COLOR: Color = Color::rgba(240, 200, 60, 255);

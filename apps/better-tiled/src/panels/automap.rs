@@ -41,6 +41,7 @@ impl AutoMapPanel {
             return;
         };
         egui::ScrollArea::vertical().show(ui, |ui| {
+            show_explaining(ui, editor, doc);
             show_rules(ui, rules);
             if rules.rules().is_some() {
                 ui.separator();
@@ -48,6 +49,25 @@ impl AutoMapPanel {
             }
         });
     }
+}
+
+/// The cell the Explain tool chose, or how to choose one.
+fn show_explaining(ui: &mut egui::Ui, editor: &Editor, doc: DocumentId) {
+    match editor.explained_cell(doc) {
+        Some(cell) => {
+            ui.label(format!("Explaining cell {}, {}", cell.x, cell.y));
+        }
+        None => {
+            let key = editor
+                .keymap()
+                .key_text(ActionId::ExplainTool)
+                .map_or_else(String::new, |key| format!(" ({key})"));
+            ui.weak(format!(
+                "Click a cell with the Explain tool{key} to see what the rules did there"
+            ));
+        }
+    }
+    ui.separator();
 }
 
 fn show_rules(ui: &mut egui::Ui, rules: &AutoMapRules) {

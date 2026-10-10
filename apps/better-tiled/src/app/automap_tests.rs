@@ -132,3 +132,33 @@ fn live_automap_binds_the_rules_to_the_layer_painted_on_from_the_panel() {
         "what was painted stays"
     );
 }
+
+#[test]
+fn the_explain_tool_opens_the_automap_panel_on_the_cell_clicked() {
+    use bt_editor::ToolKind;
+
+    let scratch = Scratch::new("window-explain-tool").unwrap();
+    let map = write_tiles_map(
+        scratch.path(),
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("ground", "0 0 0\n0 0 0")],
+    );
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&map);
+    let doc = window.editor().current().unwrap();
+    assert!(window.shows("Layers"));
+
+    window.press(egui::Modifiers::NONE, egui::Key::A);
+    assert_eq!(window.editor().tools().tool(), ToolKind::Explain);
+    window.click_cell(
+        IVec2::new(2, 1),
+        egui::PointerButton::Primary,
+        egui::Modifiers::NONE,
+    );
+    assert_eq!(window.editor().explained_cell(doc), Some(IVec2::new(2, 1)));
+    assert!(
+        window.shows("Explaining cell 2, 1"),
+        "the AutoMap panel is shown"
+    );
+}

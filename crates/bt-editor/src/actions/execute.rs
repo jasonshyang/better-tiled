@@ -162,6 +162,7 @@ impl Editor {
             | ActionId::MagicWandTool
             | ActionId::SameTileTool
             | ActionId::OffsetLayersTool
+            | ActionId::ExplainTool
             | ActionId::SelectObjectsTool
             | ActionId::InsertRectangleTool
             | ActionId::InsertEllipseTool
