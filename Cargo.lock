@@ -547,6 +547,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bt-automap"
+version = "0.1.0"
+dependencies = [
+ "bt-core",
+ "bt-test-data",
+ "bt-tmx",
+ "bt-utils",
+ "glam",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "bt-core"
 version = "0.1.0"
 dependencies = [

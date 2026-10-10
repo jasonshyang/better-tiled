@@ -1,0 +1,24 @@
+[package]
+name = "bt-automap"
+description = "better-tiled's AutoMap: Tiled's automapping rule maps compiled and run with Tiled's results, seeded, traced through an observer, with typed problems"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+# A port of Tiled's editor code (src/tiled), which is GPL-2.0-or-later, used under GPL-3.0-or-later.
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+# Rule maps and rule lists are read through it, in the `files` module only.
+bt-tmx.workspace = true
+bt-utils.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+
+[lints]
+workspace = true

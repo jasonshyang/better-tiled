@@ -10,6 +10,7 @@ authors = ["Jason Yang"]
 
 [workspace.dependencies]
 # Our crates.
+bt-automap = { path = "crates/bt-automap" }
 bt-core = { path = "crates/bt-core" }
 bt-edit = { path = "crates/bt-edit" }
 bt-editor = { path = "crates/bt-editor" }
