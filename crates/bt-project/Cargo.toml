@@ -1,0 +1,23 @@
+[package]
+name = "bt-project"
+description = "better-tiled.json, the project file beside Tiled's files: the AutoMap layers' painted state and the Godot setup, found, read and written safely by the editor and bt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+bt-utils.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+glam.workspace = true
+
+[lints]
+workspace = true

@@ -597,6 +597,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bt-project"
+version = "0.1.0"
+dependencies = [
+ "bt-core",
+ "bt-test-data",
+ "bt-utils",
+ "glam",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "bt-render"
 version = "0.1.0"
 dependencies = [
