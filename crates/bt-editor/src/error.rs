@@ -6,7 +6,7 @@ use crate::document::DocumentId;
 use crate::store::{AssetId, AssetKind};
 
 /// What stopped an edit.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum EditError {
     /// No asset has this id (any more).
     #[error("{0} is not open")]
@@ -22,6 +22,9 @@ pub enum EditError {
     /// No document has this id (any more).
     #[error("{0} is not open")]
     NoSuchDocument(DocumentId),
+    /// The document's tileset editor is not open.
+    #[error("{0} shows no tileset")]
+    NoTilesetShown(DocumentId),
     /// The map has no layer with this id.
     #[error("the map has no layer {0}")]
     NoSuchLayer(LayerId),
@@ -53,6 +56,9 @@ pub enum EditError {
     /// The operation could not be carried out on the map.
     #[error(transparent)]
     Operation(#[from] bt_edit::EditError),
+    /// A change of properties, built-in attributes or custom types was refused.
+    #[error(transparent)]
+    Property(#[from] crate::properties::PropertyError),
     /// A later change to an asset was made where it cannot be named (its history was dropped).
     #[error("{asset} changed since; undo its later changes first")]
     ChangedSince {

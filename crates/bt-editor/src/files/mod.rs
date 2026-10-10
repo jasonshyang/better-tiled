@@ -5,14 +5,12 @@ mod close;
 mod load;
 mod new;
 mod open;
+mod project;
 mod save;
 
+use bt_tmx::Loader;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-
-use bt_core::CustomTypes;
-use bt_tmx::Loader;
 
 use crate::document::DocumentId;
 use crate::effect::DecisionId;
@@ -31,7 +29,6 @@ pub use new::{NewMap, NewTileset, NewTilesetSource};
 pub(crate) struct Files {
     pub(crate) loaders: HashMap<AssetId, Loader>,
     pub(crate) project: Option<AssetId>,
-    pub(crate) custom_types: Arc<CustomTypes>,
     pub(crate) pending: HashMap<DecisionId, Pending>,
     pub(crate) next_decision: u64,
     /// The user chose to save before quitting: quit once nothing is unsaved.

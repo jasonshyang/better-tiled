@@ -90,6 +90,16 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
                 path: picked.map(|file| file.path().to_path_buf()),
             }]
         }
+        FileRequest::PropertyFile { .. } => {
+            let dialog = rfd::AsyncFileDialog::new()
+                .set_title("Choose File")
+                .add_filter("All files", &["*"]);
+            let picked = pollster::block_on(dialog.pick_file());
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::SaveAs { suggested, .. } => {
             let mut dialog = rfd::AsyncFileDialog::new()
                 .set_title("Save As")

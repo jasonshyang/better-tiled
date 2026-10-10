@@ -5,6 +5,7 @@ use std::fmt;
 
 use glam::DVec2;
 
+use super::inspecting::Inspecting;
 use super::selection::Selection;
 use super::tileset_editing::TilesetEditing;
 use crate::history::History;
@@ -59,6 +60,8 @@ pub struct Document {
     /// The tileset editor: always there in a tileset's tab, in a map's while it edits one of
     /// the map's tilesets in place of the map.
     pub(crate) tileset: Option<TilesetEditing>,
+    /// What its Properties panel inspects while no tileset editor is shown.
+    pub(crate) inspecting: Inspecting,
 }
 
 impl Document {
@@ -95,5 +98,14 @@ impl Document {
     /// Its tileset editor, when it shows one.
     pub fn tileset_editing(&self) -> Option<&TilesetEditing> {
         self.tileset.as_ref()
+    }
+
+    /// The selected objects become what the Properties panel inspects, when there are any and
+    /// they are the map's (not a tile's collision shapes), as Tiled's
+    /// `MapDocument::setSelectedObjects` makes one of them the current object.
+    pub(crate) fn inspect_selected_objects(&mut self) {
+        if self.tileset.is_none() && !self.selection.objects.is_empty() {
+            self.inspecting = Inspecting::Objects;
+        }
     }
 }

@@ -37,7 +37,7 @@ impl Editor {
         vec![Effect::Load(LoadJob {
             path,
             source: LoadSource::File,
-            project: ProjectChoice::Known(Arc::clone(&self.files.custom_types)),
+            project: ProjectChoice::Known(Arc::new(self.custom_types().clone())),
             kind: LoadKind::Tileset,
             purpose: LoadPurpose::AddToMap(doc),
         })]

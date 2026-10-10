@@ -226,7 +226,7 @@ impl Loader {
     }
 
     /// The cached template of the file at `path`, as last read; reads no file.
-    pub(crate) fn cached_template(&self, path: &Path) -> Option<&Arc<ObjectTemplate>> {
+    pub fn cached_template(&self, path: &Path) -> Option<&Arc<ObjectTemplate>> {
         let key = self.canonical.get(path).map_or(path, PathBuf::as_path);
         self.templates.get(key).map(|cached| &cached.value)
     }

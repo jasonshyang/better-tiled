@@ -11,6 +11,7 @@ mod effect;
 mod error;
 mod files;
 mod history;
+mod inspect;
 mod intent;
 mod layer_commands;
 mod map_commands;
@@ -43,6 +44,7 @@ pub use history::{
     AssetChange, DEFAULT_HISTORY_LIMIT, History, HistoryEntry, MergeKey, SelectionChange,
     Transaction, Tx,
 };
+pub use inspect::Inspected;
 pub use intent::Intent;
 pub use notice::{Notice, Severity};
 pub use objects::{

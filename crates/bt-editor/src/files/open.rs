@@ -36,8 +36,8 @@ impl Editor {
     /// A load of `path`, with the open project's types or a search for the nearest project: a
     /// tileset for a `.tsx` or `.tsj` file, else a map.
     pub(crate) fn load_job(&self, path: PathBuf, source: LoadSource) -> LoadJob {
-        let project = match self.files.project {
-            Some(_) => ProjectChoice::Known(Arc::clone(&self.files.custom_types)),
+        let project = match self.project_file() {
+            Some(_) => ProjectChoice::Known(Arc::new(self.custom_types().clone())),
             None => ProjectChoice::FindNearest {
                 home: self.files.home.clone(),
             },
@@ -121,9 +121,9 @@ impl Editor {
             return effects;
         }
         if let Some(project) = files.project
-            && self.files.project.is_none()
+            && self.project_file().is_none()
         {
-            self.files.custom_types = Arc::new(project.project.custom_types.clone());
+            effects.extend(self.drop_untitled_project(&project.path));
             let id = self.store.insert(NewAsset {
                 root: Root::Project(Arc::new(project.project)),
                 path: Some(project.path),

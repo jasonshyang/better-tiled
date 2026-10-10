@@ -1,11 +1,11 @@
 //! What the Layers panel asks of the editor: several layers selected with one of them current,
-//! layers dragged into and out of groups as one step, a drag of the opacity slider as one step,
-//! and the commands not built yet saying so.
+//! layers dragged into and out of groups as one step, and a drag of the opacity slider as one
+//! step.
 
 #![cfg(test)]
 
 use bt_core::{Layer, LayerId, LayerKind, Map};
-use bt_editor::{ActionId, DocumentId, Editor, Effect, Enabled, Intent, LayerLocation, ToolKind};
+use bt_editor::{ActionId, DocumentId, Editor, Effect, Intent, LayerLocation, ToolKind};
 use bt_test_data::fixtures::MapBuilder;
 use glam::UVec2;
 
@@ -202,11 +202,3 @@ fn a_drag_of_the_opacity_slider_is_one_step() {
     assert_eq!(opacity(&editor, 4), 1.0);
 }
 
-#[test]
-fn commands_still_to_come_say_so() {
-    let (editor, _) = editor();
-    assert_eq!(
-        editor.enabled(ActionId::LayerProperties),
-        Enabled::Disabled(Some("Layer Properties is not built yet".to_owned()))
-    );
-}

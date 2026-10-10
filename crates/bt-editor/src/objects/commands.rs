@@ -60,9 +60,10 @@ pub(crate) enum Restack {
 }
 
 impl Editor {
-    /// Changes the selected objects: `ids` combined with them as `mode` says. When they all lie
-    /// on one object layer, it becomes current, and the only selected layer unless it was
-    /// selected (Tiled's `MapDocument::setSelectedObjects`).
+    /// Changes the selected objects: `ids` combined with them as `mode` says; the Properties
+    /// panel inspects them when there are any. When they all lie on one object layer, it becomes
+    /// current, and the only selected layer unless it was selected (Tiled's
+    /// `MapDocument::setSelectedObjects`).
     pub(crate) fn select_objects(
         &mut self,
         doc: DocumentId,
@@ -85,6 +86,7 @@ impl Editor {
             SelectionMode::Subtract => current.retain(|id| !ids.contains(id)),
             SelectionMode::Intersect => current.retain(|id| ids.contains(id)),
         }
+        document.inspect_selected_objects();
         let selected = document.selection.objects.clone();
         document
             .selection

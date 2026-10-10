@@ -11,7 +11,7 @@ use bt_tmx::WriteRequest;
 use crate::actions::{Keymap, KeymapError, PaletteState};
 use crate::clipboard::Clipboard;
 use crate::document::{
-    Document, DocumentId, Documents, Selection, TilesetEditing, ViewState, ViewToggles,
+    Document, DocumentId, Documents, Inspecting, Selection, TilesetEditing, ViewState, ViewToggles,
 };
 use crate::effect::Effect;
 use crate::error::EditError;
@@ -197,13 +197,20 @@ impl Editor {
             Intent::CloseDocument(doc) => self.close_document(doc),
             Intent::SelectLayer { doc, layer } => {
                 self.select_layer(doc, layer);
+                self.set_inspecting(doc, Inspecting::Layers);
                 Vec::new()
             }
             Intent::SelectLayers {
                 doc,
                 current,
                 layers,
-            } => self.select_layers(doc, current, &layers),
+            } => {
+                let effects = self.select_layers(doc, current, &layers);
+                if effects.is_empty() {
+                    self.set_inspecting(doc, Inspecting::Layers);
+                }
+                effects
+            }
             Intent::SelectTiles { doc, region, mode } => {
                 self.select_tiles(doc, &region, mode);
                 Vec::new()
@@ -269,6 +276,19 @@ impl Editor {
                 opacity,
                 done,
             } => self.set_layers_opacity(doc, &layers, opacity, done),
+            Intent::ChangeProperties {
+                doc,
+                inspected,
+                change,
+                merge,
+            } => self.change_properties(doc, &inspected, &change, merge),
+            Intent::SetAttribute {
+                doc,
+                inspected,
+                attribute,
+                value,
+                merge,
+            } => self.set_attribute(doc, &inspected, attribute, &value, merge),
             Intent::SetCamera { doc, view } => {
                 if let Some(document) = self.documents.get_mut(doc) {
                     document.camera = Some(view);
@@ -543,6 +563,7 @@ impl Editor {
             history,
             view: ViewToggles::default(),
             tileset,
+            inspecting: Inspecting::default(),
         });
         id
     }

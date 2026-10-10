@@ -144,10 +144,20 @@ pub(crate) fn change_tile(
     }
     let mut data = tileset.tile(tile).cloned().unwrap_or_default();
     change(&mut data, tileset)?;
-    if data == TileData::default() && !tileset.is_collection() {
-        tileset.tiles.remove(&tile);
-    } else {
-        tileset.tiles.insert(tile, data);
-    }
+    tileset.tiles.insert(tile, data);
+    drop_empty_tile_data(tileset, &[tile]);
     Ok(())
+}
+
+/// Removes the data of `tiles` that is left as it would be made, so an atlas keeps entries only
+/// for tiles that have some; a collection's tiles keep theirs, which hold their images.
+pub(crate) fn drop_empty_tile_data(tileset: &mut Tileset, tiles: &[TileId]) {
+    if tileset.is_collection() {
+        return;
+    }
+    for tile in tiles {
+        if tileset.tile(*tile) == Some(&TileData::default()) {
+            tileset.tiles.remove(tile);
+        }
+    }
 }

@@ -1161,7 +1161,7 @@ fn the_layers_panel_selects_drags_and_runs_the_layer_commands() {
     // are greyed out.
     window.right_click("floor");
     assert_eq!(selection(&window).layers, [LayerId(3)]);
-    assert!(window.is_disabled("Layer Properties…"), "not built yet");
+    assert!(!window.is_disabled("Layer Properties…"));
     assert!(window.is_disabled("Ungroup Layers"), "no group is selected");
     // A menu item's label ends with its key.
     let keys = window.editor().keymap();

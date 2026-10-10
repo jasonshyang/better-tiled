@@ -6,18 +6,12 @@ use bt_edit::{Axis, Brush, LayerType, RotateDirection};
 
 use super::enabled::Enabled;
 use super::table::{ActionId, ActionKind};
-use crate::document::{DocumentId, Reorient};
+use crate::document::{DocumentId, Inspecting, Reorient};
 use crate::editor::{Editor, warn};
 use crate::effect::{Dialog, Effect, FileRequest, ViewRequest};
 use crate::notice::Notice;
 use crate::objects::{NodeCommand, Restack};
 use crate::settings::Snapping;
-
-/// The commands whose operations are still being built in this milestone: disabled, and
-/// running them does nothing. The list empties as they arrive.
-pub(crate) fn pending(id: ActionId) -> bool {
-    matches!(id, ActionId::MapProperties | ActionId::LayerProperties)
-}
 
 impl Editor {
     /// Mirrors or turns the brush on the current map's grid.
@@ -313,7 +307,18 @@ impl Editor {
             ActionId::AddExternalTileset => on_document(self, &|_, doc| {
                 vec![Effect::PickFile(FileRequest::ExternalTileset(doc))]
             }),
-            ActionId::MapProperties | ActionId::LayerProperties => Vec::new(),
+            ActionId::MapProperties => {
+                if let Some(doc) = current {
+                    self.set_inspecting(doc, Inspecting::Map);
+                }
+                Vec::new()
+            }
+            ActionId::LayerProperties => {
+                if let Some(doc) = current {
+                    self.set_inspecting(doc, Inspecting::Layers);
+                }
+                Vec::new()
+            }
         }
     }
 }

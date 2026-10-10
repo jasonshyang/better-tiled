@@ -70,12 +70,6 @@ impl Editor {
         if let Some(reason) = context_blocker(id.spec(), &here) {
             return Enabled::Disabled(reason);
         }
-        if super::execute::pending(id) {
-            return Enabled::Disabled(Some(format!(
-                "{} is not built yet",
-                id.spec().label.trim_end_matches('…')
-            )));
-        }
         let history = here.document.map(Document::history);
         let selection = here.document.map(Document::selection);
         let editing_tileset = here.document.is_some_and(|d| d.tileset_editing().is_some());

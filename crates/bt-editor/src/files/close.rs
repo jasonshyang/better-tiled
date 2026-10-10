@@ -262,6 +262,11 @@ impl Editor {
                 }
                 effects
             }
+            FileRequest::PropertyFile {
+                doc,
+                inspected,
+                path: property,
+            } => self.property_file_picked(doc, &inspected, property, &path),
         }
     }
 }

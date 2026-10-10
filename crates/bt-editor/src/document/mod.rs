@@ -8,6 +8,7 @@ mod carried;
 )]
 mod document;
 mod documents;
+mod inspecting;
 mod selecting;
 mod selection;
 mod tileset_editing;
@@ -15,5 +16,6 @@ mod tileset_editing;
 pub(crate) use carried::{Carried, CarryStart, Reorient, carry_start, movable_layers};
 pub use document::{Document, DocumentId, ViewState, ViewToggles};
 pub use documents::Documents;
+pub(crate) use inspecting::Inspecting;
 pub use selection::Selection;
 pub use tileset_editing::{TilesetEditing, TilesetMode};

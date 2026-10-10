@@ -12,8 +12,10 @@ use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, TilesetMode, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
+use crate::inspect::Inspected;
 use crate::objects::ObjectStroke;
 use crate::offset_map::MapOffset;
+use crate::properties::{Attribute, AttributeValue, Change};
 use crate::recovery::Orphan;
 use crate::settings::Settings;
 use crate::tools::Stroke;
@@ -316,6 +318,33 @@ pub enum Intent {
         opacity: f64,
         /// The drag is over: the next change is a step of its own.
         done: bool,
+    },
+    /// Change the custom properties of what a document's Properties panel shows
+    /// ([`crate::Editor::inspected`]), as one step labelled as Tiled labels it. The changes of
+    /// one run (typing in a field, dragging a colour) share `merge` and fold into one step.
+    ChangeProperties {
+        /// The document.
+        doc: DocumentId,
+        /// What the panel showed.
+        inspected: Inspected,
+        /// The change.
+        change: Change,
+        /// The run the change is part of, if any.
+        merge: Option<u64>,
+    },
+    /// Set a built-in attribute of what a document's Properties panel shows, as one step; the
+    /// edits of one run share `merge` and fold into one step.
+    SetAttribute {
+        /// The document.
+        doc: DocumentId,
+        /// What the panel showed.
+        inspected: Inspected,
+        /// The attribute.
+        attribute: Attribute,
+        /// Its new value.
+        value: AttributeValue,
+        /// The run the edit is part of, if any.
+        merge: Option<u64>,
     },
     /// The window moved a document's camera.
     SetCamera {

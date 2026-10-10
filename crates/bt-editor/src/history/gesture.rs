@@ -59,6 +59,7 @@ impl Editor {
             .ok_or(EditError::NoSuchDocument(doc))?
             .selection
             .clone();
+        let objects_before = selection.objects.clone();
         let mut tx = Tx::new(&self.store, selection);
         let result = f(&mut tx)?;
         let mut after_selection = tx.selection.clone();
@@ -79,7 +80,11 @@ impl Editor {
         }
         self.apply_roots(changed);
         if let Some(document) = self.documents.get_mut(doc) {
+            let objects_changed = after_selection.objects != objects_before;
             document.selection = after_selection;
+            if objects_changed {
+                document.inspect_selected_objects();
+            }
         }
         Ok(result)
     }

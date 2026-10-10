@@ -66,6 +66,9 @@ impl Editor {
         settle_carry(&mut after_selection, keeps_carry || changed.is_empty());
         if let Some(document) = self.documents.get_mut(doc) {
             document.selection = after_selection.clone();
+            if after_selection.objects != before_selection.objects {
+                document.inspect_selected_objects();
+            }
         }
         if changed.is_empty() {
             return Ok(result);

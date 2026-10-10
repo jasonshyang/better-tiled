@@ -5,7 +5,9 @@ use std::path::PathBuf;
 
 use crate::document::DocumentId;
 use crate::files::LoadJob;
+use crate::inspect::Inspected;
 use crate::notice::Notice;
+use crate::properties::Step;
 use crate::recovery::Snapshot;
 
 /// A request to the window.
@@ -72,6 +74,16 @@ pub enum FileRequest {
         doc: DocumentId,
         /// The file suggested.
         suggested: PathBuf,
+    },
+    /// The file of a custom property's value (the Properties panel's file field); the answer
+    /// sets it.
+    PropertyFile {
+        /// The document.
+        doc: DocumentId,
+        /// What the panel showed.
+        inspected: Inspected,
+        /// The property, and the member or item in it.
+        path: Vec<Step>,
     },
 }
 
