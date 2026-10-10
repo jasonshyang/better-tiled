@@ -223,7 +223,9 @@ impl Editor {
 
     /// Derives AutoMap layers' result again for each document whose painted map, setup or rules
     /// changed; a document whose rules are being read keeps its last result until they arrive.
-    pub(crate) fn sync_live(&mut self) {
+    /// A map opened with AutoMap layers whose first result is not what its file holds (the
+    /// rules changed since) becomes unsaved, and says so.
+    pub(crate) fn sync_live(&mut self) -> Vec<Effect> {
         let mut stale = Vec::new();
         for document in self.documents.in_order() {
             let Some(setup) = &document.automap else {
@@ -261,9 +263,16 @@ impl Editor {
             .map(|d| d.id())
             .collect();
         self.automap.live.retain(|doc, _| on.contains(doc));
+        self.automap.saved.retain(|doc, _| on.contains(doc));
+        let mut effects = Vec::new();
         for derivation in stale {
             let layers =
                 AutoLayers::derive(derivation.painted, &derivation.setup, &derivation.rules);
+            if let Some(saved) = self.automap.saved.remove(&derivation.doc)
+                && **layers.result() != *saved
+            {
+                effects.extend(self.mark_rules_changed(derivation.doc));
+            }
             self.automap.live.insert(
                 derivation.doc,
                 LiveResult {
@@ -273,6 +282,28 @@ impl Editor {
                 },
             );
         }
+        effects
+    }
+
+    /// The map of a document opened with AutoMap layers holds what its rules no longer make:
+    /// it takes a new version, so it is unsaved, and the user is told.
+    fn mark_rules_changed(&mut self, doc: DocumentId) -> Vec<Effect> {
+        let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
+            return Vec::new();
+        };
+        let Some(root) = self.store.get(asset).map(|a| a.root().clone()) else {
+            return Vec::new();
+        };
+        let name = self
+            .store
+            .get(asset)
+            .map_or_else(String::new, |a| a.display_name());
+        let version = self.store.next_version(asset);
+        self.store.set_root(asset, root, version);
+        vec![Effect::Notify(Notice::info(format!(
+            "The AutoMap rules now make something other than what {name} holds: saving keeps \
+             what they make now"
+        )))]
     }
 }
 

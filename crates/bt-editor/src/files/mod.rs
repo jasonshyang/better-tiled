@@ -35,6 +35,8 @@ pub(crate) struct Files {
     pub(crate) quitting: bool,
     /// Where to look for projects no higher than (the user's home folder).
     pub(crate) home: Option<PathBuf>,
+    /// Where project files are locked while they are written (the user's runtime folder).
+    pub(crate) lock_folder: Option<PathBuf>,
 }
 
 /// What an awaited answer is for.

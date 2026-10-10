@@ -40,6 +40,9 @@ pub(crate) struct Startup {
     pub(crate) settings_path: PathBuf,
     /// Where recovery snapshots go.
     pub(crate) recovery_folder: PathBuf,
+    /// Where project files are locked while they are written: the user's runtime folder, shared
+    /// with `bt`.
+    pub(crate) lock_folder: Option<PathBuf>,
     /// This run's process id, which names its recovery snapshots and heartbeat.
     pub(crate) pid: u32,
     outcome: RunOutcome,
@@ -49,7 +52,13 @@ impl Startup {
     /// The start the command line asks for, with the settings and session of the data folder.
     pub(crate) fn from_cli(cli: Cli) -> Result<Startup, String> {
         let data = data_folder().map_err(|error| error.to_string())?;
-        Startup::from_folder(cli, &data)
+        let mut startup = Startup::from_folder(cli, &data)?;
+        match bt_utils::paths::runtime_dir() {
+            Ok(folder) => startup.lock_folder = Some(folder),
+            // Saving says so when it needs one: AutoMap layers' painted state is not kept.
+            Err(error) => log::warn!("no runtime folder to lock project files in: {error}"),
+        }
+        Ok(startup)
     }
 
     /// The start with the settings and session of `data`.
@@ -101,6 +110,7 @@ impl Startup {
             session_path,
             settings_path,
             recovery_folder: data.join(RECOVERY_FOLDER),
+            lock_folder: None,
             pid: std::process::id(),
             outcome: RunOutcome::default(),
         })

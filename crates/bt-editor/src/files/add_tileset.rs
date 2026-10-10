@@ -40,6 +40,7 @@ impl Editor {
             project: ProjectChoice::Known(Arc::new(self.custom_types().clone())),
             kind: LoadKind::Tileset,
             purpose: LoadPurpose::AddToMap(doc),
+            home: self.files.home.clone(),
         })]
     }
 

@@ -640,3 +640,75 @@ fn live_automap_started_right_after_automap_keeps_the_map_before_that_run() {
     );
     assert_eq!(shown_top(&editor, doc), "6 6 6\n6 6 6");
 }
+
+#[test]
+fn a_map_with_live_automap_saves_the_result_and_opens_with_what_was_painted() {
+    let (scratch, map) = folder_with_rules("bt-editor-live-save", 6);
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    paint(&mut editor, doc, 2, IVec2::new(2, 1), 3);
+    let effects = apply(&mut editor, Intent::Run(ActionId::Save));
+    assert_eq!(
+        notices(&effects),
+        [(Severity::Info, "Saved a.tmx".to_owned())],
+        "{effects:?}"
+    );
+    assert!(!is_dirty(&editor, doc));
+    let record = std::fs::read_to_string(scratch.join("better-tiled.json")).unwrap();
+    assert!(record.contains("\"rules\": \"rules.txt\""), "{record}");
+
+    // The file holds the rules' result, as Tiled would show it.
+    let mut loader = bt_tmx::Loader::default();
+    let saved = loader.load_map(&map).unwrap().value;
+    let top_saved = saved.layer(LayerId(2)).unwrap().as_tile_layer().unwrap();
+    assert_eq!(top_saved.cells().count(), 6);
+    assert_eq!(
+        top_saved.cell(IVec2::new(2, 1)).tile().0,
+        6,
+        "the rules wrote over it"
+    );
+
+    // Opened again: what was painted comes back, with the setup, and nothing is unsaved.
+    let mut again = editor_in(&scratch);
+    apply(&mut again, Intent::Open(map.clone()));
+    apply(&mut again, Intent::Tick { now_ms: 0 });
+    let doc = again.current().unwrap();
+    assert!(again.document(doc).unwrap().automap().is_some());
+    assert_eq!(top(&again, doc), ". . .\n. . 3", "what was painted");
+    assert_eq!(shown_top(&again, doc), "6 6 6\n6 6 6");
+    assert!(
+        !is_dirty(&again, doc),
+        "the rules still make what the file holds"
+    );
+
+    // Stopped and saved: the record goes.
+    apply(&mut again, Intent::Run(ActionId::LiveAutoMap));
+    apply(&mut again, Intent::Run(ActionId::Save));
+    let record = std::fs::read_to_string(scratch.join("better-tiled.json")).unwrap();
+    assert!(!record.contains("rules.txt"), "{record}");
+}
+
+#[test]
+fn a_map_whose_rules_changed_since_it_was_saved_opens_unsaved() {
+    let (scratch, map) = folder_with_rules("bt-editor-live-rules-changed", 6);
+    let (mut editor, _doc) = open(&scratch, &map);
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    apply(&mut editor, Intent::Run(ActionId::Save));
+    write_flower_rule(scratch.path(), 7);
+
+    let mut again = editor_in(&scratch);
+    apply(&mut again, Intent::Open(map));
+    let effects = apply(&mut again, Intent::Tick { now_ms: 0 });
+    let doc = again.current().unwrap();
+    assert_eq!(shown_top(&again, doc), "7 7 7\n7 7 7");
+    assert!(is_dirty(&again, doc));
+    assert_eq!(
+        notices(&effects),
+        [(
+            Severity::Info,
+            "The AutoMap rules now make something other than what a.tmx holds: saving keeps what \
+             they make now"
+                .to_owned()
+        )]
+    );
+}

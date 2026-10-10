@@ -309,11 +309,15 @@ impl App {
         // ⌘= and ⌘- zoom the map, not the interface.
         ctx.options_mut(|options| options.zoom_with_keyboard = false);
         let pid = startup.pid;
-        let editor = Editor::builder()
+        let mut builder = Editor::builder()
             .settings(startup.settings.clone())
             .recovery_folder(startup.recovery_folder.clone())
             .pid(pid)
-            .home(home_folder())
+            .home(home_folder());
+        if let Some(folder) = &startup.lock_folder {
+            builder = builder.lock_folder(folder.clone());
+        }
+        let editor = builder
             .build()
             .map_err(|error| format!("the key bindings in settings.toml are not valid: {error}"))?;
         let mut images = ImageStore::builder()

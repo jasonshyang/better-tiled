@@ -5,9 +5,12 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use bt_automap::layers::Restored;
 use bt_core::{CustomTypes, Map, Project, Tileset};
 use bt_tmx::{Loader, Warning};
 use bt_utils::hash::fnv1a_64;
+
+use crate::automap::read_layers;
 
 /// Where a load's text comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,6 +58,8 @@ pub struct LoadJob {
     pub(crate) project: ProjectChoice,
     pub(crate) kind: LoadKind,
     pub(crate) purpose: LoadPurpose,
+    /// The user's home folder, where the search for the map's project file stops.
+    pub(crate) home: Option<PathBuf>,
 }
 
 /// What a load read.
@@ -77,6 +82,9 @@ pub(crate) struct LoadedFiles {
     pub(crate) project: Option<LoadedProject>,
     /// The loader, with the templates the map uses, for writing it.
     pub(crate) loader: Loader,
+    /// The map's AutoMap layers as its project file keeps them, rebuilt on the map read; `None`
+    /// when it keeps none, or why they could not be read.
+    pub(crate) layers: Result<Option<Restored>, String>,
 }
 
 /// An external tileset read with a map.
@@ -126,16 +134,17 @@ impl LoadJob {
             LoadSource::File => None,
             LoadSource::Snapshot(snapshot) => Some(snapshot.clone()),
         };
+        let canonical = std::fs::canonicalize(&self.path).unwrap_or_else(|_| self.path.clone());
         Loaded {
             path: self.path.clone(),
-            canonical: std::fs::canonicalize(&self.path).unwrap_or_else(|_| self.path.clone()),
-            outcome: self.load(),
+            outcome: self.load(&canonical),
+            canonical,
             recovered_from,
             purpose: self.purpose,
         }
     }
 
-    fn load(&self) -> Result<LoadedFiles, String> {
+    fn load(&self, canonical: &Path) -> Result<LoadedFiles, String> {
         let project = match &self.project {
             ProjectChoice::Known(_) => None,
             ProjectChoice::FindNearest { home } => self
@@ -179,6 +188,7 @@ impl LoadJob {
                 tilesets: Vec::new(),
                 project,
                 loader,
+                layers: Ok(None),
             });
         }
         let loaded = match &self.source {
@@ -212,6 +222,11 @@ impl LoadJob {
                 content_hash: hash,
             });
         }
+        // A recovered map is what was painted already; AutoMap layers are read for the file.
+        let layers = match &self.source {
+            LoadSource::File => read_layers(canonical, self.home.as_deref(), &loaded.value),
+            LoadSource::Snapshot(_) => Ok(None),
+        };
         Ok(LoadedFiles {
             content: LoadedContent::Map(Box::new(loaded.value)),
             warnings: loaded.warnings,
@@ -219,6 +234,7 @@ impl LoadJob {
             tilesets,
             project,
             loader,
+            layers,
         })
     }
 }

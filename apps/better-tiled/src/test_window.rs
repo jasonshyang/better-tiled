@@ -47,6 +47,9 @@ impl TestWindow {
     pub(crate) fn run_as(data: &Path, pid: u32) -> TestWindow {
         let mut startup = Startup::from_folder(Cli::default(), data).unwrap();
         startup.pid = pid;
+        let locks = data.join("locks");
+        std::fs::create_dir_all(&locks).unwrap();
+        startup.lock_folder = Some(locks);
         // Frames a 60th of a second apart, as a person's are: two clicks a few frames apart are
         // a double click.
         let harness = Harness::builder()

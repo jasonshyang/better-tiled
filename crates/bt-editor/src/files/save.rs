@@ -5,6 +5,7 @@
 //! the bytes written are hashed so the watcher can tell our writes from others'.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use bt_tmx::WriteRequest;
 use bt_utils::atomic_write::{WriteMode, write_file};
@@ -116,8 +117,9 @@ impl Editor {
                 )))];
             }
         }
+        let mut effects = self.move_layers_record(asset, &path);
         self.store.retarget(asset, path.clone());
-        let effects = self.save_map_to(asset, &path);
+        effects.extend(self.save_map_to(asset, &path));
         self.remember_recent(&path);
         self.session_changed();
         effects
@@ -143,9 +145,10 @@ impl Editor {
             }
         }
         match self.write_map(asset, path) {
-            Ok(()) => {
+            Ok(warnings) => {
                 self.recovery.forget(asset);
                 effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)));
+                effects.extend(warnings.into_iter().map(Effect::Notify));
                 effects.push(Effect::Notify(Notice::info(format!(
                     "Saved {}",
                     bt_utils::paths::display_name(path)
@@ -168,13 +171,14 @@ impl Editor {
             };
             let written = match asset.root() {
                 Root::Map(_) => self.write_map(id, &path),
-                Root::Tileset(_) => self.write_tileset(id),
-                Root::Project(_) => self.write_project(id),
+                Root::Tileset(_) => self.write_tileset(id).map(|()| Vec::new()),
+                Root::Project(_) => self.write_project(id).map(|()| Vec::new()),
             };
             match written {
-                Ok(()) => {
+                Ok(warnings) => {
                     self.recovery.forget(id);
                     effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(id)));
+                    effects.extend(warnings.into_iter().map(Effect::Notify));
                 }
                 Err(notice) => effects.push(Effect::Notify(notice)),
             }
@@ -182,13 +186,19 @@ impl Editor {
         effects
     }
 
-    /// Writes a map asset to `path` and marks it saved.
-    fn write_map(&mut self, asset: AssetId, path: &Path) -> Result<(), Notice> {
-        let map = self
-            .store
-            .map(asset)
-            .cloned()
-            .ok_or_else(|| Notice::error(format!("{asset} is not a map")))?;
+    /// Writes a map asset to `path` and marks it saved: the rules' result while its AutoMap
+    /// layers are on, their record going to its project file (with them off, a record left from
+    /// before goes). The warnings of what could not be done along the way.
+    fn write_map(&mut self, asset: AssetId, path: &Path) -> Result<Vec<Notice>, Notice> {
+        let save = self.layers_to_save(asset);
+        let map = match &save {
+            Some(save) => Arc::clone(save.layers.result()),
+            None => self
+                .store
+                .map(asset)
+                .cloned()
+                .ok_or_else(|| Notice::error(format!("{asset} is not a map")))?,
+        };
         let text = {
             let mut request = WriteRequest::for_map(&map, path);
             if let Some(loader) = self.files.loaders.get(&asset) {
@@ -201,7 +211,19 @@ impl Editor {
         };
         self.write_bytes(path, text.as_bytes())?;
         self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
-        Ok(())
+        let name = bt_utils::paths::display_name(path);
+        let mut warnings = Vec::new();
+        if save.as_ref().is_some_and(|save| !save.with_result) {
+            warnings.push(Notice::warning(format!(
+                "{name} was saved as painted: its AutoMap rules have not run on it as it is"
+            )));
+        }
+        if let Err(problem) = self.write_layers_record(asset, path, save.as_ref()) {
+            warnings.push(Notice::warning(format!(
+                "What was painted under the AutoMap layers of {name} was not saved: {problem}"
+            )));
+        }
+        Ok(warnings)
     }
 
     /// Writes a tileset asset to its file and marks it saved; its snapshot is no longer kept.

@@ -43,6 +43,16 @@ impl AutoLayers {
         }
     }
 
+    /// The painted map with no run made: its result is what was painted (rules that could not
+    /// be read run nothing).
+    pub fn painted_only(painted: Arc<Map>) -> AutoLayers {
+        AutoLayers {
+            painted,
+            after: Vec::new(),
+            reports: Vec::new(),
+        }
+    }
+
     /// The painted map, the first stage.
     pub fn painted(&self) -> &Arc<Map> {
         &self.painted

@@ -53,10 +53,12 @@ pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
 }
 
 pub fn editor_in(scratch: &Scratch) -> Editor {
+    std::fs::create_dir_all(scratch.join("locks")).unwrap();
     Editor::builder()
         .recovery_folder(scratch.join("recovery"))
         .pid(1000)
         .home(Some(scratch.path().to_path_buf()))
+        .lock_folder(scratch.join("locks"))
         .build()
         .unwrap()
 }

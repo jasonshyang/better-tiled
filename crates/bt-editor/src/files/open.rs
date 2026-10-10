@@ -56,6 +56,7 @@ impl Editor {
                 LoadKind::Map
             },
             purpose: LoadPurpose::Open,
+            home: self.files.home.clone(),
         }
     }
 
@@ -135,6 +136,26 @@ impl Editor {
         let mut map = *map;
         self.adopt_tilesets(files.tilesets);
         self.store.refresh_tilesets(&mut map);
+        let mut layers = match files.layers {
+            Ok(layers) => layers,
+            Err(problem) => {
+                effects.push(Effect::Notify(Notice::warning(format!(
+                    "The AutoMap layers of {} were not read: {problem}",
+                    bt_utils::paths::display_name(&path)
+                ))));
+                None
+            }
+        };
+        if let Some(restored) = &mut layers {
+            self.store.refresh_tilesets(&mut restored.painted);
+        }
+        // With AutoMap layers, the file holds the rules' result: the map edited is what was
+        // painted, and the file's map is kept to check the rules still make it.
+        let saved = Arc::new(map);
+        let root = match &layers {
+            Some(restored) => Arc::new(restored.painted.clone()),
+            None => Arc::clone(&saved),
+        };
         let warning_count = files.warnings.len();
         // A recovered map replaces nothing: if its file is open, it opens beside it, unsaved.
         let file = if loaded.recovered_from.is_some() && self.store.by_path(&path).is_some() {
@@ -143,7 +164,7 @@ impl Editor {
             Some(path.clone())
         };
         let asset = self.store.insert(NewAsset {
-            root: Root::Map(Arc::new(map)),
+            root: Root::Map(root),
             path: file,
             content_hash: files.content_hash,
             warnings: files.warnings,
@@ -153,6 +174,9 @@ impl Editor {
         }
         self.files.loaders.insert(asset, files.loader);
         let doc = self.open_document(asset);
+        if let Some(restored) = layers {
+            effects.extend(self.restore_layers(doc, restored, saved));
+        }
         self.restore_view_state(doc, &path);
         self.remember_recent(&path);
         if let Some(snapshot) = loaded.recovered_from {

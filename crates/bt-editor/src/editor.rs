@@ -36,6 +36,7 @@ pub struct EditorBuilder {
     pid: u32,
     mac: bool,
     home: Option<PathBuf>,
+    lock_folder: Option<PathBuf>,
 }
 
 impl EditorBuilder {
@@ -69,6 +70,14 @@ impl EditorBuilder {
         self
     }
 
+    /// Where project files (`better-tiled.json`) are locked while they are written: the user's
+    /// runtime folder, shared with `bt`. Without one, AutoMap layers' painted state is not saved,
+    /// with a notice.
+    pub fn lock_folder(mut self, folder: PathBuf) -> EditorBuilder {
+        self.lock_folder = Some(folder);
+        self
+    }
+
     /// The editor; the settings' key bindings must name commands and keys.
     pub fn build(self) -> Result<Editor, KeymapError> {
         let keymap = Keymap::from_settings(&self.settings.keymap, self.mac)?;
@@ -90,6 +99,7 @@ impl EditorBuilder {
             clipboard: Clipboard::default(),
             files: Files {
                 home: self.home,
+                lock_folder: self.lock_folder,
                 ..Files::default()
             },
             recovery: RecoveryPlan::new(self.recovery_folder, self.pid),
@@ -143,6 +153,7 @@ impl Editor {
             pid: std::process::id(),
             mac: cfg!(target_os = "macos"),
             home: None,
+            lock_folder: None,
         }
     }
 
@@ -158,7 +169,7 @@ impl Editor {
     /// tools of what it edits, as choosing a layer does.
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
-        let effects = match intent {
+        let mut effects = match intent {
             Intent::Run(id) => self.run(id),
             Intent::RunPalette(target) => self.run_palette(target),
             Intent::CreateMap(new) => self.create_map(&new),
@@ -338,7 +349,7 @@ impl Editor {
         {
             self.follow_document(doc);
         }
-        self.sync_live();
+        effects.extend(self.sync_live());
         effects
     }
 
