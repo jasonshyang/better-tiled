@@ -13,7 +13,7 @@
 //! The design is `docs/design/09-project-file.md`.
 
 mod automap;
-mod checksum;
+pub mod checksum;
 mod error;
 mod file;
 mod godot;

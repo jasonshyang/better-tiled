@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use bt_core::TilesetRef;
+use bt_core::{FileRef, TilesetRef};
 use bt_utils::paths::{absolute_path, clean_path, relative_path};
 
 use crate::error::Error;
@@ -42,8 +42,17 @@ pub fn resolve(file: &Path, key: &str) -> PathBuf {
 pub fn tileset_key(tileset: &TilesetRef) -> String {
     match &tileset.file {
         None => format!("#{}", tileset.tileset.name),
-        Some(file) if file.source.is_empty() => clean_reference(&file.path.to_string_lossy()),
-        Some(file) => clean_reference(&file.source),
+        Some(file) => reference_key(file),
+    }
+}
+
+/// How checksums name a file a map refers to (a tileset, a template): its path as the map writes
+/// it, with `/` and `.` and `..` folded, or its resolved path when the map has not written it yet.
+pub(crate) fn reference_key(file: &FileRef) -> String {
+    if file.source.is_empty() {
+        clean_reference(&file.path.to_string_lossy())
+    } else {
+        clean_reference(&file.source)
     }
 }
 
@@ -89,7 +98,7 @@ fn clean_reference(reference: &str) -> String {
 mod tests {
     use std::sync::Arc;
 
-    use bt_core::{FileRef, Tileset};
+    use bt_core::Tileset;
 
     use super::*;
 
