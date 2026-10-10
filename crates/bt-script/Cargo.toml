@@ -1,0 +1,32 @@
+[package]
+name = "bt-script"
+description = "better-tiled's edit scripts for agents: names, shapes and feet, the script language and its runner, the checks, the text views and the typed reports behind bt and the editor's live link"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+# It runs bt-edit, bt-terrain and bt-automap, which port Tiled's editor code under the GPL.
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+bt-automap.workspace = true
+bt-core.workspace = true
+bt-edit.workspace = true
+bt-image.workspace = true
+bt-project.workspace = true
+bt-render.workspace = true
+bt-terrain.workspace = true
+# Maps a script names (`copy MAP …`, pieces) and rules files are read through it.
+bt-tmx.workspace = true
+bt-utils.workspace = true
+glam = { workspace = true, features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+
+[lints]
+workspace = true
