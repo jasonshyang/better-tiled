@@ -1,6 +1,7 @@
 //! The panels beside the canvas. Each draws from the editor's queries and its own state (which
 //! tileset is shown, a name being edited) and returns intents; none changes the editor.
 
+mod automap;
 mod custom_rows;
 mod layers;
 mod objects;
@@ -11,6 +12,7 @@ mod tile_images;
 mod tiles;
 mod value_fields;
 
+pub(crate) use automap::AutoMapPanel;
 pub(crate) use custom_rows::{CustomEdit, CustomRows, RowsSetup};
 pub(crate) use layers::LayersPanel;
 pub(crate) use objects::ObjectsPanel;

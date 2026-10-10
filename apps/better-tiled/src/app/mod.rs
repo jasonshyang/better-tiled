@@ -2,6 +2,8 @@
 //! tab strip, status bar).
 
 #[cfg(test)]
+mod automap_tests;
+#[cfg(test)]
 mod custom_types_tests;
 mod effects;
 mod frame;

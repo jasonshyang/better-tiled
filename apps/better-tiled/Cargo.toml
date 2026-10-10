@@ -9,6 +9,7 @@ license = "GPL-3.0-or-later"
 publish = false
 
 [dependencies]
+bt-automap.workspace = true
 bt-core.workspace = true
 bt-editor.workspace = true
 bt-image.workspace = true

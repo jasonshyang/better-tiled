@@ -23,7 +23,8 @@ use crate::dialogs::{DialogRequest, Modals};
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{
-    LayersPanel, ObjectsPanel, PropertiesPanel, TerrainsPanel, TileImages, TileSource, TilesPanel,
+    AutoMapPanel, LayersPanel, ObjectsPanel, PropertiesPanel, TerrainsPanel, TileImages,
+    TileSource, TilesPanel,
 };
 use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::{apply_theme, interface_fonts};
@@ -54,6 +55,7 @@ pub(crate) struct App {
     toolbox: ToolBox,
     tiles_panel: TilesPanel,
     terrains_panel: TerrainsPanel,
+    automap_panel: AutoMapPanel,
     /// The Properties panel, below the Tiles panel.
     properties_panel: PropertiesPanel,
     /// The tileset editor, shown in place of a map or in a tileset's tab.
@@ -95,6 +97,8 @@ enum LeftTab {
     Layers,
     /// The Objects panel.
     Objects,
+    /// The AutoMap panel.
+    AutoMap,
 }
 
 impl LeftTab {
@@ -103,6 +107,7 @@ impl LeftTab {
         match self {
             LeftTab::Layers => "Layers",
             LeftTab::Objects => "Objects",
+            LeftTab::AutoMap => "AutoMap",
         }
     }
 }
@@ -297,6 +302,7 @@ impl App {
             toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
             terrains_panel: TerrainsPanel,
+            automap_panel: AutoMapPanel,
             properties_panel: PropertiesPanel::default(),
             tileset_editor: TilesetEditorView::default(),
             tile_images: TileImages::default(),
@@ -568,7 +574,7 @@ impl App {
                 .default_size(240.0)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        for tab in [LeftTab::Layers, LeftTab::Objects] {
+                        for tab in [LeftTab::Layers, LeftTab::Objects, LeftTab::AutoMap] {
                             let title = egui::RichText::new(tab.title()).heading();
                             if ui.selectable_label(self.left_tab == tab, title).clicked() {
                                 self.left_tab = tab;
@@ -583,6 +589,10 @@ impl App {
                         }
                         LeftTab::Objects => {
                             self.objects_panel
+                                .show(ui, &self.editor, doc, &mut self.intents);
+                        }
+                        LeftTab::AutoMap => {
+                            self.automap_panel
                                 .show(ui, &self.editor, doc, &mut self.intents);
                         }
                     }
