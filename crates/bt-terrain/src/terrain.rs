@@ -406,6 +406,11 @@ impl Terrain {
         self.kind_mask
     }
 
+    /// The labels that count, by tile, as the set's file has them.
+    pub(crate) fn labels(&self) -> &BTreeMap<TileId, PackedWangId> {
+        &self.labels
+    }
+
     pub(crate) fn candidates(&self) -> &[Candidate] {
         &self.candidates
     }

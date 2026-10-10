@@ -26,6 +26,7 @@ pub mod layouts;
 #[cfg(test)]
 mod oracle_tests;
 mod paint;
+pub mod patterns;
 mod pixels;
 mod request;
 mod terrain;
