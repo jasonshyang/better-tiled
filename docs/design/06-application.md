@@ -1,7 +1,7 @@
 # The application — `apps/better-tiled`
 
-*2026-10-09; the M1 part as built at the end of M1 (§1.1) and the M2 part at the end of M2
-(§1.2), both 2026-10-10. The design of the window:
+*2026-10-09; the M1 part as built at the end of M1 (§1.1), the M2 part at the end of M2
+(§1.2) and the M3 part at the end of M3 (§1.3), all 2026-10-10. The design of the window:
 tabs, menus, panels, dialogs, tools and the canvas, built on `bt-editor` (`05-editor-core.md`)
 and `bt-render` (`03-rendering.md`) with eframe and egui. The high-level design
 (`00-high-level-design.md`, §9) states the rule: the application holds no map logic; if it needs
@@ -131,6 +131,31 @@ M2 made the window edit. What it added:
 `click_on_screen`, `drag_on_screen`), answers to file dialogs, polling the watcher, and places
 to find on screen: tiles of the Tiles panel, of the tileset editor and of the animation
 palette, and points of the collision view.
+
+### 1.3 As built at M3
+
+M3 brought the rules into the window. What it added:
+
+- **The Terrain tool** (`tools/terrain.rs`, T): the target under the pointer from
+  `bt_terrain::hit_test` (the map's screen space less the layer's offset, as Tiled's brush
+  measures it), a preview of exactly what a dab places with the cells no tile fits outlined in
+  red and the reason in the status bar; a drag paints the targets `bt_terrain::Stroke` gives as
+  one step; ⌘ paints whole tiles, Shift a line from where the last stroke ended, ⌥ the half turn
+  around the map's centre too; a right-click takes the terrain under the pointer.
+- **The fill tools**: Bucket Fill and Shape Fill get a "Terrain fill" toggle and outline the
+  cells no terrain tile fits.
+- **Panels**: the right group's upper part is two tabs over one current tileset, Tiles and
+  Terrains; the Terrains panel lists the tileset's terrain sets, each with an erase row and its
+  terrains (colour, the tile that stands for it, name), and a click chooses one and the Terrain
+  tool.
+- **The tileset editor's Terrain mode** (`tileset_editor/terrain.rs`): the tiles with the chosen
+  set's labels drawn over them and the lane under the pointer outlined, found as Tiled's tileset
+  view finds it (a corner set's quadrant, an edge set's triangle, a mixed set's ninth, the
+  middle nothing), on an isometric tileset on the diamond Tiled maps each tile to; a drag labels
+  lanes, the right button clears them; beside the tiles, the sets with New (corner, edge or
+  mixed), Rename, Duplicate and Remove, and the chosen set's terrains with Add, a colour button,
+  a weight, Rename, Move Up, Move Down and Remove. The Tiles and Terrain modes share one tile
+  grid (`draw_tiles`).
 
 ## 2. Startup
 

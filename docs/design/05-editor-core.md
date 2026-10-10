@@ -1,7 +1,7 @@
 # Editor core — `bt-editor`
 
-*2026-10-09; the M1 part as built at the end of M1 (§1.1) and the M2 part at the end of M2
-(§1.2), both 2026-10-10. The design of the crate
+*2026-10-09; the M1 part as built at the end of M1 (§1.1), the M2 part at the end of M2
+(§1.2) and the M3 part at the end of M3 (§1.3), all 2026-10-10. The design of the crate
 that is the editor without a window: what is open, how it changes, how it relates to the files
 on disk, what the user can do to it, and what the editor remembers between runs. The high-level
 design (`00-high-level-design.md`, §8) states the shape: an asset store, documents as views on
@@ -18,10 +18,10 @@ the thread that owns the `Editor`, which in the window is the UI thread. Work th
 worker; the results come back as intents. The crate therefore has no threads, no timers and no
 channels of its own, and every behaviour is a function of what it was told.
 
-Dependencies: `bt-core`, `bt-tmx`, `bt-edit`, `bt-automap`, `bt-project`, `bt-utils`, `serde`
-and `toml` for what is remembered. Not `bt-render`, `bt-terrain` (the terrain tool's choice is
-three ids), `bt-script` (the window runs scripts and hands the result in) or `bt-godot` (the
-export is an effect the window carries out).
+Dependencies: `bt-core`, `bt-tmx`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project`,
+`bt-utils`, `serde` and `toml` for what is remembered. Not `bt-render`, `bt-script` (the window
+runs scripts and hands the result in) or `bt-godot` (the export is an effect the window carries
+out).
 
 ### 1.1 As built at M1
 
@@ -110,6 +110,27 @@ current document's history; Save, Save All and the quit prompt write a changed p
 The project file is not watched yet (§18).
 
 The crate now depends on `bt-edit` too.
+
+### 1.3 As built at M3
+
+M3 brought the rules into the editor. What it added, module by module:
+
+| Module | What it holds |
+|---|---|
+| `tools/terrain.rs` | `TerrainChoice { home, set, color }`, the terrain painted, naming a set by where its tileset lives; `terrain_in_use(doc)`, the choice made ready for a document (the prepared `bt_terrain::Terrain` in that map's slot, the current tile layer, the terrains' names) or why it cannot paint (`NoTerrain`: none chosen, the tileset not the map's, no layer, not a tile layer, locked); `terrain_preview` and `terrain_fill_preview`, exactly what a dab or a fill places; `TerrainStroke` (`Begin`, `Paint { targets, mirror }`, `End`, `Cancel`), a gesture whose dabs draw from one seed and which says at its end what no tile fits, which terrain it pushed back and which other set it painted over; the terrain under a target taken as the one painted |
+| `tools/` | `ToolKind::Terrain` (T); `ToolState` keeps the terrain choice, the terrain-fill switch of Bucket Fill and Shape Fill (picking a brush turns it off, as §6 wants), the terrain seed and where the last terrain stroke ended |
+| `terrain_sets.rs` | the tileset editor's Terrain mode: `LabelTerrain`, the set and terrain labelling paints; `LabelStroke` (`Begin`, `Paint { marks }`, `End`, `Cancel`), lanes labelled or cleared, each drag one step, a label left with no terrain removed; `TerrainSetEdit`, one step per change of the sets: new set of each kind (Tiled's "Unnamed Set" with one terrain), remove, duplicate, rename; terrains added (Tiled's colours in turn, named "Terrain N"), removed and moved with the labels following, renamed, recoloured, weighted; the labelling choice follows every edit |
+| `document/` | `TilesetMode::Terrain`; `TilesetEditing` keeps the terrain labelling paints |
+| `inspect/`, `properties/` | `Inspected::TerrainSet` and `Inspected::Terrain`: in the Terrain mode the Properties panel shows the terrain labelled with, or its set for no terrain; a set's name, class and type (`Attribute::TerrainType`), a terrain's name, class, colour and probability, and custom properties of either under their classes' members (`ClassUsage::WANG_SET`, `WANG_COLOR`) |
+
+The intents added: `ChooseTerrain`, `TerrainStroke`, `CaptureTerrain`, `SetTerrainFill`,
+`ChooseLabelTerrain`, `LabelStroke`, `EditTerrainSets`. A document that becomes current by any
+means (opened, loaded, switched to, next in line when another closes) brings the tools of what
+it edits: one rule, in `Editor::apply`.
+
+The crate now depends on `bt-terrain` (`decisions.md`, 2026-10-10): §1's first version kept the
+terrain to three ids and left the solver to the window, which could not make the transaction
+the editor makes for every tool.
 
 ## 2. The editor
 
