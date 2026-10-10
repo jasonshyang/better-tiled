@@ -37,27 +37,28 @@ const LANE_NAMES: [&str; LANE_COUNT] = [
 /// at the top-left corner and Grass at the other three corners (and 1 other pattern)", or the
 /// plain reason when the commonest lack has one. `None` when nothing was left unfilled.
 pub fn missing_text(terrain: &Terrain, name: TerrainName<'_>, needed: &[Needed]) -> Option<String> {
-    let mut groups: HashMap<(Pattern, Cause), usize> = HashMap::new();
-    for need in needed {
-        *groups.entry((need.lanes, need.cause)).or_default() += 1;
-    }
-    let mut groups: Vec<((Pattern, Cause), usize)> = groups.into_iter().collect();
-    // The commonest first; ties by pattern, so the sentence does not depend on hashing.
-    groups.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.0.cmp(&b.0.0)));
-    let ((pattern, cause), _) = groups.first()?;
-    let cells = plural(needed.len(), "cell", "cells");
     let set = format!("“{}”", terrain.name());
-    let reason = match cause {
-        Cause::ZeroProbability => format!("the tile that fits best in {set} has probability 0"),
-        _ => plain_reason(terrain, name, pattern)
-            .map(|reason| format!("{set} {reason}"))
-            .unwrap_or_else(|| {
-                format!(
-                    "{set} has none with {}",
-                    describe(pattern, terrain.kind(), name)
-                )
-            }),
-    };
+    // Lacks are grouped by what is said of them, so cells with one plain reason count once.
+    let mut groups: HashMap<String, usize> = HashMap::new();
+    for need in needed {
+        let reason = match need.cause {
+            Cause::ZeroProbability => format!("the tile that fits best in {set} has probability 0"),
+            _ => plain_reason(terrain, name, &need.lanes)
+                .map(|reason| format!("{set} {reason}"))
+                .unwrap_or_else(|| {
+                    format!(
+                        "{set} has none with {}",
+                        describe(&need.lanes, terrain.kind(), name)
+                    )
+                }),
+        };
+        *groups.entry(reason).or_default() += 1;
+    }
+    let mut groups: Vec<(String, usize)> = groups.into_iter().collect();
+    // The commonest first; ties by the words, so the sentence does not depend on hashing.
+    groups.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let (reason, _) = groups.first()?;
+    let cells = plural(needed.len(), "cell", "cells");
     let others = groups.len() - 1;
     let more = if others > 0 {
         format!(

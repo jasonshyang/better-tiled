@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 bt-core.workspace = true
 bt-edit.workspace = true
+bt-terrain.workspace = true
 bt-tmx.workspace = true
 bt-utils.workspace = true
 glam.workspace = true

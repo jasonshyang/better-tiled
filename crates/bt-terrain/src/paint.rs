@@ -99,8 +99,10 @@ fn preview_of(outcome: Outcome) -> Preview {
     }
 }
 
-/// Writes a preview's cells into the layer; the report's bounds cover the cells that changed.
-fn write_preview(map: &mut Map, id: LayerId, preview: Preview) -> Result<Report, TerrainError> {
+/// Writes a preview's cells into the tile layer `id`: what [`paint`] and [`fill`] do after
+/// previewing, for callers that previewed already. The report's bounds cover the cells that
+/// changed.
+pub fn write_preview(map: &mut Map, id: LayerId, preview: Preview) -> Result<Report, TerrainError> {
     let layer = map.layer_mut(id).ok_or(TerrainError::NoSuchLayer(id))?;
     let name = layer.name.clone();
     let cells = layer

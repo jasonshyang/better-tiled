@@ -532,6 +532,11 @@ action_table! {
         .on(TileLayer)
         .keys(&[plain('b')])
         .tool(ToolKind::Brush),
+    /// The Terrain tool.
+    TerrainTool => ActionSpec::new(ActionId::TerrainTool, "terrain_tool", "Terrain", "wang terrain brush paint tool")
+        .on(TileLayer)
+        .keys(&[plain('t')])
+        .tool(ToolKind::Terrain),
     /// The Eraser.
     EraserTool => ActionSpec::new(ActionId::EraserTool, "eraser_tool", "Eraser", "erase delete tool")
         .on(TileLayer)
@@ -623,6 +628,7 @@ action_table! {
 pub fn tool_action(tool: ToolKind) -> ActionId {
     match tool {
         ToolKind::Brush => ActionId::BrushTool,
+        ToolKind::Terrain => ActionId::TerrainTool,
         ToolKind::Eraser => ActionId::EraserTool,
         ToolKind::BucketFill => ActionId::BucketFillTool,
         ToolKind::ShapeFill => ActionId::ShapeFillTool,

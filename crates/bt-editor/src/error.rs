@@ -59,6 +59,9 @@ pub enum EditError {
     /// A change of properties, built-in attributes or custom types was refused.
     #[error(transparent)]
     Property(#[from] crate::properties::PropertyError),
+    /// A terrain paint or fill was refused.
+    #[error(transparent)]
+    Terrain(#[from] bt_terrain::TerrainError),
     /// A later change to an asset was made where it cannot be named (its history was dropped).
     #[error("{asset} changed since; undo its later changes first")]
     ChangedSince {

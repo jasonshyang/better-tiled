@@ -572,6 +572,7 @@ version = "0.1.0"
 dependencies = [
  "bt-core",
  "bt-edit",
+ "bt-terrain",
  "bt-test-data",
  "bt-tmx",
  "bt-utils",

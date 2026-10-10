@@ -148,6 +148,7 @@ impl Editor {
                 Vec::new()
             }
             ActionId::BrushTool
+            | ActionId::TerrainTool
             | ActionId::EraserTool
             | ActionId::BucketFillTool
             | ActionId::ShapeFillTool

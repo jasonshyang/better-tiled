@@ -141,6 +141,7 @@ const MENUS: [Menu; 7] = [
         title: "Tools",
         entries: &[
             Action(ActionId::BrushTool),
+            Action(ActionId::TerrainTool),
             Action(ActionId::EraserTool),
             Action(ActionId::BucketFillTool),
             Action(ActionId::ShapeFillTool),

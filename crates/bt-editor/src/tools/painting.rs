@@ -90,12 +90,16 @@ pub struct FillPreview {
     pub area: TileRegion,
     /// The tiles painted, in the map's tilesets.
     pub cells: Vec<PlacedCell>,
+    /// With terrain, the cells no tile fits.
+    pub invalid: Vec<IVec2>,
 }
 
 impl Editor {
     /// Makes `brush` the brush; the Brush tool becomes current (picking a brush means painting
     /// with it).
     pub(crate) fn set_brush(&mut self, brush: Brush) {
+        // Picking a brush by any means means painting with it, not with terrain.
+        self.tools.terrain_fill = false;
         let brush = brush
             .with_mode(if self.tools.random {
                 BrushMode::Random
@@ -308,16 +312,31 @@ impl Editor {
         extra: &[Cell],
         whole_selection: bool,
     ) -> FillPreview {
-        let (Some(brush), Some(map)) = (&self.tools.brush, self.map_of(doc)) else {
+        let Some(map) = self.map_of(doc) else {
             return FillPreview::default();
         };
         let selection = self.selection_of(doc);
         let area = fill_region(map, &selection, start, extra, whole_selection);
-        let cells = brush
-            .fill(&area, &mut Rng::new(self.tools.seed))
+        if self.tools.terrain_fill {
+            let preview = self.terrain_fill_preview(doc, &area).unwrap_or_default();
+            return FillPreview {
+                area,
+                cells: preview.cells,
+                invalid: preview.invalid,
+            };
+        }
+        let cells = self
+            .tools
+            .brush
+            .as_ref()
+            .and_then(|brush| brush.fill(&area, &mut Rng::new(self.tools.seed)))
             .map(|clip| cells_in_map(map, &clip))
             .unwrap_or_default();
-        FillPreview { area, cells }
+        FillPreview {
+            area,
+            cells,
+            invalid: Vec::new(),
+        }
     }
 
     /// Fills as [`Editor::fill_preview`] shows, as one step.
@@ -333,15 +352,27 @@ impl Editor {
         };
         let selection = self.selection_of(doc);
         let area = fill_region(&map, &selection, start, extra, whole_selection);
+        if self.tools.terrain_fill {
+            return self.terrain_fill(doc, &area, "Fill");
+        }
         self.paint_area(doc, &area, "Fill")
     }
 
     /// What Shape Fill paints over `region`.
     pub fn shape_preview(&self, doc: DocumentId, region: &TileRegion) -> Vec<PlacedCell> {
-        let (Some(brush), Some(map)) = (&self.tools.brush, self.map_of(doc)) else {
+        let Some(map) = self.map_of(doc) else {
             return Vec::new();
         };
         let region = paintable(map, &self.selection_of(doc), region);
+        if self.tools.terrain_fill {
+            return self
+                .terrain_fill_preview(doc, &region)
+                .map(|preview| preview.cells)
+                .unwrap_or_default();
+        }
+        let Some(brush) = &self.tools.brush else {
+            return Vec::new();
+        };
         brush
             .fill(&region, &mut Rng::new(self.tools.seed))
             .map(|clip| cells_in_map(map, &clip))
@@ -354,6 +385,9 @@ impl Editor {
             return Vec::new();
         };
         let region = paintable(&map, &self.selection_of(doc), region);
+        if self.tools.terrain_fill {
+            return self.terrain_fill(doc, &region, "Shape Fill");
+        }
         self.paint_area(doc, &region, "Shape Fill")
     }
 

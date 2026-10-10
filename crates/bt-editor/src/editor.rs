@@ -24,7 +24,7 @@ use crate::recovery::{RecoveryPlan, Snapshot, SnapshotMeta};
 use crate::session::Session;
 use crate::settings::Settings;
 use crate::store::{AssetId, AssetKind, AssetStore, NewAsset, Root, TilesetHome};
-use crate::tools::{StrokeState, ToolState};
+use crate::tools::{StrokeState, TerrainStrokeState, ToolState};
 use crate::watch::WatchModel;
 
 /// Sets up an [`Editor`].
@@ -81,6 +81,7 @@ impl EditorBuilder {
             gesture: None,
             stroke: None,
             object_stroke: None,
+            terrain_stroke: None,
             keymap,
             tools: ToolState::default(),
             palette: PaletteState::default(),
@@ -109,6 +110,8 @@ pub struct Editor {
     pub(crate) stroke: Option<StrokeState>,
     /// A drag of objects under way.
     pub(crate) object_stroke: Option<ObjectStrokeState>,
+    /// A Terrain tool stroke under way.
+    pub(crate) terrain_stroke: Option<TerrainStrokeState>,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
     pub(crate) palette: PaletteState,
@@ -236,6 +239,18 @@ impl Editor {
             } => self.reorder_objects(doc, &objects, layer, index),
             Intent::InsertObject { doc, object } => self.insert_object(doc, *object),
             Intent::ObjectStroke(step) => self.object_stroke(step),
+            Intent::ChooseTerrain {
+                doc,
+                slot,
+                set,
+                color,
+            } => self.choose_terrain(doc, slot, set, color),
+            Intent::TerrainStroke(step) => self.terrain_stroke(step),
+            Intent::CaptureTerrain { doc, target } => self.capture_terrain(doc, target),
+            Intent::SetTerrainFill(on) => {
+                self.tools.terrain_fill = on;
+                Vec::new()
+            }
             Intent::PasteObjects { doc, at } => self.paste_copied_objects(doc, at),
             Intent::MoveObjectsToLayer { doc, layer } => self.move_selected_objects_to(doc, layer),
             Intent::Stroke(step) => self.stroke(step),

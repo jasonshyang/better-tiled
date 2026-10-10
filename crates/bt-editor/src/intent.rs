@@ -18,7 +18,7 @@ use crate::offset_map::MapOffset;
 use crate::properties::{Attribute, AttributeValue, Change, TypeEdit};
 use crate::recovery::Orphan;
 use crate::settings::Settings;
-use crate::tools::Stroke;
+use crate::tools::{Stroke, TerrainStroke};
 use crate::watch::Observation;
 
 /// A request to the editor.
@@ -267,6 +267,29 @@ pub enum Intent {
     },
     /// What Shape Fill paints (the toolbar's).
     SetFillShape(FillShape),
+    /// Terrain `color` of set `set` of the map's tileset in `slot` becomes the one painted, and
+    /// the Terrain tool current (the Terrains panel).
+    ChooseTerrain {
+        /// The document whose map has the tileset.
+        doc: DocumentId,
+        /// The tileset's slot in the map.
+        slot: TilesetSlot,
+        /// The set's index in the tileset.
+        set: usize,
+        /// The terrain; none erases.
+        color: bt_terrain::TerrainColor,
+    },
+    /// A step of a Terrain tool stroke.
+    TerrainStroke(TerrainStroke),
+    /// The terrain under a target becomes the one painted (the Terrain tool's right-click).
+    CaptureTerrain {
+        /// The document.
+        doc: DocumentId,
+        /// Where.
+        target: bt_terrain::BrushTarget,
+    },
+    /// Whether Bucket Fill and Shape Fill fill with the terrain (the toolbar's).
+    SetTerrainFill(bool),
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

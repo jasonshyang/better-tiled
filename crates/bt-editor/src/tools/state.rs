@@ -2,10 +2,12 @@
 //! that keep the tool, the layer and the brush coherent.
 
 use bt_edit::{Brush, BrushMode, FillShape, SelectionMode};
+use bt_terrain::BrushTarget;
 use bt_utils::rng::Rng;
 use glam::IVec2;
 
 use super::kind::{ToolFamily, ToolKind};
+use super::terrain::TerrainChoice;
 
 /// The current tool and its options.
 #[derive(Clone, Debug, PartialEq)]
@@ -33,6 +35,15 @@ pub struct ToolState {
     pub(crate) seed: u64,
     /// Where the last brush stroke ended, where Shift's line starts.
     pub(crate) last_paint: Option<IVec2>,
+    /// The terrain the Terrain tool paints and terrain fills prefer.
+    pub(crate) terrain: Option<TerrainChoice>,
+    /// Whether Bucket Fill and Shape Fill fill with the terrain rather than the brush; picking
+    /// a brush ends it.
+    pub(crate) terrain_fill: bool,
+    /// The seed of the next terrain stroke or fill; it moves on after each, as the brush's does.
+    pub(crate) terrain_seed: u64,
+    /// Where the last terrain stroke ended, where Shift's line starts.
+    pub(crate) last_terrain_target: Option<BrushTarget>,
 }
 
 impl Default for ToolState {
@@ -49,6 +60,10 @@ impl Default for ToolState {
             brush: None,
             seed: 0x5EED_0FB7_7E55,
             last_paint: None,
+            terrain: None,
+            terrain_fill: false,
+            terrain_seed: 0x7E44_A1D5_EED0,
+            last_terrain_target: None,
         }
     }
 }
@@ -90,6 +105,26 @@ impl ToolState {
     /// Where the last brush stroke ended.
     pub fn last_paint(&self) -> Option<IVec2> {
         self.last_paint
+    }
+
+    /// The terrain chosen, if any.
+    pub fn terrain(&self) -> Option<TerrainChoice> {
+        self.terrain
+    }
+
+    /// Whether the fill tools fill with the terrain.
+    pub fn terrain_fill(&self) -> bool {
+        self.terrain_fill
+    }
+
+    /// Where the last terrain stroke ended.
+    pub fn last_terrain_target(&self) -> Option<BrushTarget> {
+        self.last_terrain_target
+    }
+
+    /// Moves the terrain seed on, for the next stroke or fill.
+    pub(crate) fn reseed_terrain(&mut self) {
+        self.terrain_seed = Rng::new(self.terrain_seed).next_u64();
     }
 
     /// Moves the seed on, for the next paint.

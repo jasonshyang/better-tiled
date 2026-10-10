@@ -5,6 +5,8 @@
 pub enum ToolKind {
     /// Paints the brush.
     Brush,
+    /// Paints terrain.
+    Terrain,
     /// Erases tiles.
     Eraser,
     /// Fills an area of like tiles.
@@ -57,6 +59,7 @@ impl ToolKind {
     pub fn family(self) -> ToolFamily {
         match self {
             ToolKind::Brush
+            | ToolKind::Terrain
             | ToolKind::Eraser
             | ToolKind::BucketFill
             | ToolKind::ShapeFill

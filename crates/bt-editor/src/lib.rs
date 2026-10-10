@@ -69,7 +69,10 @@ pub use settings::{
     data_folder,
 };
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root, TilesetHome};
-pub use tools::{FillPreview, MAX_BRUSH_SIZE, Stroke, StrokeKind, ToolFamily, ToolKind, ToolState};
+pub use tools::{
+    FillPreview, MAX_BRUSH_SIZE, NoTerrain, Stroke, StrokeKind, TerrainChoice, TerrainInUse,
+    TerrainStroke, ToolFamily, ToolKind, ToolState,
+};
 pub use watch::{Found, Observation};
 
 // The editing types the intents and queries speak in.
