@@ -4,11 +4,16 @@
 //! when left out) and flips: `h` and `v` mirror, `d` mirrors along the anti-diagonal (a 60° turn
 //! on hexagonal maps), `x` turns 120° on hexagonal maps. So `3`, `3h`, `12@1vd`. Blank lines are
 //! skipped, so a grid can be indented in a raw string.
+//!
+//! In rule maps, a capital letter is one of AutoMap's rule tiles ([`super::rule_tiles`]), in
+//! slot [`super::RULE_SLOT`] unless an `@slot` says otherwise: `X` Negate, `I` Ignore, `N`
+//! NonEmpty, `E` Empty, `O` Other.
 
 use bt_core::{Cell, Flip, PlacedCell, TileId, TileLayer, TilesetSlot};
 use glam::{IVec2, UVec2};
 
 use super::error::FixtureError;
+use super::rules::{RULE_SLOT, RULE_TILE_LETTERS};
 
 /// The cells a grid places, row by row from (0, 0); empty cells are left out.
 pub fn grid_cells(text: &str) -> Result<Vec<PlacedCell>, FixtureError> {
@@ -79,12 +84,24 @@ fn parse_cell(token: &str) -> Option<Option<Cell>> {
     if token == "." {
         return Some(None);
     }
-    let digits_end = token
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(token.len());
-    let id: u32 = token.get(..digits_end)?.parse().ok()?;
-    let mut rest = token.get(digits_end..)?;
-    let mut slot = 0u32;
+    let rule_tile = token
+        .chars()
+        .next()
+        .and_then(|c| RULE_TILE_LETTERS.iter().position(|&letter| letter == c));
+    let (id, mut rest, mut slot) = match rule_tile {
+        Some(index) => (
+            u32::try_from(index).ok()?,
+            token.get(1..)?,
+            u32::try_from(RULE_SLOT).ok()?,
+        ),
+        None => {
+            let digits_end = token
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(token.len());
+            let id: u32 = token.get(..digits_end)?.parse().ok()?;
+            (id, token.get(digits_end..)?, 0u32)
+        }
+    };
     if let Some(after_at) = rest.strip_prefix('@') {
         let slot_end = after_at
             .find(|c: char| !c.is_ascii_digit())

@@ -6,8 +6,10 @@ mod atlas;
 mod error;
 mod grid;
 mod map;
+mod rules;
 
 pub use atlas::{Atlas, AtlasBuilder, GUTTER, MARKER};
 pub use error::FixtureError;
 pub use grid::{grid_cells, grid_layer};
 pub use map::MapBuilder;
+pub use rules::{RULE_SLOT, rule_tiles};

@@ -22,6 +22,8 @@ mod bx;
     )
 )]
 mod cell_set;
+mod object_cells;
+mod problem;
 #[cfg_attr(
     not(test),
     expect(
@@ -31,5 +33,12 @@ mod cell_set;
 )]
 mod rng;
 mod rule_ref;
+#[expect(
+    dead_code,
+    reason = "the rule set and the engine, which come next, use it"
+)]
+mod rulemap;
 
+pub use problem::{Problem, ProblemKind, Severity};
 pub use rule_ref::RuleRef;
+pub use rulemap::RuleMap;

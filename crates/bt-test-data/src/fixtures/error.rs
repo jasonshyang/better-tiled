@@ -8,7 +8,7 @@ use std::path::PathBuf;
 pub enum FixtureError {
     /// A grid token that means nothing.
     #[error(
-        "grid line {line}: “{token}” is not a cell (`.`, or a tile id with an optional `@slot` and flips h, v, d, x)"
+        "grid line {line}: “{token}” is not a cell (`.`, a tile id or a rule tile letter X, I, N, E, O, with an optional `@slot` and flips h, v, d, x)"
     )]
     UnknownToken {
         /// The line, from 1.
