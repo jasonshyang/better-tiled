@@ -21,5 +21,6 @@ pub mod paths;
 mod rows;
 mod schema;
 
+pub use automap::{AutoMapRecord, BindingRecord, PaintedRecord, RunRecord};
 pub use error::Error;
 pub use schema::{Document, MapEntry, Note};

@@ -14,6 +14,8 @@ use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 
+use crate::automap::AutoMapRecord;
+
 /// The format version this program writes. It changes only when a key's meaning changes:
 /// adding a key never bumps it, since unknown keys are kept and defaults are explicit.
 pub(crate) const FORMAT_VERSION: u32 = 1;
@@ -36,10 +38,13 @@ pub struct Document {
     unknown: UnknownKeys,
 }
 
-/// What a project file says about one map.
+/// What a project file says about one map: its records.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MapEntry {
+    /// The map's AutoMap layers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    automap: Option<AutoMapRecord>,
     /// Keys this version does not know: records a newer version added, kept as they were.
     #[serde(flatten)]
     unknown: UnknownKeys,
@@ -115,13 +120,51 @@ impl Document {
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.maps.keys().map(String::as_str)
     }
+
+    /// The AutoMap record of the map with `key`.
+    pub fn automap(&self, key: &str) -> Option<&AutoMapRecord> {
+        self.maps.get(key)?.automap.as_ref()
+    }
+
+    /// Sets the AutoMap record of the map with `key`, replacing the one it had, and changes
+    /// nothing else. Keys the replaced record had that this version does not know stay, unless
+    /// `record` sets them itself: a newer version's additions survive an older one's save.
+    pub fn set_automap(&mut self, key: &str, mut record: AutoMapRecord) {
+        let entry = self.maps.entry(key.to_owned()).or_default();
+        if let Some(replaced) = entry.automap.take() {
+            for (name, value) in replaced.unknown {
+                record.unknown.entry(name).or_insert(value);
+            }
+        }
+        entry.automap = Some(record);
+    }
+
+    /// Removes the AutoMap record of the map with `key` and returns it; an entry left with
+    /// nothing in it is removed too.
+    pub fn remove_automap(&mut self, key: &str) -> Option<AutoMapRecord> {
+        let removed = self.maps.get_mut(key)?.automap.take();
+        self.remove_entry_if_empty(key);
+        removed
+    }
+
+    /// Removes the entry of `key` when nothing is left in it.
+    fn remove_entry_if_empty(&mut self, key: &str) {
+        if self.maps.get(key).is_some_and(MapEntry::is_empty) {
+            self.maps.remove(key);
+        }
+    }
 }
 
 impl MapEntry {
+    /// The map's AutoMap record.
+    pub fn automap(&self) -> Option<&AutoMapRecord> {
+        self.automap.as_ref()
+    }
+
     /// Whether the entry holds nothing, not even a record this version does not know; such an
     /// entry is removed from the file.
     pub fn is_empty(&self) -> bool {
-        self.unknown.is_empty()
+        self.automap.is_none() && self.unknown.is_empty()
     }
 }
 
@@ -278,6 +321,82 @@ mod tests {
         ] {
             assert!(Document::from_json(text).is_err(), "{text}");
         }
+    }
+
+    fn record(rules: &str) -> AutoMapRecord {
+        AutoMapRecord {
+            rules: rules.to_owned(),
+            seed: 1,
+            ..AutoMapRecord::default()
+        }
+    }
+
+    #[test]
+    fn setting_a_record_replaces_only_that_maps_and_keeps_what_a_newer_version_added() {
+        let mut document = Document::from_json(
+            r#"{"maps": {
+                "a.tmx": {"zones": 1, "automap": {"rules": "old.txt", "seed": 9, "runs": [],
+                          "later": "kept", "mode": "old"}},
+                "b.tmx": {"automap": {"rules": "b.txt", "seed": 2, "runs": []}}
+            }}"#,
+        )
+        .unwrap();
+        let b = document.automap("b.tmx").cloned();
+        let mut new = record("new.txt");
+        new.unknown.insert("mode".to_owned(), Value::from("new"));
+        document.set_automap("a.tmx", new);
+        let a = document.automap("a.tmx").unwrap();
+        assert_eq!((a.rules.as_str(), a.seed), ("new.txt", 1));
+        assert_eq!(a.unknown["later"], "kept", "a newer version's key stays");
+        assert_eq!(a.unknown["mode"], "new", "unless the new record sets it");
+        assert_eq!(
+            document.automap("b.tmx").cloned(),
+            b,
+            "other maps untouched"
+        );
+        assert!(
+            document.to_json().unwrap().contains("\"zones\": 1"),
+            "the entry's other records stay"
+        );
+
+        document.set_automap("new/c.tmx", record("c.txt"));
+        assert_eq!(
+            document.keys().collect::<Vec<_>>(),
+            ["a.tmx", "b.tmx", "new/c.tmx"]
+        );
+    }
+
+    #[test]
+    fn an_entry_left_empty_is_removed_and_one_with_unknown_records_is_kept() {
+        let mut document = Document::from_json(
+            r#"{"maps": {
+                "a.tmx": {"zones": 1, "automap": {"rules": "a.txt", "seed": 1, "runs": []}},
+                "b.tmx": {"automap": {"rules": "b.txt", "seed": 2, "runs": []}}
+            }}"#,
+        )
+        .unwrap();
+        let removed = document.remove_automap("b.tmx").unwrap();
+        assert_eq!(removed.rules, "b.txt");
+        assert!(document.entry("b.tmx").is_none(), "emptied, so removed");
+        assert_eq!(document.remove_automap("a.tmx").unwrap().rules, "a.txt");
+        assert!(document.automap("a.tmx").is_none());
+        assert!(!document.entry("a.tmx").unwrap().is_empty(), "zones remain");
+        assert_eq!(document.remove_automap("a.tmx"), None);
+        assert_eq!(document.remove_automap("missing.tmx"), None);
+        let written = document.to_json().unwrap();
+        assert!(
+            !written.contains("b.tmx") && !written.contains("automap"),
+            "{written}"
+        );
+
+        let mut only = Document::default();
+        only.set_automap("a.tmx", record("a.txt"));
+        only.remove_automap("a.tmx");
+        assert_eq!(
+            only.to_json().unwrap(),
+            EMPTY,
+            "the empty document, not nothing"
+        );
     }
 
     #[test]
