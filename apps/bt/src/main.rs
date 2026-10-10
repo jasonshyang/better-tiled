@@ -5,10 +5,12 @@
 //! gets.
 
 mod cli;
+mod commands;
 mod exit;
 #[cfg(test)]
 mod guide_tests;
 mod load;
+mod output;
 mod run;
 
 use std::io::Write;

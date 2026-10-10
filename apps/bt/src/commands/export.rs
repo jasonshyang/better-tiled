@@ -1,0 +1,203 @@
+//! `bt export`: a map or tileset in another of Tiled's formats (`10-agents.md`, §10.8).
+
+use std::path::Path;
+
+use anyhow::{Context, bail};
+use bt_script::{ExportFormat, ExportOutcome};
+use bt_tmx::{ExportOptions, Format, Loader, WriteRequest};
+
+use crate::cli::{Cli, ExportArgs};
+use crate::exit::{Printed, Status};
+use crate::load::load_map;
+use crate::output::printed;
+
+/// Runs `bt export`.
+pub(crate) fn export(cli: &Cli, args: &ExportArgs, home: Option<&Path>) -> anyhow::Result<Printed> {
+    if args.schema || args.resolved {
+        bail!("the resolved JSON is not built yet");
+    }
+    let (Some(input), Some(out)) = (&args.input, &args.out) else {
+        bail!("bt export needs the file to export and the file to write");
+    };
+    let extension = out
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    if extension == "png" {
+        bail!("pictures are not built yet");
+    }
+    let Some(format) = Format::from_path(out) else {
+        bail!(
+            "{} names no format bt writes: .tmx, .tmj, .json or .js for a map, .tsx, .tsj or \
+             .json for a tileset, .png for a picture",
+            out.display()
+        );
+    };
+    let options = ExportOptions {
+        embed_tilesets: args.embed_tilesets,
+        detach_templates: args.detach_templates,
+        resolve_types_and_properties: args.resolve_types,
+        minimize: args.minimize,
+    };
+    let mut warnings = Vec::new();
+    if is_tileset(input)? {
+        if format == Format::JavaScript {
+            bail!("a tileset is written as .tsx, .tsj or .json, not .js");
+        }
+        let mut loader = Loader::builder().build();
+        let loaded = loader
+            .load_tileset(input)
+            .with_context(|| format!("{} can't be read", input.display()))?;
+        warnings.extend(loaded.warnings.iter().map(ToString::to_string));
+        let written = WriteRequest::for_tileset(&loaded.value, out)
+            .format(format)
+            .loader(&loader)
+            .export(options)
+            .write()
+            .with_context(|| format!("{} was not written", out.display()))?;
+        warnings.extend(written.iter().map(ToString::to_string));
+    } else {
+        let loaded = load_map(input, cli.project.as_deref(), home)?;
+        warnings.extend(loaded.warnings.iter().map(ToString::to_string));
+        let written = WriteRequest::for_map(&loaded.map, out)
+            .format(format)
+            .loader(&loaded.loader)
+            .export(options)
+            .write()
+            .with_context(|| format!("{} was not written", out.display()))?;
+        warnings.extend(written.iter().map(ToString::to_string));
+    }
+    let outcome = ExportOutcome {
+        input: input.clone(),
+        out: out.clone(),
+        format: match format {
+            Format::Xml => ExportFormat::Xml,
+            Format::Json => ExportFormat::Json,
+            Format::JavaScript => ExportFormat::JavaScript,
+        },
+        options: [
+            (args.embed_tilesets, "--embed-tilesets"),
+            (args.detach_templates, "--detach-templates"),
+            (args.resolve_types, "--resolve-types"),
+            (args.minimize, "--minimize"),
+        ]
+        .iter()
+        .filter(|option| option.0)
+        .map(|option| option.1.to_owned())
+        .collect(),
+        warnings,
+    };
+    printed(&outcome, cli.json, Status::Done)
+}
+
+/// Whether `path` is a tileset: `.tsx` and `.tsj` are, a `.json` file when Tiled's `type` says
+/// so, anything else is a map.
+fn is_tileset(path: &Path) -> anyhow::Result<bool> {
+    let extension = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    match extension.as_str() {
+        "tsx" | "tsj" => Ok(true),
+        "json" => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("{} can't be read", path.display()))?;
+            let value: serde_json::Value = serde_json::from_str(&text)
+                .with_context(|| format!("{} is not JSON", path.display()))?;
+            Ok(value.get("type").and_then(serde_json::Value::as_str) == Some("tileset"))
+        }
+        _ => Ok(false),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use bt_core::{FileRef, TilesetRef};
+    use bt_test_data::Scratch;
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use clap::Parser;
+    use glam::UVec2;
+
+    use super::*;
+
+    /// A map with an external tileset, written in `folder`.
+    fn write_map(folder: &Path) -> PathBuf {
+        let atlas = Atlas::builder().name("tiles").build_in(folder).unwrap();
+        let tileset_path = folder.join("tiles.tsx");
+        WriteRequest::for_tileset(&atlas.tileset, &tileset_path)
+            .write()
+            .unwrap();
+        let mut map = MapBuilder::new(UVec2::new(16, 16), UVec2::new(3, 2))
+            .tileset(atlas.tileset.clone())
+            .tile_layer("ground", "0 1 2\n3 4 5")
+            .build()
+            .unwrap();
+        map.tilesets[0] = TilesetRef {
+            file: Some(FileRef::new("tiles.tsx", &tileset_path)),
+            first_gid: Some(1),
+            tileset: atlas.tileset.clone(),
+        };
+        let path = folder.join("a.tmx");
+        WriteRequest::for_map(&map, &path).write().unwrap();
+        path
+    }
+
+    fn run(args: &[&str]) -> anyhow::Result<Printed> {
+        let cli = Cli::try_parse_from(std::iter::once("bt").chain(args.iter().copied()))?;
+        match &cli.command {
+            crate::cli::Command::Export(export_args) => export(&cli, export_args, None),
+            _ => panic!("an export"),
+        }
+    }
+
+    #[test]
+    fn a_map_is_written_in_the_format_its_extension_names() {
+        let scratch = Scratch::new("bt-export-json").unwrap();
+        let map = write_map(scratch.path());
+        let out = scratch.join("a.tmj");
+        let printed = run(&[
+            "export",
+            map.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--embed-tilesets",
+        ])
+        .unwrap();
+        assert!(
+            printed.text.contains("as Tiled's JSON (--embed-tilesets)"),
+            "{}",
+            printed.text
+        );
+        let mut loader = Loader::builder().build();
+        let read = loader.load_map(&out).unwrap().value;
+        assert!(read.tilesets[0].file.is_none(), "the tileset is embedded");
+        let original = loader.load_map(&map).unwrap().value;
+        assert_eq!(read.layers.len(), original.layers.len());
+
+        let tileset = scratch.join("tiles.tsj");
+        let tsx = scratch.join("tiles.tsx");
+        run(&["export", tsx.to_str().unwrap(), tileset.to_str().unwrap()]).unwrap();
+        assert!(loader.load_tileset(&tileset).is_ok());
+    }
+
+    #[test]
+    fn unknown_formats_and_read_only_targets_are_refused() {
+        let scratch = Scratch::new("bt-export-refused").unwrap();
+        let map = write_map(scratch.path());
+        let error = run(&["export", map.to_str().unwrap(), "a.txt"])
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("names no format"), "{error}");
+        let out = scratch.join("locked.tmx");
+        std::fs::write(&out, "x").unwrap();
+        let mut permissions = std::fs::metadata(&out).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&out, permissions).unwrap();
+        let error = run(&["export", map.to_str().unwrap(), out.to_str().unwrap()])
+            .err()
+            .unwrap();
+        assert!(format!("{error:#}").contains("read-only"), "{error:#}");
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "x");
+    }
+}

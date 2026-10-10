@@ -11,6 +11,7 @@
 
 mod context;
 mod error;
+mod export;
 mod history;
 mod names;
 mod report;
@@ -19,6 +20,7 @@ mod words;
 
 pub use context::{Context, Selection};
 pub use error::{Error, NameKind};
+pub use export::{ExportFormat, ExportOutcome};
 pub use history::{EditToKeep, History, HistoryError, KEPT_PER_MAP, KeptEdit, fingerprint};
 pub use names::{
     Ground, GroupPart, MaterialPart, NamedTerrain, Names, Piece, PieceObjects, Sprite, TileGroup,

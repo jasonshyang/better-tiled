@@ -3,6 +3,7 @@
 use anyhow::bail;
 
 use crate::cli::{Cli, Command};
+use crate::commands;
 use crate::exit::Printed;
 
 /// The guide, the only documentation an agent gets.
@@ -12,6 +13,7 @@ pub(crate) const GUIDE: &str = include_str!("guide.md");
 pub(crate) fn run(cli: &Cli) -> anyhow::Result<Printed> {
     match &cli.command {
         Command::Guide => Ok(Printed::done(GUIDE)),
+        Command::Export(args) => commands::export::export(cli, args, home().as_deref()),
         other => bail!("{} is not built yet", command_name(other)),
     }
 }
@@ -40,4 +42,11 @@ fn command_name(command: &Command) -> &'static str {
         Command::Save(_) => "save",
         Command::Export(_) => "export",
     }
+}
+
+/// The user's home folder: project files and projects are not looked for at or above it.
+fn home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .map(std::path::PathBuf::from)
 }
