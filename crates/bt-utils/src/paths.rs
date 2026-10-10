@@ -3,9 +3,9 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use crate::error::Error;
 #[cfg(unix)]
 use crate::error::NotPrivate;
+use crate::error::{Error, NoDataFolder};
 
 /// The folders whose presence marks the top of a repository.
 const REPOSITORY_MARKERS: [&str; 3] = [".git", ".hg", ".svn"];
@@ -96,6 +96,29 @@ pub fn display_name(path: &Path) -> String {
         || path.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     )
+}
+
+/// The folder of better-tiled's own files, shared by the editor and `bt`:
+/// `~/Library/Application Support/better-tiled` on macOS, `%APPDATA%\better-tiled` on Windows,
+/// `$XDG_DATA_HOME/better-tiled` (or `~/.local/share/better-tiled`) elsewhere. An error names the
+/// variable that is not set.
+pub fn data_dir() -> Result<PathBuf, NoDataFolder> {
+    let var = |name: &'static str| {
+        std::env::var_os(name)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .ok_or(NoDataFolder { variable: name })
+    };
+    if cfg!(target_os = "macos") {
+        return Ok(var("HOME")?.join("Library/Application Support/better-tiled"));
+    }
+    if cfg!(target_os = "windows") {
+        return Ok(var("APPDATA")?.join("better-tiled"));
+    }
+    if let Ok(xdg) = var("XDG_DATA_HOME") {
+        return Ok(xdg.join("better-tiled"));
+    }
+    Ok(var("HOME")?.join(".local/share/better-tiled"))
 }
 
 /// Searches `start` and the folders above it, nearest first, for the first one `found` returns

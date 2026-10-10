@@ -55,24 +55,7 @@ pub enum SettingsError {
 /// macOS, `%APPDATA%\better-tiled` on Windows, `$XDG_DATA_HOME/better-tiled` (or
 /// `~/.local/share/better-tiled`) elsewhere.
 pub fn data_folder() -> Result<PathBuf, SettingsError> {
-    let var = |name: &'static str| {
-        std::env::var_os(name)
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-    };
-    if cfg!(target_os = "macos") {
-        let home = var("HOME").ok_or(SettingsError::NoDataFolder("HOME"))?;
-        return Ok(home.join("Library/Application Support/better-tiled"));
-    }
-    if cfg!(target_os = "windows") {
-        let appdata = var("APPDATA").ok_or(SettingsError::NoDataFolder("APPDATA"))?;
-        return Ok(appdata.join("better-tiled"));
-    }
-    if let Some(xdg) = var("XDG_DATA_HOME") {
-        return Ok(xdg.join("better-tiled"));
-    }
-    let home = var("HOME").ok_or(SettingsError::NoDataFolder("HOME"))?;
-    Ok(home.join(".local/share/better-tiled"))
+    bt_utils::paths::data_dir().map_err(|missing| SettingsError::NoDataFolder(missing.variable))
 }
 
 impl Settings {

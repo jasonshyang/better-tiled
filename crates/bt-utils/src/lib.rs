@@ -14,5 +14,5 @@ pub mod rect;
 pub mod rng;
 pub mod text;
 
-pub use error::{Error, NotPrivate, Refused};
+pub use error::{Error, NoDataFolder, NotPrivate, Refused};
 pub use rect::{DRect, IRect};

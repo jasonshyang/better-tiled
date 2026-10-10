@@ -116,3 +116,11 @@ impl std::fmt::Display for Refused {
         })
     }
 }
+
+/// The data folder cannot be found: the environment variable that locates it is not set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("no data folder: {variable} is not set")]
+pub struct NoDataFolder {
+    /// The environment variable.
+    pub variable: &'static str,
+}

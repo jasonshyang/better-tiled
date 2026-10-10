@@ -9,10 +9,12 @@
 //! `bt-edit`, `bt-terrain` and `bt-automap`, which port Tiled's editor code, and is
 //! GPL-3.0-or-later with them.
 
+mod history;
 mod report;
 mod script;
 mod words;
 
+pub use history::{EditToKeep, History, HistoryError, KEPT_PER_MAP, KeptEdit, fingerprint};
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
 };
