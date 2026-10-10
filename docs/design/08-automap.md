@@ -332,7 +332,7 @@ as a failure, not as a slower editor.
 | Explain | writes, attempts, checks at the right moment in both modes, near misses, overwritten matches, unnamed tiles |
 | The pack | the Highlands rules reproduce the pack's sample scene; incremental runs equal full runs; timings under their bounds |
 | Layers | chained rule maps (sewers) with no intermediate layer; bindings on other layer names; a layer bound twice refused; stable object ids across runs; a record written and restored round-trips the painted map; a changed checksum counts as painted |
-| Files | discovery order, filters and includes, reload keeping an unreadable rule map's rules, class-given `MatchType`s, paths through symbolic links |
+| Files | the order rules files are found in, filters and includes, reload keeping an unreadable rule map's rules, class-given `MatchType`s, paths through symbolic links |
 
 ## 15. As built at M3 (core)
 
