@@ -16,7 +16,6 @@ mod analysis;
 mod bx;
 mod cell_set;
 mod engine;
-mod error;
 pub mod files;
 mod object_cells;
 mod observer;
@@ -30,7 +29,7 @@ pub use analysis::{MissingLayer, TilesetCopy};
 pub use engine::{
     Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
 };
-pub use error::Error;
+pub use files::Error;
 pub use observer::{Attempt, Check, Condition, NoObserver, Observer, Outcome, Write, Writer};
 pub use problem::{Problem, ProblemKind, Severity};
 pub use rule_ref::RuleRef;

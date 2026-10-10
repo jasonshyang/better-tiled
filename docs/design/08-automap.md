@@ -346,9 +346,9 @@ run. `region`, `explain`, the post-run analysis and `layers` come later.
 | `rules/` | `RuleSet` (the rule maps in run order, the table, `rules_file`, `tileset(index)`, set-level problems) built by `RuleSet::builder()` from maps in memory; `Report` and `LockedOutput` |
 | `engine/` | `RunRequest` (seed, `Area::{Whole, Selection, Edit}`, `LayerNames`), tileset and layer binding, grids, anchors, matching, applying, `DeleteTiles`, objects, write-back; `RuleSet::{apply, apply_to, run, run_observed}` |
 | `observer` | `Observer` (with `ACTIVE`, `tries_every_position`, `attempt`, `check`, `write`), `NoObserver`, `Attempt`, `Outcome`, `Check`, `Condition`, `Write`, `Writer` |
-| `files` | `find_rules`, `load`, `reload`; `RuleSet::{tileset_files, classes_changed}` |
+| `files` | `find_rules`, `load`, `reload` and their `Error::{RulesFile, MissingRuleMap}` (the crate's one error, so `bt-tmx` stays in this module); `RuleSet::{tileset_files, classes_changed}` |
 | `analysis` | `RuleSet::{tileset_copies, missing_layers}` with `TilesetCopy` and `MissingLayer` |
-| `problem`, `error` | `Problem { kind, text }` with `ProblemKind` and `Severity`; `Error::{RulesFile, MissingRuleMap}` |
+| `problem` | `Problem { kind, text }` with `ProblemKind` and `Severity` |
 | `rng`, `bx`, `cell_set`, `object_cells`, `rule_ref` | the seeded draws; inclusive boxes; sets of cells as row runs visited in `QRegion`'s band order; Tiled's `objectTileRect` and `QRect`'s handling of zero and negative sizes; `RuleRef` |
 
 **Grids.** A run binds the names the rules use (output layers of every rule map first, in rule

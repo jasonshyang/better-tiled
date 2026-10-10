@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn the_built_in_tiles_mean_what_their_properties_say() {
-        let tiles = bt_tmx_free_builtin();
+        let tiles = built_in_rule_tiles();
         let types = CustomTypes::new();
         let kinds: Vec<Option<MatchType>> = (0..5)
             .map(|id| resolve_match_type(&tiles, TileId(id), &types).match_type)
@@ -241,7 +241,7 @@ mod tests {
     }
 
     /// The five tiles of Tiled's rule tileset, built here so the test needs no file reader.
-    fn bt_tmx_free_builtin() -> Tileset {
+    fn built_in_rule_tiles() -> Tileset {
         let mut tileset = tileset_with(with_property(Value::String("Negate".into())));
         for (id, name) in [(1, "Ignore"), (2, "NonEmpty"), (3, "Empty"), (4, "Other")] {
             tileset
