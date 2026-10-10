@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use bt_automap::{Area, Problem, RuleSet, Severity};
+use bt_automap::{Area, IdleRuleMap, Problem, RuleSet, Severity};
 use bt_editor::{ActionId, AutoMapRules, DocumentId, Editor, Intent, LastRun};
 use bt_utils::text::{and_list, plural};
 
@@ -198,10 +198,24 @@ fn show_last_run(ui: &mut egui::Ui, run: &LastRun, rules_dir: Option<&Path>) {
                 None => ui.weak("No cell changed"),
             };
             let mut idle = Vec::new();
-            for (rule_map, matches) in run.rules.rule_maps().iter().zip(&report.rule_map_matches) {
+            for (index, (rule_map, matches)) in run
+                .rules
+                .rule_maps()
+                .iter()
+                .zip(&report.rule_map_matches)
+                .enumerate()
+            {
                 let name = relative_name(rule_map.path(), rules_dir);
                 if *matches == 0 {
-                    idle.push(name);
+                    let why = run
+                        .idle
+                        .iter()
+                        .find(|i| i.rule_map == index)
+                        .map(idle_reason);
+                    idle.push(match why {
+                        Some(why) => format!("{name}: {why}"),
+                        None => name,
+                    });
                 } else {
                     ui.label(format!("{name}: {}", plural(*matches, "match", "matches")));
                 }
@@ -237,6 +251,25 @@ fn show_last_run(ui: &mut egui::Ui, run: &LastRun, rules_dir: Option<&Path>) {
                 problem_line(ui, problem);
             }
         });
+}
+
+/// Why a rule map matched nothing, as its inputs say.
+fn idle_reason(idle: &IdleRuleMap) -> String {
+    if !idle.missing_layers.is_empty() {
+        format!(
+            "reads {}, which the map lacks",
+            and_list(&idle.missing_layers)
+        )
+    } else if !idle.empty_layers.is_empty() {
+        let are = if idle.empty_layers.len() == 1 {
+            "is"
+        } else {
+            "are"
+        };
+        format!("reads {}, which {are} empty", and_list(&idle.empty_layers))
+    } else {
+        "no rule matched".to_owned()
+    }
 }
 
 /// A rule map's path from the rules file's folder, or its file name.

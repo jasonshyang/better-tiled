@@ -431,7 +431,7 @@ fn rules_are_read_again_when_a_class_gives_a_rule_tile_another_match_type() {
         notices(&effects),
         [(
             Severity::Warning,
-            "AutoMap did nothing: no rule matched".to_owned()
+            "AutoMap did nothing: no rule matched; Explain (A) shows why at a cell".to_owned()
         )],
         "tile 9 is an ordinary tile now"
     );
@@ -775,4 +775,28 @@ fn live_automap_comes_back_with_recovered_work() {
     assert_eq!(top(&editor, doc), ". . .\n. . 3", "what was painted");
     assert_eq!(shown_top(&editor, doc), "6 6 6\n6 6 6");
     assert!(editor.has_unsaved());
+}
+
+#[test]
+fn a_run_that_does_nothing_says_which_layers_it_reads_are_empty() {
+    let (scratch, map) = folder_with_rules("bt-editor-automap-empty-layer", 6);
+    // As in the Highlands pack's sample scene: the rules read a layer the map paints nothing on.
+    write_tiles_map(
+        scratch.path(),
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("ground", ". . .\n. . ."), ("top", ". . .\n. . .")],
+    );
+    let (mut editor, doc) = open(&scratch, &map);
+    let effects = apply(&mut editor, Intent::Run(ActionId::AutoMap));
+    assert_eq!(
+        notices(&effects),
+        [(
+            Severity::Warning,
+            "AutoMap did nothing: the rules read ground, which is empty".to_owned()
+        )]
+    );
+    let last = editor.automap_rules(doc).unwrap().last_run().unwrap();
+    assert_eq!(last.idle.len(), 1);
+    assert_eq!(last.idle[0].empty_layers, ["ground"]);
 }

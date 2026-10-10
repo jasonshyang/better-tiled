@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_automap::{Area, Report, RuleSet};
+use bt_automap::{Area, IdleRuleMap, Report, RuleSet};
 use bt_core::{Map, Project};
 
 use super::live::LiveResult;
@@ -116,6 +116,8 @@ pub struct LastRun {
     pub after: Arc<Map>,
     /// What the run did.
     pub report: Report,
+    /// The rule maps that matched nothing, with the reasons their inputs give.
+    pub idle: Vec<IdleRuleMap>,
 }
 
 /// A file rules were read from, with what it held then.

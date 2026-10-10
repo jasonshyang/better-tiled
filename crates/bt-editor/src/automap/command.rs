@@ -4,8 +4,7 @@
 
 use std::sync::Arc;
 
-use bt_automap::{Area, Report, RuleSet, RunRequest, Severity as ProblemSeverity};
-use bt_core::Map;
+use bt_automap::{Area, IdleRuleMap, Report, RuleSet, RunRequest, Severity as ProblemSeverity};
 use bt_edit::TileRegion;
 use bt_utils::rng::Rng;
 use bt_utils::text::{and_list, plural};
@@ -76,7 +75,8 @@ impl Editor {
         };
         self.automap.seed = Rng::new(seed).next_u64();
         self.add_rule_tilesets(asset, &report);
-        let notice = run_notice(&rules, &before, &report);
+        let idle = rules.idle_rule_maps(&before, &request, &report);
+        let notice = run_notice(&rules, &report, &idle);
         let after = self
             .store
             .map(asset)
@@ -90,6 +90,7 @@ impl Editor {
                 before,
                 after,
                 report,
+                idle,
             });
         }
         vec![Effect::Notify(notice)]
@@ -143,9 +144,15 @@ fn selection_area(tiles: &TileRegion) -> Area {
     }
 }
 
-/// What a run did, or why it did nothing, as the status bar says it.
-fn run_notice(rules: &RuleSet, before: &Map, report: &Report) -> Notice {
+/// What a run did, or why it did nothing, as the status bar says it; the details say what each
+/// rule map that matched nothing reads.
+fn run_notice(rules: &RuleSet, report: &Report, idle: &[IdleRuleMap]) -> Notice {
     let mut detail: Vec<String> = report.problems.iter().map(|p| p.text.clone()).collect();
+    detail.extend(
+        idle.iter()
+            .flat_map(|rule_map| rule_map.problems(rules))
+            .map(|p| p.text),
+    );
     if report.matches > 0 {
         let applied = plural(report.matches, "match", "matches");
         let mut text = match report.changed {
@@ -175,29 +182,41 @@ fn run_notice(rules: &RuleSet, before: &Map, report: &Report) -> Notice {
         .map(|p| p.text.as_str())
         .collect();
     detail.extend(unused.iter().map(|text| (*text).to_owned()));
+    let missing = names_once(idle.iter().flat_map(|i| &i.missing_layers));
+    let empty = names_once(idle.iter().flat_map(|i| &i.empty_layers));
     let text = if rules.rule_count() == 0 {
         "AutoMap did nothing: the rules file holds no rules that can run".to_owned()
-    } else {
-        let missing: Vec<String> = rules
-            .missing_layers(before)
-            .into_iter()
-            .map(|m| m.name)
-            .collect();
-        if missing.is_empty() {
-            "AutoMap did nothing: no rule matched".to_owned()
+    } else if !missing.is_empty() {
+        let layers = if missing.len() == 1 {
+            "layer"
         } else {
-            let layers = if missing.len() == 1 {
-                "layer"
-            } else {
-                "layers"
-            };
-            format!(
-                "AutoMap did nothing: the map has no {layers} {} that the rules read",
-                and_list(&missing)
-            )
-        }
+            "layers"
+        };
+        format!(
+            "AutoMap did nothing: the map has no {layers} {} that the rules read",
+            and_list(&missing)
+        )
+    } else if !empty.is_empty() {
+        let are = if empty.len() == 1 { "is" } else { "are" };
+        format!(
+            "AutoMap did nothing: the rules read {}, which {are} empty",
+            and_list(&empty)
+        )
+    } else {
+        "AutoMap did nothing: no rule matched; Explain (A) shows why at a cell".to_owned()
     };
     with_detail(Notice::warning(text), detail)
+}
+
+/// Layer names, each once, in the order first named.
+fn names_once<'n>(names: impl Iterator<Item = &'n String>) -> Vec<&'n str> {
+    let mut once: Vec<&str> = Vec::new();
+    for name in names {
+        if !once.contains(&name.as_str()) {
+            once.push(name);
+        }
+    }
+    once
 }
 
 fn with_detail(notice: Notice, detail: Vec<String>) -> Notice {

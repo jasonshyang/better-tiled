@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_automap::{Error, RuleSet, files};
+use bt_automap::{RuleSet, files};
 use bt_core::{CustomTypes, Tileset};
 use bt_tmx::Loader;
 
@@ -71,20 +71,14 @@ impl RulesJob {
             }
             None => files::load(&mut loader, &self.file, self.map_path.as_deref()),
         };
-        let mut paths = vec![self.file.clone()];
-        let outcome = match read {
-            Ok(rules) => {
-                paths.extend(rules.rule_maps().iter().map(|r| r.path().to_path_buf()));
-                paths.extend(rules.tileset_files());
-                Ok(rules)
-            }
-            Err(error) => {
-                if let Error::MissingRuleMap { path, .. } = &error {
-                    paths.push(path.clone());
-                }
-                Err(error.to_string())
-            }
+        // Every file whose change must read the rules again: after a failed read, those the
+        // read got to, so fixing one is seen.
+        let outcome = read.map_err(|error| error.to_string());
+        let mut paths = match &outcome {
+            Ok(rules) => rules.watched_files(),
+            Err(_) => files::listed_files(&self.file),
         };
+        paths.push(self.file.clone());
         paths.sort();
         paths.dedup();
         RulesLoaded {
