@@ -12,6 +12,7 @@ use bt_editor::ActionId;
 use bt_render::RenderStats;
 use glam::DVec2;
 
+use crate::app::PanelTab;
 use crate::canvas::{Canvas, MAX_ZOOM, MIN_ZOOM, ViewTransform};
 
 /// How long a check waits for its files before it gives up.
@@ -157,6 +158,23 @@ pub(crate) fn screenshot_actions(value: Option<&str>) -> Result<Vec<ActionId>, S
         .map(|name| {
             ActionId::from_name(name)
                 .ok_or_else(|| format!("BT_SCREENSHOT_ACTIONS names no command “{name}”"))
+        })
+        .collect()
+}
+
+/// The panel tabs `BT_SCREENSHOT_TABS` names, by their titles separated by commas; a name that
+/// is no tab stops the run.
+pub(crate) fn screenshot_tabs(value: Option<&str>) -> Result<Vec<PanelTab>, String> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| {
+            PanelTab::named(name)
+                .ok_or_else(|| format!("BT_SCREENSHOT_TABS names no panel tab “{name}”"))
         })
         .collect()
 }
@@ -498,5 +516,7 @@ mod tests {
         );
         assert_eq!(screenshot_actions(None), Ok(Vec::new()));
         assert!(screenshot_actions(Some("no_such_thing")).is_err());
+        assert_eq!(screenshot_tabs(Some("automap, Terrains")).unwrap().len(), 2);
+        assert!(screenshot_tabs(Some("no_such_tab")).is_err());
     }
 }

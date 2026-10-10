@@ -91,7 +91,7 @@ pub(crate) struct App {
 
 /// The panels of the left group, shown one at a time as tabs.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-enum LeftTab {
+pub(crate) enum LeftTab {
     /// The Layers panel.
     #[default]
     Layers,
@@ -102,6 +102,9 @@ enum LeftTab {
 }
 
 impl LeftTab {
+    /// The group's tabs, in order.
+    const ALL: [LeftTab; 3] = [LeftTab::Layers, LeftTab::Objects, LeftTab::AutoMap];
+
     /// The tab's title.
     fn title(self) -> &'static str {
         match self {
@@ -114,7 +117,7 @@ impl LeftTab {
 
 /// The panels of the right group's upper part.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-enum RightTab {
+pub(crate) enum RightTab {
     /// The Tiles panel.
     #[default]
     Tiles,
@@ -123,12 +126,40 @@ enum RightTab {
 }
 
 impl RightTab {
+    /// The group's tabs, in order.
+    const ALL: [RightTab; 2] = [RightTab::Tiles, RightTab::Terrains];
+
     /// The tab's title.
     fn title(self) -> &'static str {
         match self {
             RightTab::Tiles => "Tiles",
             RightTab::Terrains => "Terrains",
         }
+    }
+}
+
+/// A tab of either group, as `BT_SCREENSHOT_TABS` names it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PanelTab {
+    /// A tab of the left group.
+    Left(LeftTab),
+    /// A tab of the right group.
+    Right(RightTab),
+}
+
+impl PanelTab {
+    /// The tab titled `name`, in any case.
+    pub(crate) fn named(name: &str) -> Option<PanelTab> {
+        LeftTab::ALL
+            .into_iter()
+            .find(|tab| tab.title().eq_ignore_ascii_case(name))
+            .map(PanelTab::Left)
+            .or_else(|| {
+                RightTab::ALL
+                    .into_iter()
+                    .find(|tab| tab.title().eq_ignore_ascii_case(name))
+                    .map(PanelTab::Right)
+            })
     }
 }
 
@@ -364,6 +395,12 @@ impl App {
         if let Some(problem) = startup.session_problem {
             self.notify(Notice::warning(problem));
         }
+        for tab in &startup.screenshot_tabs {
+            match *tab {
+                PanelTab::Left(tab) => self.left_tab = tab,
+                PanelTab::Right(tab) => self.right_tab = tab,
+            }
+        }
         self.dev = if let Some(path) = startup.screenshot {
             Some(DevRun::Screenshot(ScreenshotRun::new(
                 path,
@@ -574,7 +611,7 @@ impl App {
                 .default_size(240.0)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        for tab in [LeftTab::Layers, LeftTab::Objects, LeftTab::AutoMap] {
+                        for tab in LeftTab::ALL {
                             let title = egui::RichText::new(tab.title()).heading();
                             if ui.selectable_label(self.left_tab == tab, title).clicked() {
                                 self.left_tab = tab;
@@ -617,7 +654,7 @@ impl App {
                             .show(ui, &self.editor, doc, &mut self.intents);
                     });
                 ui.horizontal(|ui| {
-                    for tab in [RightTab::Tiles, RightTab::Terrains] {
+                    for tab in RightTab::ALL {
                         let title = egui::RichText::new(tab.title()).heading();
                         if ui.selectable_label(self.right_tab == tab, title).clicked() {
                             self.right_tab = tab;

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use bt_automap::{Area, Problem, RuleSet, Severity};
 use bt_editor::{ActionId, AutoMapRules, DocumentId, Editor, Intent, LastRun};
-use bt_utils::text::plural;
+use bt_utils::text::{and_list, plural};
 
 /// The AutoMap panel (it keeps nothing of its own: sections fold as egui remembers).
 #[derive(Default)]
@@ -83,20 +83,32 @@ fn show_rules(ui: &mut egui::Ui, rules: &AutoMapRules) {
     }
 }
 
-/// What is wrong with the rules, the rule set's first, then each rule map's under its name.
+/// What is wrong with the rules, the rule set's first, then each rule map's under its name;
+/// open at first only when something is more than a note.
 fn show_problems(ui: &mut egui::Ui, set: &RuleSet, rules_dir: Option<&Path>) {
-    let count = set.problems().len()
-        + set
-            .rule_maps()
-            .iter()
-            .map(|r| r.problems().len())
-            .sum::<usize>();
-    if count == 0 {
+    let all: Vec<&Problem> = set
+        .problems()
+        .iter()
+        .chain(set.rule_maps().iter().flat_map(|r| r.problems()))
+        .collect();
+    if all.is_empty() {
         return;
     }
-    egui::CollapsingHeader::new(format!("Problems ({count})"))
+    let count = |severity: Severity, one: &str, many: &str| {
+        let n = all.iter().filter(|p| p.severity() == severity).count();
+        (n > 0).then(|| plural(n, one, many))
+    };
+    let counts: Vec<String> = [
+        count(Severity::Error, "error", "errors"),
+        count(Severity::Warning, "warning", "warnings"),
+        count(Severity::Note, "note", "notes"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    egui::CollapsingHeader::new(format!("Problems: {}", and_list(&counts)))
         .id_salt("automap problems")
-        .default_open(true)
+        .default_open(all.iter().any(|p| p.severity() != Severity::Note))
         .show(ui, |ui| {
             for problem in set.problems() {
                 problem_line(ui, problem);
@@ -156,13 +168,31 @@ fn show_last_run(ui: &mut egui::Ui, run: &LastRun, rules_dir: Option<&Path>) {
                 )),
                 None => ui.weak("No cell changed"),
             };
+            let mut idle = Vec::new();
             for (rule_map, matches) in run.rules.rule_maps().iter().zip(&report.rule_map_matches) {
                 let name = relative_name(rule_map.path(), rules_dir);
                 if *matches == 0 {
-                    ui.weak(format!("{name}: matched nothing"));
+                    idle.push(name);
                 } else {
                     ui.label(format!("{name}: {}", plural(*matches, "match", "matches")));
                 }
+            }
+            if !idle.is_empty() {
+                let header = if idle.len() == report.rule_map_matches.len() {
+                    "No rule map matched".to_owned()
+                } else {
+                    format!(
+                        "{} matched nothing",
+                        plural(idle.len(), "rule map", "rule maps")
+                    )
+                };
+                egui::CollapsingHeader::new(header)
+                    .id_salt("automap idle rule maps")
+                    .show(ui, |ui| {
+                        for name in &idle {
+                            ui.weak(name);
+                        }
+                    });
             }
             for locked in &report.locked_outputs {
                 ui.colored_label(

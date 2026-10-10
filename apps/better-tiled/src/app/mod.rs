@@ -17,5 +17,5 @@ mod tabs;
 mod tests;
 mod toolbar;
 
-pub(crate) use frame::App;
+pub(crate) use frame::{App, PanelTab};
 pub(crate) use startup::Startup;
