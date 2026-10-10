@@ -78,8 +78,6 @@ impl TilesPanel {
         store: &Mutex<ImageStore>,
         out: &mut Vec<Intent>,
     ) {
-        ui.heading("Tiles");
-        ui.separator();
         let Some(map) = editor.map_of(doc) else {
             return;
         };
@@ -132,7 +130,9 @@ impl TilesPanel {
         self.shown.as_ref()?.centre_of(tile)
     }
 
-    fn show_tabs(&mut self, ui: &mut egui::Ui, map: &Map, doc: DocumentId) -> usize {
+    /// Draws the map's tilesets as tabs and returns the one shown (the Terrains panel shows the
+    /// same one).
+    pub(crate) fn show_tabs(&mut self, ui: &mut egui::Ui, map: &Map, doc: DocumentId) -> usize {
         let mut current = self
             .current
             .get(&doc)

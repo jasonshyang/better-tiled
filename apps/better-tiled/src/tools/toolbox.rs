@@ -13,6 +13,7 @@ use super::offset_layers::OffsetLayers;
 use super::picker::Picker;
 use super::rect_select::RectSelect;
 use super::select_objects::SelectObjects;
+use super::terrain::TerrainTool;
 use super::tool::Tool;
 
 /// The tools.
@@ -35,6 +36,7 @@ impl Default for ToolBox {
         ToolBox {
             tools: vec![
                 Box::new(BrushTool::default()),
+                Box::new(TerrainTool::default()),
                 Box::new(Eraser::default()),
                 Box::new(BucketFill::default()),
                 Box::new(ShapeFill::default()),

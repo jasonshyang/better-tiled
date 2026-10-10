@@ -7,8 +7,9 @@ use bt_editor::{
 };
 
 /// The tools, in the order the toolbar shows them.
-const TILE_TOOLS: [ToolKind; 8] = [
+const TILE_TOOLS: [ToolKind; 9] = [
     ToolKind::Brush,
+    ToolKind::Terrain,
     ToolKind::Eraser,
     ToolKind::BucketFill,
     ToolKind::ShapeFill,
@@ -67,6 +68,17 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
         // A tool's options show only where the tool does.
         if !tools.contains(&current) {
             return;
+        }
+        if matches!(current, ToolKind::BucketFill | ToolKind::ShapeFill) {
+            ui.separator();
+            let terrain = editor.tools().terrain_fill();
+            if ui
+                .selectable_label(terrain, "Terrain fill")
+                .on_hover_text("Fill with the terrain chosen in the Terrains panel, not the brush")
+                .clicked()
+            {
+                out.push(Intent::SetTerrainFill(!terrain));
+            }
         }
         if current == ToolKind::ShapeFill {
             ui.separator();

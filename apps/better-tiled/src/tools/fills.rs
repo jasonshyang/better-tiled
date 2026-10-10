@@ -102,6 +102,11 @@ impl Tool for BucketFill {
         preview_cells(cx, &self.preview.cells, out);
         let color = cx.editor.settings().theme.selection_color.0;
         outline_cells(cx, &self.preview.area, color, out);
+        if !self.preview.invalid.is_empty() {
+            // Cells no terrain tile fits.
+            let invalid = TileRegion::from_cells(self.preview.invalid.iter().copied());
+            outline_cells(cx, &invalid, super::painting::ERASE_COLOR, out);
+        }
     }
 
     fn hint(&self, _cx: &ToolContext<'_>) -> String {

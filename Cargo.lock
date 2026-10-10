@@ -468,6 +468,7 @@ dependencies = [
  "bt-editor",
  "bt-image",
  "bt-render",
+ "bt-terrain",
  "bt-test-data",
  "bt-tmx",
  "bt-utils",

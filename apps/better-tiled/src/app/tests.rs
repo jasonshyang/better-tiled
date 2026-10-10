@@ -1652,3 +1652,116 @@ fn a_level_is_built_from_scratch_in_the_window() {
         shape.size
     );
 }
+
+#[test]
+fn the_terrain_tool_paints_a_terrain_chosen_in_the_terrains_panel() {
+    use std::sync::Arc;
+
+    use bt_core::{Color, TileId, WangColor, WangId, WangSet, WangSetType};
+    use bt_editor::ToolKind;
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Modifiers, PointerButton};
+    use glam::{DVec2, UVec2};
+
+    let scratch = Scratch::new("window-terrain").unwrap();
+    let atlas = Atlas::builder()
+        .name("ground")
+        .grid(4, 4)
+        .build_in(scratch.path())
+        .unwrap();
+    // Sand and grass on the corners, every combination: tile 0 all sand.
+    let mut tileset = (*atlas.tileset).clone();
+    let terrain = |name: &str| WangColor {
+        name: name.to_owned(),
+        class: String::new(),
+        color: Color::rgb(200, 180, 90),
+        tile: None,
+        probability: 1.0,
+        properties: Default::default(),
+    };
+    let mut set = WangSet {
+        name: "Ground".to_owned(),
+        class: String::new(),
+        kind: WangSetType::Corner,
+        tile: None,
+        colors: vec![terrain("Sand"), terrain("Grass")],
+        tiles: Default::default(),
+        properties: Default::default(),
+    };
+    for tile in 0..16_u32 {
+        let corner = |bit: u32| if tile & (1 << bit) == 0 { 1 } else { 2 };
+        set.tiles.insert(
+            TileId(tile),
+            WangId::from_lanes([0, corner(0), 0, corner(1), 0, corner(2), 0, corner(3)]),
+        );
+    }
+    tileset.wang_sets.push(set);
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(6))
+        .tileset(Arc::new(tileset))
+        .tile_layer("ground", &["0 0 0 0 0 0"; 6].join("\n"))
+        .build()
+        .unwrap();
+    let path = scratch.join("terrain.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+
+    window.click("Terrains");
+    window.click("Grass");
+    assert_eq!(window.editor().tools().tool(), ToolKind::Terrain);
+
+    // Along the vertices of row 2 from column 2 to column 4.
+    window.drag_world(
+        DVec2::new(32.0, 32.0),
+        DVec2::new(64.0, 32.0),
+        Modifiers::NONE,
+    );
+    let lanes = |window: &TestWindow, at: IVec2| {
+        let map = window.editor().map_of(doc).unwrap();
+        let terrain =
+            bt_terrain::Terrain::new(map, bt_core::TilesetSlot::new(0).unwrap(), 0).unwrap();
+        let cell = map.layers[0].as_tile_layer().unwrap().cell(at);
+        terrain.wang_of_cell(cell).lanes()
+    };
+    assert_eq!(
+        lanes(&window, IVec2::new(2, 2)),
+        [0, 2, 0, 1, 0, 1, 0, 2],
+        "grass along its top"
+    );
+    assert_eq!(
+        lanes(&window, IVec2::new(3, 1)),
+        [0, 1, 0, 2, 0, 2, 0, 1],
+        "and above it"
+    );
+    assert_eq!(lanes(&window, IVec2::ZERO), [0, 1, 0, 1, 0, 1, 0, 1]);
+    let labels: Vec<String> = window
+        .editor()
+        .document(doc)
+        .unwrap()
+        .history()
+        .entries()
+        .into_iter()
+        .filter(|e| e.done)
+        .map(|e| e.label)
+        .collect();
+    assert_eq!(labels, ["Paint Terrain"], "one step");
+
+    // A right-click takes the terrain under the pointer.
+    window.click("Sand");
+    window.click_world(
+        DVec2::new(48.0, 32.0),
+        PointerButton::Secondary,
+        Modifiers::NONE,
+    );
+    assert_eq!(
+        window.editor().tools().terrain().unwrap().color,
+        bt_terrain::TerrainColor(2)
+    );
+
+    // The fill tools fill with it when asked.
+    window.click("Bucket Fill");
+    window.click("Terrain fill");
+    assert!(window.editor().tools().terrain_fill());
+}

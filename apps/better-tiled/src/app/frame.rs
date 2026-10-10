@@ -22,7 +22,9 @@ use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun
 use crate::dialogs::{DialogRequest, Modals};
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
-use crate::panels::{LayersPanel, ObjectsPanel, PropertiesPanel, TileImages, TilesPanel};
+use crate::panels::{
+    LayersPanel, ObjectsPanel, PropertiesPanel, TerrainsPanel, TileImages, TileSource, TilesPanel,
+};
 use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::{apply_theme, interface_fonts};
 use crate::tileset_editor::{TilesetEditorView, TilesetFrame};
@@ -46,9 +48,12 @@ pub(crate) struct App {
     objects_panel: ObjectsPanel,
     /// The panel the left group shows.
     left_tab: LeftTab,
+    /// The panel shown in the right group's upper part.
+    right_tab: RightTab,
     /// The canvas's tools.
     toolbox: ToolBox,
     tiles_panel: TilesPanel,
+    terrains_panel: TerrainsPanel,
     /// The Properties panel, below the Tiles panel.
     properties_panel: PropertiesPanel,
     /// The tileset editor, shown in place of a map or in a tileset's tab.
@@ -98,6 +103,26 @@ impl LeftTab {
         match self {
             LeftTab::Layers => "Layers",
             LeftTab::Objects => "Objects",
+        }
+    }
+}
+
+/// The panels of the right group's upper part.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+enum RightTab {
+    /// The Tiles panel.
+    #[default]
+    Tiles,
+    /// The Terrains panel.
+    Terrains,
+}
+
+impl RightTab {
+    /// The tab's title.
+    fn title(self) -> &'static str {
+        match self {
+            RightTab::Tiles => "Tiles",
+            RightTab::Terrains => "Terrains",
         }
     }
 }
@@ -268,8 +293,10 @@ impl App {
             layers_panel: LayersPanel::default(),
             objects_panel: ObjectsPanel::default(),
             left_tab: LeftTab::default(),
+            right_tab: RightTab::default(),
             toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
+            terrains_panel: TerrainsPanel,
             properties_panel: PropertiesPanel::default(),
             tileset_editor: TilesetEditorView::default(),
             tile_images: TileImages::default(),
@@ -579,14 +606,45 @@ impl App {
                         self.properties_panel
                             .show(ui, &self.editor, doc, &mut self.intents);
                     });
-                self.tiles_panel.show(
-                    ui,
-                    &self.editor,
-                    doc,
-                    &mut self.tile_images,
-                    &self.images,
-                    &mut self.intents,
-                );
+                ui.horizontal(|ui| {
+                    for tab in [RightTab::Tiles, RightTab::Terrains] {
+                        let title = egui::RichText::new(tab.title()).heading();
+                        if ui.selectable_label(self.right_tab == tab, title).clicked() {
+                            self.right_tab = tab;
+                        }
+                    }
+                });
+                ui.separator();
+                match self.right_tab {
+                    RightTab::Tiles => self.tiles_panel.show(
+                        ui,
+                        &self.editor,
+                        doc,
+                        &mut self.tile_images,
+                        &self.images,
+                        &mut self.intents,
+                    ),
+                    RightTab::Terrains => {
+                        let Some(map) = self.editor.map_of(doc) else {
+                            return;
+                        };
+                        // The tileset is the Tiles panel's, so both show the same one.
+                        let tileset = self.tiles_panel.show_tabs(ui, map, doc);
+                        ui.separator();
+                        let mut source = TileSource {
+                            images: &mut self.tile_images,
+                            store: &self.images,
+                        };
+                        self.terrains_panel.show(
+                            ui,
+                            &self.editor,
+                            doc,
+                            tileset,
+                            &mut source,
+                            &mut self.intents,
+                        );
+                    }
+                }
             });
         for request in self.properties_panel.take_file_requests() {
             if let Err(problem) = self.file_dialogs.ask(&mut self.workers, request) {

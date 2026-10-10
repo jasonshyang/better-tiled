@@ -15,6 +15,7 @@ mod picker;
 mod rect_select;
 mod select_objects;
 mod selecting;
+mod terrain;
 mod tool;
 mod toolbox;
 
