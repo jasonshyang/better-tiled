@@ -12,6 +12,7 @@
 //! Most of the crate follows the behaviour of Tiled's editor (`reference/tiled/src/tiled`); each
 //! module names its sources and `docs/design/04-editing-operations.md` lists the differences.
 
+mod brush;
 mod clip;
 mod error;
 mod ids;
@@ -24,6 +25,7 @@ mod shapes;
 mod testutil;
 mod tileset_ops;
 
+pub use brush::{Brush, BrushMode, Variation};
 pub use clip::{
     ClipLayer, PasteTarget, TileClip, TileCut, copy, cut, erase, erase_targets, find_target_layers,
     paste,
