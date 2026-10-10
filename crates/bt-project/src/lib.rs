@@ -18,9 +18,10 @@ mod error;
 mod file;
 mod godot;
 pub mod paths;
-mod rows;
+pub mod rows;
 mod schema;
 
 pub use automap::{AutoMapRecord, BindingRecord, PaintedRecord, RunRecord};
 pub use error::Error;
+pub use rows::{RowCell, RowError};
 pub use schema::{Document, MapEntry, Note};
