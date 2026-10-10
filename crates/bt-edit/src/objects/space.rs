@@ -2,12 +2,16 @@
 //! come from. A map's object layers live in the map's; a tile's collision shapes in the tile's
 //! own, a one-cell map of the tile's grid as Tiled's collision editor sets it up
 //! (`reference/tiled/src/tiled/tilecollisiondock.cpp`); a template's object in a grid of
-//! one-pixel cells, as Tiled's template editor sets it up (`tiled/templatesdock.cpp`).
+//! one-pixel cells, as Tiled's template editor sets it up (`tiled/templatesdock.cpp`). Objects
+//! are placed and outlined in a space by `bt_core`'s object geometry, so what the editor picks is
+//! what the renderer draws.
 
 use bt_core::{
     Alignment, Cell, GridOrientation, Map, MapGeometry, MapObject, ObjectTemplate, Orientation,
-    TileId, Tileset, TilesetGrid, TilesetRef,
+    Outline, TileId, Tileset, TilesetGrid, TilesetRef, object_marker, object_outline,
+    object_pixel_outline, tile_object_box,
 };
+use bt_utils::DRect;
 use glam::{IVec2, UVec2};
 
 /// Where a list of objects lives: the grid and the tilesets its tile objects name.
@@ -84,6 +88,11 @@ impl<'a> ObjectSpace<'a> {
             .map(|r| r.tileset.as_ref())
     }
 
+    /// The tileset of a tile object's tile, when the space has it; `None` for other objects.
+    pub(crate) fn tileset_of_object(&self, object: &MapObject) -> Option<&'a Tileset> {
+        self.tileset_of(object.tile?)
+    }
+
     /// Tiled's alignment of an object (`MapObject::alignment`): a tile object's tileset's, else
     /// the grid's default for tile objects; top-left for every other object. A tile object
     /// whose tileset the space lacks takes the default, as the renderer draws it.
@@ -94,6 +103,28 @@ impl<'a> ObjectSpace<'a> {
         let fallback = Tileset::default();
         self.geometry
             .object_alignment(Some(self.tileset_of(cell).unwrap_or(&fallback)))
+    }
+
+    /// The outline of `object` as drawn, in screen space; rectangles, ellipses and capsules
+    /// without a size are their position.
+    pub(crate) fn drawn_outline(&self, object: &MapObject) -> Outline {
+        object_outline(&self.geometry, object, self.tileset_of_object(object))
+    }
+
+    /// The outline of `object` as drawn, in pixel space.
+    pub(crate) fn pixel_outline(&self, object: &MapObject) -> Outline {
+        object_pixel_outline(&self.geometry, object, self.tileset_of_object(object))
+    }
+
+    /// The outline hit tests use, in screen space: what the renderer draws, Tiled's marker
+    /// standing in for rectangles, ellipses and capsules without a size.
+    pub(crate) fn hit_outline(&self, object: &MapObject) -> Outline {
+        object_marker(&self.geometry, object).unwrap_or_else(|| self.drawn_outline(object))
+    }
+
+    /// A tile object's image box in its frame; `None` for other objects.
+    pub(crate) fn tile_box(&self, object: &MapObject) -> Option<DRect> {
+        tile_object_box(&self.geometry, object, self.tileset_of_object(object))
     }
 }
 

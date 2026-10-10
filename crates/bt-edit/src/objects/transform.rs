@@ -5,7 +5,7 @@
 //! `rotateSelectedObjects` (`tiled/mapdocument.cpp`), and the rotate handle of
 //! `ObjectSelectionTool::updateRotatingItems` (`tiled/objectselectiontool.cpp`).
 
-use bt_core::{Alignment, Map, MapObject, ObjectId, ObjectLayer, ObjectOverrides, Shape};
+use bt_core::{Alignment, Map, MapObject, ObjectId, ObjectLayer, ObjectOverrides, Shape, rotated};
 use glam::DVec2;
 
 use crate::axis::Axis;
@@ -15,8 +15,6 @@ use crate::report::ObjectsReport;
 use super::bounds::{drawn_bounds, union_of};
 use super::edit::rewrite_objects_in;
 use super::find::{objects_by_id, objects_in, on_layers_holding};
-use super::outline::tile_box;
-use super::polygon::rotated;
 use super::space::ObjectSpace;
 
 /// What objects turn around.
@@ -117,10 +115,9 @@ fn flip_upright(
     origin: DVec2,
 ) {
     let geometry = space.geometry();
-    let size = match object.tile {
-        Some(cell) => tile_box(space, object, cell).size(),
-        None => object.size,
-    };
+    let size = space
+        .tile_box(object)
+        .map_or(object.size, |image| image.size());
     let screen_origin = geometry.pixel_to_screen(origin);
     let top_left = geometry.pixel_to_screen(object.pos)
         + rotated(-alignment.origin_fraction() * size, object.rotation);
@@ -276,7 +273,6 @@ mod tests {
 
     use super::*;
     use crate::objects::find::find_object;
-    use crate::objects::outline::{drawn_outline, pixel_outline};
     use crate::testutil::{assert_near, assert_valid, random_object, rect_object};
 
     fn v(x: f64, y: f64) -> DVec2 {
@@ -412,13 +408,14 @@ mod tests {
                         Axis::Vertical
                     };
                     let screen_origin = map.geometry().pixel_to_screen(origin);
-                    let mirrored: Vec<DVec2> = drawn_outline(&space, &object)
+                    let mirrored: Vec<DVec2> = space
+                        .drawn_outline(&object)
                         .points()
                         .iter()
                         .map(|&p| axis.mirrored(p, screen_origin))
                         .collect();
                     let flipped = flipped(&space, &object, axis, origin);
-                    let drawn = drawn_outline(&space, &flipped);
+                    let drawn = space.drawn_outline(&flipped);
                     for p in drawn.points() {
                         assert!(
                             mirrored.iter().any(|m| (*m - *p).length() < 1e-6),
@@ -445,13 +442,14 @@ mod tests {
             }
             let origin = v(rng.next_f64() * 200.0, rng.next_f64() * 200.0);
             for axis in [Axis::Horizontal, Axis::Vertical] {
-                let mirrored: Vec<DVec2> = pixel_outline(&space, &object)
+                let mirrored: Vec<DVec2> = space
+                    .pixel_outline(&object)
                     .points()
                     .iter()
                     .map(|&p| axis.mirrored(p, origin))
                     .collect();
                 let flipped = flipped(&space, &object, axis, origin);
-                let drawn = pixel_outline(&space, &flipped);
+                let drawn = space.pixel_outline(&flipped);
                 assert_eq!(drawn.points().len(), mirrored.len());
                 for p in drawn.points() {
                     assert!(

@@ -14,8 +14,6 @@ pub(crate) mod edit;
 pub(crate) mod find;
 pub(crate) mod hit;
 pub(crate) mod order;
-pub(crate) mod outline;
-pub(crate) mod polygon;
 pub(crate) mod snap;
 pub(crate) mod space;
 pub(crate) mod transform;

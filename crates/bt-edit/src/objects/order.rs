@@ -13,7 +13,6 @@ use crate::error::EditError;
 use crate::report::ObjectsReport;
 
 use super::find::{ids_by_layer, indices_in, object_layer, on_layers_holding};
-use super::outline::hit_outline;
 use super::space::ObjectSpace;
 
 /// The objects of a list in the order they are drawn, bottom first: the list's order, or on a
@@ -270,7 +269,7 @@ fn related(objects: &ObjectLayer, space: &ObjectSpace, indices: &[usize]) -> Vec
     let outlines: Vec<_> = objects
         .objects
         .iter()
-        .map(|object| hit_outline(space, object))
+        .map(|object| space.hit_outline(object))
         .collect();
     let chosen: Vec<_> = outlines
         .iter()

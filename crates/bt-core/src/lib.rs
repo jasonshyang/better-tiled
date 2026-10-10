@@ -1,5 +1,6 @@
 //! The data model of better-tiled: maps, tilesets, objects, properties, terrain sets, worlds and
-//! projects, with the grid geometry of every Tiled orientation.
+//! projects, with the grid geometry of every Tiled orientation and the geometry of the objects
+//! drawn on it: their frames and outlines, and the segments and polygons those are made of.
 //!
 //! The crate is data and arithmetic on data: no pixels, no file access, no undo and no global
 //! state. The file format crate builds its values, the renderer and the exports read them, the
@@ -22,9 +23,15 @@ mod image_ref;
 mod layer;
 mod map;
 mod object;
+mod object_frame;
 mod object_layer;
+mod object_outline;
+mod outline;
+mod polygon;
 mod project;
 mod property;
+mod rotation;
+mod segment;
 mod template;
 mod text;
 mod tile;
@@ -52,9 +59,15 @@ pub use image_ref::{EmbeddedImage, ImageRef, ImageSource};
 pub use layer::{BlendMode, EffectiveLayer, Layer, LayerKind};
 pub use map::{Map, Orientation, RenderOrder, StaggerAxis, StaggerIndex, TilesetRef};
 pub use object::{MapObject, ObjectOverrides, Shape};
+pub use object_frame::ObjectFrame;
 pub use object_layer::{DrawOrder, ObjectLayer};
+pub use object_outline::{object_marker, object_outline, object_pixel_outline, tile_object_box};
+pub use outline::Outline;
+pub use polygon::{polygon_holds, polygon_holds_or_bounds};
 pub use project::{Command, CompatibilityVersion, Project};
 pub use property::{Properties, Property, Value};
+pub use rotation::rotated;
+pub use segment::{Segment, closed_segments, open_segments};
 pub use template::ObjectTemplate;
 pub use text::{HAlign, TextData, VAlign};
 pub use tile::{CollisionGroup, Frame, TileData};

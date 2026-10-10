@@ -7,7 +7,7 @@
 //! upright at their projected position, other shapes projected corner by corner, a point where
 //! it is.
 
-use bt_core::{Alignment, Map, MapGeometry, MapObject, ObjectId, Shape};
+use bt_core::{Alignment, Map, MapGeometry, MapObject, ObjectId, Shape, rotated};
 use bt_utils::{DRect, IRect};
 use glam::DVec2;
 
@@ -88,17 +88,13 @@ fn turned(rect: DRect, origin: DVec2, degrees: f64) -> DRect {
     if degrees == 0.0 {
         return rect;
     }
-    let (sin, cos) = degrees.to_radians().sin_cos();
     let corners = [
         rect.min,
         DVec2::new(rect.max.x, rect.min.y),
         rect.max,
         DVec2::new(rect.min.x, rect.max.y),
     ];
-    let turned = corners.map(|corner| {
-        let d = corner - origin;
-        origin + DVec2::new(d.x * cos - d.y * sin, d.x * sin + d.y * cos)
-    });
+    let turned = corners.map(|corner| origin + rotated(corner - origin, degrees));
     DRect::from_points(turned).unwrap_or(rect)
 }
 

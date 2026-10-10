@@ -1,9 +1,13 @@
 //! Objects that are not tiles or text, drawn as Tiled draws them: a black shadow half a line
 //! width down and right, the outline in the object's colour, and a fill of that colour at
 //! alpha 50; points as pins, polygons and polylines with their first point marked. The colour is
-//! the class's when it has one, else the layer's, else Tiled's grey.
+//! the class's when it has one, else the layer's, else Tiled's grey. Where a shape is drawn is
+//! `bt_core`'s object outline, the one the editor picks objects by: shapes projected and turned
+//! around their position, Tiled's marker for those without a size.
 
-use bt_core::{Color, LayerId, MapGeometry, MapObject, ObjectLayer, Shape};
+use bt_core::{
+    Color, LayerId, MapGeometry, MapObject, ObjectLayer, Shape, object_marker, object_outline,
+};
 use glam::DVec2;
 
 use crate::input::ObjectStyle;
@@ -21,7 +25,7 @@ pub(crate) fn object_color(object: &MapObject, layer: &ObjectLayer, style: &Obje
 }
 
 /// Appends the vector items of a shape object of layer `layer_id` (nothing for tile and text
-/// objects).
+/// objects, nor for polygons and polylines without points).
 pub(crate) fn shape_vectors(
     object: &MapObject,
     color: Color,
@@ -33,6 +37,15 @@ pub(crate) fn shape_vectors(
     if object.tile.is_some() || matches!(object.shape, Shape::Text(_)) {
         return;
     }
+    let points = match &object.shape {
+        Shape::Point => pin_points(geometry.pixel_to_screen(object.pos)),
+        Shape::Polygon(points) | Shape::Polyline(points) if points.is_empty() => return,
+        _ => object_marker(geometry, object)
+            .unwrap_or_else(|| object_outline(geometry, object, None))
+            .into_points(),
+    };
+    let closed = !matches!(object.shape, Shape::Polyline(_));
+    let marks_first = matches!(object.shape, Shape::Polygon(_) | Shape::Polyline(_));
     let width = if style.width() > 0.0 {
         style.width()
     } else {
@@ -43,197 +56,30 @@ pub(crate) fn shape_vectors(
     let fill = Color::rgba(color.r, color.g, color.b, alpha(FILL_ALPHA));
     let shadow_color = Color::rgba(0, 0, 0, alpha(255));
     let shadow = DVec2::splat(f64::from(width) * 0.5);
-    let origin = geometry.pixel_to_screen(object.pos);
-    let rotation = object.rotation.to_radians();
-    let place = |pixel: DVec2| rotate(geometry.pixel_to_screen(pixel), origin, rotation);
-    let outline = Outline::of(object, origin, rotation, &place);
-    let Some(outline) = outline else {
-        return;
-    };
     let item = |points: Vec<DVec2>| {
-        if outline.closed {
+        if closed {
             VectorItem::polygon(points)
         } else {
             VectorItem::polyline(points)
         }
     };
+    let first = points.first().copied();
     out.push(
-        item(outline.points.clone())
+        item(points.clone())
             .stroke(shadow_color, width)
             .device_offset(shadow)
             .on_layer(layer_id),
     );
-    let mut drawn = item(outline.points.clone()).stroke(main, width);
-    if outline.closed && outline.filled {
+    let mut drawn = item(points).stroke(main, width);
+    if closed {
         drawn = drawn.fill(fill);
     }
     out.push(drawn.on_layer(layer_id));
-    if outline.marks_first
-        && let Some(&first) = outline.points.first()
-    {
+    if marks_first && let Some(first) = first {
         let dot =
             |color: Color| VectorItem::polyline(vec![first, first]).stroke(color, width * 4.0);
         out.push(dot(shadow_color).device_offset(shadow).on_layer(layer_id));
         out.push(dot(main).on_layer(layer_id));
-    }
-}
-
-/// An object's outline in world pixels.
-struct Outline {
-    points: Vec<DVec2>,
-    closed: bool,
-    filled: bool,
-    marks_first: bool,
-}
-
-impl Outline {
-    fn of(
-        object: &MapObject,
-        origin: DVec2,
-        rotation: f64,
-        place: &dyn Fn(DVec2) -> DVec2,
-    ) -> Option<Outline> {
-        let size = object.size;
-        let degenerate = size.x == 0.0 || size.y == 0.0;
-        // A shape without a size is drawn as a 20 pixel square about its position.
-        let unsized_square = || {
-            [
-                DVec2::new(-10.0, -10.0),
-                DVec2::new(10.0, -10.0),
-                DVec2::new(10.0, 10.0),
-                DVec2::new(-10.0, 10.0),
-            ]
-            .map(|corner| rotate(origin + corner, origin, rotation))
-            .to_vec()
-        };
-        let closed = |points: Vec<DVec2>| Outline {
-            points,
-            closed: true,
-            filled: true,
-            marks_first: false,
-        };
-        Some(match &object.shape {
-            Shape::Rectangle => {
-                if size == DVec2::ZERO {
-                    closed(unsized_square())
-                } else {
-                    closed(
-                        rect_points(object.pos, size)
-                            .into_iter()
-                            .map(place)
-                            .collect(),
-                    )
-                }
-            }
-            Shape::Ellipse | Shape::Capsule if degenerate && size != DVec2::ZERO => closed(
-                rect_points(object.pos, size)
-                    .into_iter()
-                    .map(place)
-                    .collect(),
-            ),
-            Shape::Ellipse => {
-                if size == DVec2::ZERO {
-                    closed(
-                        ellipse_points(origin - DVec2::splat(10.0), DVec2::splat(20.0))
-                            .into_iter()
-                            .map(|p| rotate(p, origin, rotation))
-                            .collect(),
-                    )
-                } else {
-                    closed(
-                        ellipse_points(object.pos, size)
-                            .into_iter()
-                            .map(place)
-                            .collect(),
-                    )
-                }
-            }
-            Shape::Capsule => {
-                if size == DVec2::ZERO {
-                    closed(unsized_square())
-                } else {
-                    closed(
-                        capsule_points(object.pos, size)
-                            .into_iter()
-                            .map(place)
-                            .collect(),
-                    )
-                }
-            }
-            Shape::Polygon(points) => Outline {
-                points: points.iter().map(|p| place(object.pos + *p)).collect(),
-                closed: true,
-                filled: true,
-                marks_first: true,
-            },
-            Shape::Polyline(points) => Outline {
-                points: points.iter().map(|p| place(object.pos + *p)).collect(),
-                closed: false,
-                filled: false,
-                marks_first: true,
-            },
-            Shape::Point => closed(pin_points(origin)),
-            Shape::Text(_) => return None,
-        })
-    }
-}
-
-/// Turns `p` clockwise on screen by `radians` about `pivot`.
-pub(crate) fn rotate(p: DVec2, pivot: DVec2, radians: f64) -> DVec2 {
-    if radians == 0.0 {
-        return p;
-    }
-    let d = p - pivot;
-    let (s, c) = radians.sin_cos();
-    pivot + DVec2::new(d.x * c - d.y * s, d.x * s + d.y * c)
-}
-
-fn rect_points(min: DVec2, size: DVec2) -> Vec<DVec2> {
-    vec![
-        min,
-        min + DVec2::new(size.x, 0.0),
-        min + size,
-        min + DVec2::new(0.0, size.y),
-    ]
-}
-
-fn ellipse_points(min: DVec2, size: DVec2) -> Vec<DVec2> {
-    let center = min + size * 0.5;
-    let radius = size * 0.5;
-    let count = 64;
-    (0..count)
-        .map(|i| {
-            let angle = std::f64::consts::TAU * f64::from(i) / f64::from(count);
-            center + DVec2::new(angle.cos(), angle.sin()) * radius
-        })
-        .collect()
-}
-
-/// A rectangle with its short sides rounded into half circles.
-fn capsule_points(min: DVec2, size: DVec2) -> Vec<DVec2> {
-    let radius = size.x.min(size.y) * 0.5;
-    let steps = 16;
-    let arc = |center: DVec2, from: f64| -> Vec<DVec2> {
-        (0..=steps)
-            .map(|i| {
-                let angle = from + std::f64::consts::PI * f64::from(i) / f64::from(steps);
-                center + DVec2::new(angle.cos(), angle.sin()) * radius
-            })
-            .collect()
-    };
-    let half = std::f64::consts::FRAC_PI_2;
-    if size.x >= size.y {
-        let left = min + DVec2::new(radius, radius);
-        let right = min + DVec2::new(size.x - radius, radius);
-        let mut points = arc(right, -half);
-        points.extend(arc(left, half));
-        points
-    } else {
-        let top = min + DVec2::new(radius, radius);
-        let bottom = min + DVec2::new(radius, size.y - radius);
-        let mut points = arc(bottom, 0.0);
-        points.extend(arc(top, std::f64::consts::PI));
-        points
     }
 }
 
@@ -317,5 +163,50 @@ mod tests {
         let pin = pin_points(DVec2::new(5.0, 5.0));
         assert_eq!(*pin.last().unwrap(), DVec2::new(5.0, 5.0));
         assert!(pin.iter().all(|p| p.y <= 5.0 + 1e-9));
+    }
+
+    #[test]
+    fn shapes_without_a_size_are_drawn_as_tileds_marker() {
+        let geometry = MapGeometry::new(Orientation::Orthogonal, IVec2::splat(16), IVec2::splat(4));
+        let style = ObjectStyle::default();
+        let drawn = |shape: Shape| {
+            let object = MapObject {
+                shape,
+                pos: DVec2::new(50.0, 50.0),
+                ..MapObject::default()
+            };
+            let mut out = Vec::new();
+            shape_vectors(
+                &object,
+                Color::GRAY,
+                &geometry,
+                &style,
+                LayerId(1),
+                &mut out,
+            );
+            out.into_iter()
+                .map(|item| match item.shape {
+                    crate::vector::VectorShape::Polygon(points) => points,
+                    other => panic!("{other:?}"),
+                })
+                .collect::<Vec<_>>()
+        };
+        let square = drawn(Shape::Rectangle);
+        assert_eq!(square[1].len(), 4);
+        assert_eq!(square[1][0], DVec2::new(40.0, 40.0));
+        // Ellipses and capsules are circles of the same size, as Tiled draws them.
+        for round in [Shape::Ellipse, Shape::Capsule] {
+            let circle = drawn(round);
+            assert_eq!(circle[1].len(), 64);
+            assert!(
+                circle[1]
+                    .iter()
+                    .all(|p| (p.distance(DVec2::new(50.0, 50.0)) - 10.0).abs() < 1e-9)
+            );
+        }
+        assert!(
+            drawn(Shape::Polygon(Vec::new())).is_empty(),
+            "nothing to draw"
+        );
     }
 }

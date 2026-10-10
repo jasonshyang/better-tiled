@@ -9,7 +9,6 @@ use bt_utils::DRect;
 use crate::error::EditError;
 
 use super::find::{objects_by_id, objects_in};
-use super::outline::{drawn_outline, pixel_outline};
 use super::space::ObjectSpace;
 
 /// The pixel rectangle an object covers as drawn: its shape, or a tile object's image placed by
@@ -18,7 +17,7 @@ use super::space::ObjectSpace;
 /// space. Points, and rectangles, ellipses and capsules without a size, have bounds of no size
 /// at their position; hit tests give the latter Tiled's marker.
 pub fn object_bounds(space: &ObjectSpace, object: &MapObject) -> DRect {
-    pixel_outline(space, object).bounds()
+    space.pixel_outline(object).bounds()
 }
 
 /// The rectangle holding the bounds of the objects of `map` with `ids`; `None` for no ids.
@@ -46,7 +45,7 @@ pub fn objects_bounds_in(
 
 /// The screen rectangle an object covers as drawn.
 pub(crate) fn drawn_bounds(space: &ObjectSpace, object: &MapObject) -> DRect {
-    drawn_outline(space, object).bounds()
+    space.drawn_outline(object).bounds()
 }
 
 /// The smallest rectangle holding every rectangle, those of no size (points) included;

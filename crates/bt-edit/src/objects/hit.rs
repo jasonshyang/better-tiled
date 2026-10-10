@@ -5,11 +5,10 @@
 //! objects never. Tile objects are picked by their image's box, not its opaque pixels (Tiled's
 //! "precise tile object selection" needs the image, which this crate does not have).
 
-use bt_core::{MapObject, ObjectId, ObjectLayer};
+use bt_core::{MapObject, ObjectId, ObjectLayer, Outline};
 use glam::DVec2;
 
 use super::order::render_order;
-use super::outline::{Outline, hit_outline};
 use super::space::ObjectSpace;
 
 /// What a rubber band selects.
@@ -33,7 +32,9 @@ pub fn object_contains(
     point: DVec2,
     tolerance: f64,
 ) -> bool {
-    hit_outline(space, object).hits(space.geometry().pixel_to_screen(point), tolerance)
+    space
+        .hit_outline(object)
+        .hits(space.geometry().pixel_to_screen(point), tolerance)
 }
 
 /// The shown objects of a list `point` picks (see [`object_contains`]), topmost first.
@@ -47,7 +48,7 @@ pub fn objects_at(
     render_order(objects, space.geometry())
         .into_iter()
         .rev()
-        .filter(|o| o.visible && hit_outline(space, o).hits(screen, tolerance))
+        .filter(|o| o.visible && space.hit_outline(o).hits(screen, tolerance))
         .map(|o| o.id)
         .collect()
 }
@@ -71,7 +72,7 @@ pub fn objects_in_quad(
         .rev()
         .filter(|o| o.visible)
         .filter(|o| {
-            let outline = hit_outline(space, o);
+            let outline = space.hit_outline(o);
             match mode {
                 RectMode::Touching => outline.touches(&area),
                 RectMode::Enclosed => outline.lies_within(&band),
