@@ -106,11 +106,9 @@ impl PatternsPanel {
             patterns.present()
         ));
         ui.checkbox(&mut self.missing_only, "Only the missing ones");
-        let shown: Vec<(usize, &NeededPattern)> = patterns
-            .listed
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| !self.missing_only || p.tiles == 0)
+        // The places in the list of the patterns shown.
+        let shown: Vec<usize> = (0..patterns.listed.len())
+            .filter(|&i| !self.missing_only || patterns.listed.get(i).is_some_and(|p| p.tiles == 0))
             .collect();
         let columns = ((ui.available_width() / (PATTERN_SIZE + 4.0)).floor() as usize).max(1);
         let rows = shown.len().div_ceil(columns);
@@ -124,8 +122,11 @@ impl PatternsPanel {
                     ui.horizontal(|ui| {
                         let start = row * columns;
                         let end = (start + columns).min(shown.len());
-                        for &(number, pattern) in shown.get(start..end).unwrap_or_default() {
-                            let response = pattern_picture(ui, set, pattern, chosen, number);
+                        for &place in shown.get(start..end).unwrap_or_default() {
+                            let Some(pattern) = patterns.listed.get(place) else {
+                                continue;
+                            };
+                            let response = pattern_picture(ui, set, pattern, chosen, place);
                             if response.clicked() {
                                 chosen = Some(pattern.pattern);
                             }
@@ -192,18 +193,19 @@ impl PatternsPanel {
 }
 
 /// A pattern drawn as a tile of its lanes in their terrains' colours, framed in red when no
-/// tile has it and boldly when it is chosen; it answers clicks as "Pattern n".
+/// tile has it and boldly when it is chosen; it answers clicks as "Pattern n", the `place`-th
+/// in the set's list counted from 1.
 fn pattern_picture(
     ui: &mut egui::Ui,
     set: &WangSet,
     needed: &NeededPattern,
     chosen: Option<WangId>,
-    number: usize,
+    place: usize,
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(vec2(PATTERN_SIZE, PATTERN_SIZE), Sense::click());
     let is_chosen = chosen == Some(needed.pattern);
     let missing = needed.tiles == 0;
-    let label = format!("Pattern {}", number + 1);
+    let label = format!("Pattern {}", place + 1);
     response.widget_info(|| {
         egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, is_chosen, &label)
     });

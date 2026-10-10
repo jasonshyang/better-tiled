@@ -554,34 +554,31 @@ fn outline_edges(painter: &egui::Painter, rect: Rect, area: IRect, at: UVec2, st
     if !contains(area, at) {
         return;
     }
-    let (x, y) = (i64::from(at.x), i64::from(at.y));
+    let column = i64::from(at.x);
+    let row = i64::from(at.y);
     let r = rect.shrink(stroke.width * 0.5);
-    let edges = [
-        (y == i64::from(area.y), [r.left_top(), r.right_top()]),
-        (
-            y == i64::from(area.y) + i64::from(area.h) - 1,
-            [r.left_bottom(), r.right_bottom()],
-        ),
-        (x == i64::from(area.x), [r.left_top(), r.left_bottom()]),
-        (
-            x == i64::from(area.x) + i64::from(area.w) - 1,
-            [r.right_top(), r.right_bottom()],
-        ),
-    ];
-    for (on_border, points) in edges {
-        if on_border {
-            painter.line_segment(points, stroke);
-        }
+    if row == i64::from(area.y) {
+        painter.line_segment([r.left_top(), r.right_top()], stroke);
+    }
+    if row == i64::from(area.y) + i64::from(area.h) - 1 {
+        painter.line_segment([r.left_bottom(), r.right_bottom()], stroke);
+    }
+    if column == i64::from(area.x) {
+        painter.line_segment([r.left_top(), r.left_bottom()], stroke);
+    }
+    if column == i64::from(area.x) + i64::from(area.w) - 1 {
+        painter.line_segment([r.right_top(), r.right_bottom()], stroke);
     }
 }
 
 /// Whether the tile at `at` (column and row) is in `area`.
 fn contains(area: IRect, at: UVec2) -> bool {
-    let (x, y) = (i64::from(at.x), i64::from(at.y));
-    x >= i64::from(area.x)
-        && y >= i64::from(area.y)
-        && x < i64::from(area.x) + i64::from(area.w)
-        && y < i64::from(area.y) + i64::from(area.h)
+    let column = i64::from(at.x);
+    let row = i64::from(at.y);
+    column >= i64::from(area.x)
+        && row >= i64::from(area.y)
+        && column < i64::from(area.x) + i64::from(area.w)
+        && row < i64::from(area.y) + i64::from(area.h)
 }
 
 /// A small picture of a layout: each tile's lanes in the terrain's colour where the layout puts

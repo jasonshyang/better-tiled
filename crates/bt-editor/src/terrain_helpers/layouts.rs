@@ -5,7 +5,7 @@
 //! does not exist yet is made in the same step, and the terrains the blocks need past the set's
 //! are added, named and coloured as new terrains are.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use bt_core::{Lane, TileId, Tileset, WangId, WangSet, WangSetType};
 use bt_terrain::TerrainColor;
@@ -302,7 +302,7 @@ fn block_problem(tileset: &Tileset, into: LayoutTarget, block: &Block) -> Option
     let size = layout.size();
     let columns = tileset.columns();
     let rows = tileset.tile_count().div_ceil(columns.max(1));
-    let end = block.origin + size;
+    let end = block.origin.saturating_add(size);
     if end.x > columns || end.y > rows {
         return Some(format!(
             "“{}” is {}×{} tiles: from column {}, row {} it goes past the tileset's {}×{}",
@@ -323,16 +323,13 @@ fn label_blocks(
     blocks: &[Block],
 ) -> Result<usize, EditError> {
     let columns = tileset.columns();
-    let labels: Vec<(TerrainColor, TileId, Option<WangId>)> = blocks
+    let labels: Vec<BTreeMap<TileId, Option<WangId>>> =
+        blocks.iter().map(|block| block.labels(columns)).collect();
+    if let Some(&missing) = labels
         .iter()
-        .flat_map(|block| {
-            block
-                .labels(columns)
-                .into_iter()
-                .map(|(tile, label)| (block.terrain, tile, label))
-        })
-        .collect();
-    if let Some(&(_, missing, _)) = labels.iter().find(|(_, tile, _)| !tileset.has_tile(*tile)) {
+        .flat_map(BTreeMap::keys)
+        .find(|tile| !tileset.has_tile(**tile))
+    {
         return Err(EditError::NoSuchTile(missing));
     }
     let index = match into {
@@ -360,23 +357,25 @@ fn label_blocks(
     while set.colors.len() < needed {
         set.colors.push(new_terrain(set.colors.len()));
     }
-    for (terrain, tile, label) in labels {
-        let Some(label) = label else {
-            set.tiles.remove(&tile);
-            continue;
-        };
-        set.tiles.insert(tile, label);
-        let Some(whole) = all_of_one_terrain(label, set.kind) else {
-            continue;
-        };
-        if let Some(color) = usize::from(whole.0)
-            .checked_sub(1)
-            .and_then(|i| set.colors.get_mut(i))
-        {
-            color.tile.get_or_insert(tile);
-        }
-        if whole == terrain {
-            set.tile.get_or_insert(tile);
+    for (block, block_labels) in blocks.iter().zip(labels) {
+        for (tile, label) in block_labels {
+            let Some(label) = label else {
+                set.tiles.remove(&tile);
+                continue;
+            };
+            set.tiles.insert(tile, label);
+            let Some(whole) = all_of_one_terrain(label, set.kind) else {
+                continue;
+            };
+            if let Some(color) = usize::from(whole.0)
+                .checked_sub(1)
+                .and_then(|i| set.colors.get_mut(i))
+            {
+                color.tile.get_or_insert(tile);
+            }
+            if whole == block.terrain {
+                set.tile.get_or_insert(tile);
+            }
         }
     }
     Ok(index)

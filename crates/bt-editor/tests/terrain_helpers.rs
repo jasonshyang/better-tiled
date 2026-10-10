@@ -29,22 +29,29 @@ const GRASS: [u8; 4] = [70, 170, 60, 255];
 const SAND: [u8; 4] = [220, 200, 120, 255];
 const DIRT: [u8; 4] = [120, 80, 40, 255];
 
-fn layout(name: &str) -> (usize, &'static Layout) {
-    LAYOUTS
-        .iter()
-        .enumerate()
-        .find(|(_, l)| l.name == name)
-        .unwrap()
+/// The index of a layout in `LAYOUTS`.
+fn layout_index(name: &str) -> usize {
+    LAYOUTS.iter().position(|l| l.name == name).unwrap()
 }
 
-/// A tileset `columns`×`rows` tiles, all `under`, with `layout` drawn at each origin in its
-/// terrain's colour.
-fn drawn_tileset(
-    columns: u32,
-    rows: u32,
-    under: [u8; 4],
-    blocks: &[(&str, UVec2, [u8; 4])],
-) -> Arc<Tileset> {
+/// A block of a layout drawn in a terrain's colour.
+struct DrawnBlock {
+    layout: &'static str,
+    origin: UVec2,
+    terrain: [u8; 4],
+}
+
+/// A 3×3 island of `terrain` from `origin`.
+fn island_of(terrain: [u8; 4], origin: UVec2) -> DrawnBlock {
+    DrawnBlock {
+        layout: "3×3 island",
+        origin,
+        terrain,
+    }
+}
+
+/// A tileset `columns`×`rows` tiles, all `under`, with `blocks` drawn over it.
+fn drawn_tileset(columns: u32, rows: u32, under: [u8; 4], blocks: &[DrawnBlock]) -> Arc<Tileset> {
     let mut picture = blank_picture(columns * TILE, rows * TILE);
     for row in 0..rows {
         for column in 0..columns {
@@ -52,21 +59,21 @@ fn drawn_tileset(
             paint_lanes(&mut picture, at, TILE, WangSetType::Mixed, [Some(under); 9]);
         }
     }
-    for &(name, origin, terrain) in blocks {
-        let (_, layout) = layout(name);
+    for block in blocks {
+        let layout: &Layout = &LAYOUTS[layout_index(block.layout)];
         let width = layout.size().x;
         for (i, slot) in layout.slots().into_iter().enumerate() {
             let Some(slot) = slot else { continue };
             let i = u32::try_from(i).unwrap();
-            let tile = origin + UVec2::new(i % width, i / width);
+            let tile = block.origin + UVec2::new(i % width, i / width);
             let mut colors = [Some(under); 9];
             for (lane, color) in colors.iter_mut().enumerate().take(8) {
                 if slot.terrain & (1 << lane) != 0 {
-                    *color = Some(terrain);
+                    *color = Some(block.terrain);
                 }
             }
             if slot.middle {
-                colors[8] = Some(terrain);
+                colors[8] = Some(block.terrain);
             }
             paint_lanes(&mut picture, tile * TILE, TILE, layout.kind, colors);
         }
@@ -136,15 +143,18 @@ fn decoded(tileset: &Tileset) -> bt_image::DecodedImage {
     bt_image::decode_bytes(&embedded.bytes, &embedded.format, None).unwrap()
 }
 
-/// What `bt-terrain` finds in the tileset's image, and what Label All gives the blocks of `kind`
-/// in a set with no terrains yet.
-fn terrain_crate_finds(tileset: &Tileset, kind: WangSetType) -> (Vec<Fit>, Vec<Block>) {
+/// What `bt-terrain` finds in the tileset's image.
+fn terrain_crate_fits(tileset: &Tileset) -> Vec<Fit> {
+    detect(&Samples::from_tileset(tileset, &decoded(tileset)))
+}
+
+/// What `bt-terrain`'s Label All gives the blocks it finds of `kind`, in a set with no terrains
+/// yet.
+fn terrain_crate_label_all(tileset: &Tileset, kind: WangSetType) -> Vec<Block> {
     let samples = Samples::from_tileset(tileset, &decoded(tileset));
-    let fits = detect(&samples);
-    let of_kind: Vec<Fit> = fits
-        .iter()
+    let of_kind: Vec<Fit> = detect(&samples)
+        .into_iter()
         .filter(|f| LAYOUTS[f.layout].kind == kind)
-        .cloned()
         .collect();
     let empty = WangSet {
         name: String::new(),
@@ -155,8 +165,7 @@ fn terrain_crate_finds(tileset: &Tileset, kind: WangSetType) -> (Vec<Fit>, Vec<B
         tiles: BTreeMap::new(),
         properties: Default::default(),
     };
-    let blocks = KnownTerrains::from_set(&samples, &empty, &[]).label_all(&samples, &of_kind);
-    (fits, blocks)
+    KnownTerrains::from_set(&samples, &empty, &[]).label_all(&samples, &of_kind)
 }
 
 /// The labels a set has after `blocks` are labelled in it from scratch.
@@ -175,12 +184,11 @@ fn labels_of(blocks: &[Block], columns: u32) -> BTreeMap<TileId, WangId> {
 
 #[test]
 fn apply_labels_one_block_in_a_new_set_as_one_step() {
-    let (island, _) = layout("3×3 island");
-    let drawn = drawn_tileset(3, 3, DIRT, &[("3×3 island", UVec2::ZERO, GRASS)]);
+    let island = layout_index("3×3 island");
+    let drawn = drawn_tileset(3, 3, DIRT, &[island_of(GRASS, UVec2::ZERO)]);
     let (mut editor, doc) = editor_with(drawn.clone());
     let fits = find_layouts(&mut editor, doc);
-    let (expected, _) = terrain_crate_finds(&drawn, WangSetType::Corner);
-    assert_eq!(fits, expected, "what bt-terrain finds");
+    assert_eq!(fits, terrain_crate_fits(&drawn), "what bt-terrain finds");
     assert_eq!(
         fits,
         [Fit {
@@ -255,14 +263,14 @@ fn label_all_labels_every_block_found_as_one_step() {
         3,
         DIRT,
         &[
-            ("3×3 island", UVec2::ZERO, GRASS),
-            ("3×3 island", UVec2::new(4, 0), SAND),
+            island_of(GRASS, UVec2::ZERO),
+            island_of(SAND, UVec2::new(4, 0)),
         ],
     );
     let (mut editor, doc) = editor_with(drawn.clone());
     let fits = find_layouts(&mut editor, doc);
-    let (expected_fits, expected_blocks) = terrain_crate_finds(&drawn, WangSetType::Corner);
-    assert_eq!(fits, expected_fits);
+    assert_eq!(fits, terrain_crate_fits(&drawn));
+    let expected_blocks = terrain_crate_label_all(&drawn, WangSetType::Corner);
     assert_eq!(fits.len(), 2, "both islands: {fits:?}");
     let into = LayoutTarget::NewSet(WangSetType::Corner);
     assert_eq!(editor.label_all_blocks(doc, into), expected_blocks);
@@ -307,9 +315,9 @@ fn label_all_labels_every_block_found_as_one_step() {
 
 #[test]
 fn blocks_that_cannot_be_labelled_are_refused_with_the_reason() {
-    let (island, _) = layout("3×3 island");
-    let (blob, _) = layout("Blob 7×7");
-    let drawn = drawn_tileset(3, 3, DIRT, &[("3×3 island", UVec2::ZERO, GRASS)]);
+    let island = layout_index("3×3 island");
+    let blob = layout_index("Blob 7×7");
+    let drawn = drawn_tileset(3, 3, DIRT, &[island_of(GRASS, UVec2::ZERO)]);
     let (mut editor, doc) = editor_with(drawn);
     let block = |layout: usize, x: u32, terrain: u8, under: u8| Block {
         layout,
@@ -358,7 +366,7 @@ fn blocks_that_cannot_be_labelled_are_refused_with_the_reason() {
 
 #[test]
 fn a_search_belongs_to_the_tileset_it_was_made_for() {
-    let drawn = drawn_tileset(3, 3, DIRT, &[("3×3 island", UVec2::ZERO, GRASS)]);
+    let drawn = drawn_tileset(3, 3, DIRT, &[island_of(GRASS, UVec2::ZERO)]);
     let other = Atlas::builder().name("other").build_embedded().unwrap();
     let map = MapBuilder::new(UVec2::splat(TILE), UVec2::splat(4))
         .tileset(drawn)
