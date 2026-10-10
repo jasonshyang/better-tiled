@@ -178,6 +178,32 @@ M3 brought the rules into the window. What it added:
   lane by lane, Layout…'s Apply, a block chosen by hand and Label All, Auto-label…, Patterns
   (and a set too large to list), and New Tileset from an RPG Maker sheet, checked on the
   editor's state.
+- **The AutoMap panel** (`panels/automap.rs`), a third tab of the left group: Run AutoMap with
+  its key; the cell the Explain tool chose and its explanations; where the rules come from,
+  whether they are being read and why a read failed; their problems (open at first only when
+  one is more than a note), the rule maps with their rule counts, and the last run (its matches
+  over the whole map or the selection, the cells it changed, each rule map's matches, the rule
+  maps that matched nothing folded into one line with each one's reason, the outputs locks kept
+  out, its problems).
+- **Live AutoMap** (`panels/automap_live.rs`), the panel's section for AutoMap layers: on or
+  off, the seed and Re-roll, Show what I painted, and per run each name the rules use with what
+  they do with it (reads, writes, reads and writes, places objects on) and a chooser of the
+  map's layers of the right kind or a temporary layer; a name bound to an empty layer is marked
+  "empty"; Add a run, Remove this run; the runs' problems. The canvas draws, and its tools read,
+  the editor's `shown_map`; the status bar says of the hovered tile of the current layer whether
+  it was painted or made by the rules.
+- **The Explain tool** (`tools/explain.rs`, A, beside Offset Layers): a click chooses the cell,
+  outlined, and brings the AutoMap panel forward. Its view (`panels/automap_explain.rs`), per run
+  explained (each Live run, the last run, or a run now): each layer the rules write before and
+  after, the writes in order, the rules applied and those held back by Probability or overlap,
+  those that came close (a condition naming the tiles here holds) with the conditions that
+  failed, and how many others could write the cell, naming the layers they needed tiles on when
+  every failed condition found the cell empty; the tiles no rule names.
+- The Terrains panel numbers the terrains a set leaves unnamed ("Terrain 1"), as every set of the
+  packs does. `Startup::lock_folder`: the runtime folder project files are locked in, passed to
+  the editor; tests use a scratch folder. Tests: `app/automap_tests.rs` (⌘M and the panel, Live
+  bound from the panel, the Explain tool) and `app/m3_tests.rs`, the milestone's measure on the
+  Highlands pack.
 
 ## 2. Startup
 
@@ -485,7 +511,10 @@ with debug logging each slow frame is logged with the window's own work and the 
 built at M2, `BT_SCREENSHOT_ACTIONS` names commands by their keymap names, separated by commas
 (`rect_select_tool,select_all`): `--screenshot` runs them once the window has settled, waits for
 it to settle again, then takes the picture; a name that is no command stops the start with the
-reason. Selecting a cell for Explain and showing rule matches come with M3.
+reason. As built at M3, `BT_SCREENSHOT_TABS` brings panel tabs forward by their titles
+(`automap,terrains`), and `BT_SCREENSHOT_EXPLAIN=x,y` has the Explain tool choose that cell of
+the current map before the commands run; either stops the start when it names nothing. Showing
+where a rule matches did not come with M3.
 
 ## 14. Module layout
 

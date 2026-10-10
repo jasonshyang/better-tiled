@@ -1,6 +1,6 @@
 # Testing
 
-*2026-10-09; what M0, M1 and M2 built is as built at the end of M2, 2026-10-10. The rules every
+*2026-10-09; what M0 to M3 built is as built at the end of M3, 2026-10-10. The rules every
 crate's tests follow and the infrastructure they share: the corpora and how they are found, the
 fixtures, the oracle and golden-file policies, randomised tests, the editor harness, external
 programs, performance checks, the gates no test can automate, and continuous integration. Each
@@ -88,7 +88,13 @@ dev-dependencies that ask for them build `bt-core` into the test crate.
   pixel by pixel, each tile one colour with a marker in its corner, with offsets, render sizes,
   fill modes and animations) and `map` (`MapBuilder`: a map of any orientation with those
   tilesets and tile, object and image layers). Rule maps, Wang sets and classes join them with
-  the milestones that need them. Each crate's `tests/common` adds what only it needs.
+  the milestones that need them. Each crate's `tests/common` adds what only it needs. As built
+  at M3: grids name AutoMap's rule tiles by letter (`X` Negate, `I` Ignore, `N` NonEmpty, `E`
+  Empty, `O` Other, in slot 1 unless an `@slot` says otherwise) and `rule_tiles()` draws their
+  tileset; `TerrainSetBuilder` builds a terrain set of any kind with named terrains, labelled
+  tile by tile or with every combination (`corners`, `edges`, `every_combination`,
+  `combination_tile`); the picture fixtures draw tilesets lane by lane for the terrain helpers
+  (`blank_picture`, `paint_lanes`, `paint_a2_autotile`, `AtlasBuilder::picture`).
 
 ## 5. Oracles and goldens
 
@@ -182,6 +188,18 @@ a new map, a tileset from an image, painting and filling, an object layer with a
 collision shape drawn in the tileset editor, Save As, and the file read back. `bt-edit`'s
 randomised tests (brushes, carried tiles, layer and map commands, objects, nodes) use the
 seeded runs of §6 through `bt-test-data`'s `Fuzz`.
+
+As built at M3, the measure is `a_packs_rules_and_terrain_sets_give_tileds_results_with_every_failure_explained`
+(`app/m3_tests.rs`), on the Highlands pack opened where it is and never saved, skipped without
+the pack: the rules do nothing on the pack's sample scene and AutoMap's notice and the Explain
+tool say why; bound to the layer the scene paints its platforms on, Live AutoMap rebuilds its
+2763 platform cells as the pack draws them; a terrain set of the pack paints with every tile
+meeting its neighbours. The exact results it rests on are the crates' own: Tiled's automapping
+cases and the pack suites of `bt-automap`, the sample sets and pack sets of `bt-terrain`. The
+randomised tests M3 added: region runs equal full runs and explanations agree with runs
+(`bt-automap`), anchors never change a run, AutoMap layers updated around a change equal
+deriving them again. `bt-test-data`'s `workspace_root` is a path without `..`, so a path built
+from it compares equal to the cleaned paths the crates report.
 
 ## 8. External programs
 

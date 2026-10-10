@@ -803,6 +803,18 @@ holding all of it. Building it changed designs recorded in `decisions.md`, among
 tilesets edited in place of the map, Tiled's modifiers with ⌘ for its Ctrl, one Insert Polygon
 tool, and carried tiles held in the selection.
 
+M3 was built on 2026-10-10; `07-terrain.md`, `08-automap.md` and `09-project-file.md` and the M3
+parts of `05-editor-core.md` and `06-application.md` (their §1.3) and `13-testing.md` are as
+built. Its measure is a window test on the Highlands pack,
+`a_packs_rules_and_terrain_sets_give_tileds_results_with_every_failure_explained`: the pack's
+rules do nothing on its own sample scene and the window says why (they read a layer the scene
+leaves empty), Live AutoMap bound to the layer the scene paints on rebuilds its platforms as
+the pack draws them, and a terrain set of the pack paints with every tile meeting its
+neighbours; Tiled's own automapping cases give Tiled's results exactly. Building it changed
+designs recorded in `decisions.md`, among them the editor core running the terrain solver,
+AutoMap layers' runs as the engine's layer-name bindings, `bt-project` below `bt-automap` in the
+crate layers, and two autotile layouts the packs draw every terrain in.
+
 ## 18. Glossary
 
 - **Asset**: a loaded map, tileset, template, world or project, with a path and a dirty state.

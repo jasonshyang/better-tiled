@@ -491,3 +491,44 @@ checks at the right moment in both modes, untried positions, skipped matches, ne
 overwritten matches, unnamed tiles, layer names, summaries and pictures, and the fuzzed agreement
 of explanations with runs), and in the pack and files suites the exact timed region run, an
 explanation and the idle rule maps on Highlands, the files watched, cycles and failed loads.
+
+## 17. As built at M3 (AutoMap layers)
+
+`layers` is a public module: `layers::{Setup, RuleLayers, AutoLayers, MapChange, Restored,
+painted_record, restore}`. Where it differs from §10, or says more:
+
+- **A run is the engine's `LayerNames`**, its unbound names temporary layers: `Setup { rules,
+  runs: Vec<LayerNames>, seed }`, with no `Run`/`Bound` beside it. `LayerNames` gained
+  `temporary()`, `found_in(map, rule_layers)` (every name bound to the map's layer of that name
+  as Tiled finds it), `rebound(name, objects, layer)`, `tile_bindings()` and
+  `object_bindings()`. Run `i` draws from `seed + i`.
+- **`RuleSet::rule_layers()`** gives `RuleLayers { inputs, tile_outputs, object_outputs, made }`
+  over the rule maps that are used, each name once in the order first used.
+- **`AutoLayers`**: `derive(painted, setup, rules)` runs every run in full; `update(previous,
+  …)` does so and gives the objects the rules place the ids they had in `previous` when they are
+  the same objects (same layer, same everything but the id) and the id is free, the others ids
+  after every id in use, references following; `after_painting(…)` on a change of what was
+  painted alone, with the setup and rules unchanged: nothing when nothing the rules see changed,
+  else when only cells changed (`MapChange::between`: `Nothing`, `Cells(rect)`, `Everything`)
+  each run as a region run on the new stage before it, its result inside the area it may change
+  laid over the run's old stage, which is exact by §7 (a fuzz test holds it equal to `derive`);
+  object outputs, other changes and region runs that fall back run in full. `painted_only` is
+  what was painted with nothing run, for a setup whose rules cannot be read; `input_of(run)` is
+  the stage a run read, for explaining it.
+- **The record** keeps a painted tile layer whole, row by row from its leftmost cell, wherever
+  it differs from the result, and for object layers the ids the rules placed; objects removed by
+  `DeleteTiles` are not kept and do not come back. An entry that no longer applies (its layer
+  changed or gone, a tileset it names gone, a row that cannot be read) is a
+  `PaintedNotRestored` note, and its layer counts as all painted. `restore` takes the rules
+  file's path already resolved; the editor resolves it against the project file, and for a
+  recovery snapshot the record holds the full path.
+- The editor (`05-editor-core.md`, §1.3) starts them by binding every name found and making the
+  output layers the map lacks, derives the result after every change, explains each run on its
+  input stage in the map's names (`Explanation::with_layer_names`), and disables AutoMap while
+  they are on. The touched-layers skip §16 leaves to this module is not built: a change of cells
+  is already worked around run by run.
+
+Tests: `tests/layers.rs` (chained rule maps with no layer in between, bindings on other layers
+and two runs, refused bindings, the record written and restored and a layer changed elsewhere,
+placed objects kept out of what was painted and keeping their ids, and the fuzzed update) and
+the unit tests of `rule_layers`, `setup` and `change`.
