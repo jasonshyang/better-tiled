@@ -19,6 +19,8 @@ mod color;
 mod diagnose;
 mod error;
 mod filler;
+#[cfg(test)]
+mod oracle_tests;
 mod paint;
 mod request;
 mod terrain;

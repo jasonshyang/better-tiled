@@ -43,6 +43,28 @@ pub(crate) struct Outcome {
     pub(crate) placed: Vec<PlacedCell>,
     pub(crate) invalid: Vec<IVec2>,
     pub(crate) needed: Vec<Needed>,
+    /// Every decision, in the order it was made, for the tests that check them.
+    #[cfg(test)]
+    pub(crate) decisions: Vec<Decision>,
+}
+
+/// One decision of a run as the solver saw it: the cell's wishes, its neighbours', and what it
+/// placed (`None`: nothing fits).
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(crate) struct Decision {
+    pub(crate) cell: IVec2,
+    pub(crate) info: CellInfo,
+    pub(crate) neighbours: [NeighbourState; LANE_COUNT],
+    pub(crate) chosen: Option<Cell>,
+}
+
+/// A neighbour across a lane when a decision was made.
+#[cfg(test)]
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct NeighbourState {
+    pub(crate) info: CellInfo,
+    pub(crate) settled: bool,
 }
 
 /// A run of the solver over one tile layer.
@@ -67,6 +89,8 @@ struct Solve {
     queue: Vec<IVec2>,
     /// Whether some tile has a pattern, by the pattern's lanes and mask.
     used: HashMap<(PackedWangId, PackedWangId), bool>,
+    #[cfg(test)]
+    decisions: Vec<Decision>,
 }
 
 /// A candidate the lookahead turned down, and why.
@@ -342,7 +366,23 @@ impl<'a> Filler<'a> {
         if solve.checked.contains(&p) {
             return;
         }
-        let cell = match self.find_best(solve, p) {
+        #[cfg(test)]
+        let seen = Decision {
+            cell: p,
+            info: self.grid.get(&p).copied().unwrap_or_default(),
+            neighbours: self.topology.around(p).map(|q| NeighbourState {
+                info: self.grid.get(&q).copied().unwrap_or_default(),
+                settled: solve.checked.contains(&q),
+            }),
+            chosen: None,
+        };
+        let found = self.find_best(solve, p);
+        #[cfg(test)]
+        solve.decisions.push(Decision {
+            chosen: found.as_ref().ok().copied(),
+            ..seen
+        });
+        let cell = match found {
             Ok(cell) => cell,
             Err(needed) => {
                 solve.invalid.entry(p).or_insert(needed);
@@ -561,5 +601,7 @@ fn outcome_of(solve: Solve) -> Outcome {
         placed,
         invalid,
         needed,
+        #[cfg(test)]
+        decisions: solve.decisions,
     }
 }
