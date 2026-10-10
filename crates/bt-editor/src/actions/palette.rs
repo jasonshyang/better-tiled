@@ -146,9 +146,15 @@ impl Editor {
                 })
             })
             .collect();
+        // Equal scores put the shorter label first, the one the words cover more of: "snap to
+        // grid" finds Snap to Grid before Snap to Fine Grid.
         ranked.sort_by(|a, b| {
             b.rank
                 .cmp(&a.rank)
+                .then_with(|| {
+                    let length = |r: &Ranked| r.entry.label.chars().count();
+                    length(a).cmp(&length(b))
+                })
                 .then_with(|| bt_utils::text::natural_cmp(&a.entry.label, &b.entry.label))
         });
         ranked.into_iter().take(limit).map(|r| r.entry).collect()
@@ -214,6 +220,12 @@ mod tests {
         assert_eq!(layer[0].target, PaletteTarget::Layer(LayerId(2)));
         assert_eq!(layer[0].detail, "object layer");
         assert!(editor.palette("zzqq", 5).is_empty());
+        // Words that score alike in both find the shorter label first.
+        let snap = editor.palette("snap to grid", 2);
+        assert_eq!(
+            snap.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(),
+            ["Snap to Grid", "Snap to Fine Grid"]
+        );
         assert!(
             editor
                 .palette("", 200)
