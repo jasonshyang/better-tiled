@@ -49,6 +49,8 @@ pub enum AttributeValue {
     FillMode(FillMode),
     /// A tileset's grid orientation.
     GridOrientation(GridOrientation),
+    /// A terrain set's type.
+    TerrainType(bt_core::WangSetType),
     /// A text object's horizontal alignment.
     HAlign(HAlign),
     /// A text object's vertical alignment.
@@ -145,6 +147,11 @@ impl fmt::Display for AttributeValue {
             AttributeValue::GridOrientation(orientation) => match orientation {
                 GridOrientation::Orthogonal => "Orthogonal",
                 GridOrientation::Isometric => "Isometric",
+            },
+            AttributeValue::TerrainType(kind) => match kind {
+                bt_core::WangSetType::Corner => "Corner",
+                bt_core::WangSetType::Edge => "Edge",
+                bt_core::WangSetType::Mixed => "Mixed",
             },
             AttributeValue::HAlign(align) => match align {
                 HAlign::Left => "Left",

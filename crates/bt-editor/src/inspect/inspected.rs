@@ -1,12 +1,14 @@
 //! What the Properties panel shows and changes for a document (Tiled's `currentObjects`:
 //! `MapDocument::currentObjects` and `TilesetDocument::currentObjects`,
 //! `reference/tiled/src/tiled/mapdocument.cpp` and `tilesetdocument.cpp`): while the tileset
-//! editor is open, its selected tiles, or its tileset when none is selected; else the map, the
+//! editor is open, in its Terrain mode the terrain chosen to label with (the set, for no
+//! terrain), else its selected tiles, or its tileset when none is selected; else the map, the
 //! selected layers or the selected objects, whichever was chosen last.
 
 use bt_core::{LayerId, ObjectId, TileId};
+use bt_terrain::TerrainColor;
 
-use crate::document::{DocumentId, Inspecting};
+use crate::document::{DocumentId, Inspecting, TilesetMode};
 use crate::editor::Editor;
 
 /// What the Properties panel shows and changes: things of one kind, of a document's map or of
@@ -23,13 +25,25 @@ pub enum Inspected {
     Tileset,
     /// Tiles of that tileset: the selected ones.
     Tiles(Vec<TileId>),
+    /// A terrain set of that tileset.
+    TerrainSet(usize),
+    /// A terrain of a terrain set of that tileset.
+    Terrain {
+        /// The set.
+        set: usize,
+        /// The terrain.
+        color: TerrainColor,
+    },
 }
 
 impl Inspected {
     /// Whether nothing is inspected: no layer or no object selected.
     pub fn is_empty(&self) -> bool {
         match self {
-            Inspected::Map | Inspected::Tileset => false,
+            Inspected::Map
+            | Inspected::Tileset
+            | Inspected::TerrainSet(_)
+            | Inspected::Terrain { .. } => false,
             Inspected::Layers(layers) => layers.is_empty(),
             Inspected::Objects(objects) => objects.is_empty(),
             Inspected::Tiles(tiles) => tiles.is_empty(),
@@ -52,6 +66,18 @@ impl Editor {
     pub fn inspected(&self, doc: DocumentId) -> Option<Inspected> {
         let document = self.documents.get(doc)?;
         if let Some(editing) = document.tileset_editing() {
+            if editing.mode() == TilesetMode::Terrain
+                && let Some(label) = editing.label_terrain()
+            {
+                return Some(if label.color.is_none() {
+                    Inspected::TerrainSet(label.set)
+                } else {
+                    Inspected::Terrain {
+                        set: label.set,
+                        color: label.color,
+                    }
+                });
+            }
             let tiles = editing.selected_tiles();
             return Some(if tiles.is_empty() {
                 Inspected::Tileset

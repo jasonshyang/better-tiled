@@ -5,10 +5,10 @@
 
 #![cfg(test)]
 
-use bt_core::{Color, Lane, TileId, TilesetSlot, WangId, WangSetType};
+use bt_core::{Color, Lane, Property, TileId, TilesetSlot, Value, WangId, WangSetType};
 use bt_editor::{
-    ActionId, DocumentId, Editor, Intent, LabelMark, LabelStroke, LabelTerrain, TerrainSetEdit,
-    TilesetMode,
+    ActionId, Attribute, AttributeValue, Change, DocumentId, Editor, Inspected, Intent, LabelMark,
+    LabelStroke, LabelTerrain, Step, TerrainSetEdit, TilesetMode, ValueType,
 };
 use bt_terrain::TerrainColor;
 use bt_test_data::fixtures::{Atlas, MapBuilder};
@@ -312,4 +312,102 @@ fn sets_and_terrains_are_renamed_recoloured_weighted_and_removed() {
     assert_eq!(tileset(&editor, doc).wang_sets.len(), 1);
     assert_eq!(tileset(&editor, doc).wang_sets[0].kind, WangSetType::Mixed);
     assert_eq!(label(&editor, doc).unwrap().set, 0);
+}
+
+#[test]
+fn the_properties_panel_shows_the_terrain_labelled_with() {
+    let (mut editor, doc) = editor();
+    edit(
+        &mut editor,
+        doc,
+        TerrainSetEdit::AddSet {
+            kind: WangSetType::Corner,
+        },
+    );
+    let terrain = Inspected::Terrain {
+        set: 0,
+        color: TerrainColor(1),
+    };
+    assert_eq!(editor.inspected(doc), Some(terrain.clone()));
+    let set_attribute = |editor: &mut Editor, inspected: &Inspected, attribute, value| {
+        let effects = editor.apply(Intent::SetAttribute {
+            doc,
+            inspected: inspected.clone(),
+            attribute,
+            value,
+            merge: None,
+        });
+        assert!(effects.is_empty(), "{effects:?}");
+    };
+    set_attribute(
+        &mut editor,
+        &terrain,
+        Attribute::Name,
+        AttributeValue::Text("Grass".into()),
+    );
+    set_attribute(
+        &mut editor,
+        &terrain,
+        Attribute::Probability,
+        AttributeValue::Number(2.0),
+    );
+    set_attribute(
+        &mut editor,
+        &terrain,
+        Attribute::Color,
+        AttributeValue::Color(Some(Color::rgb(0, 128, 0))),
+    );
+    let grass = tileset(&editor, doc).wang_sets[0].colors[0].clone();
+    assert_eq!(
+        (grass.name.as_str(), grass.probability, grass.color),
+        ("Grass", 2.0, Color::rgb(0, 128, 0))
+    );
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(
+        tileset(&editor, doc).wang_sets[0].colors[0].color,
+        Color::rgb(255, 0, 0)
+    );
+
+    // A terrain keeps custom properties of its own.
+    for change in [
+        Change::add("speed", ValueType::Float),
+        Change::set(
+            vec![Step::Member("speed".into())],
+            Property::new(Value::Float(0.5)),
+        ),
+    ] {
+        let effects = editor.apply(Intent::ChangeProperties {
+            doc,
+            inspected: terrain.clone(),
+            change,
+            merge: None,
+        });
+        assert!(effects.is_empty(), "{effects:?}");
+    }
+    assert_eq!(
+        tileset(&editor, doc).wang_sets[0].colors[0]
+            .properties
+            .get("speed")
+            .map(|p| &p.value),
+        Some(&Value::Float(0.5))
+    );
+
+    // With no terrain chosen, the set itself; its type is a choice.
+    editor.apply(Intent::ChooseLabelTerrain {
+        doc,
+        label: LabelTerrain {
+            set: 0,
+            color: TerrainColor::NONE,
+        },
+    });
+    let set = Inspected::TerrainSet(0);
+    assert_eq!(editor.inspected(doc), Some(set.clone()));
+    set_attribute(
+        &mut editor,
+        &set,
+        Attribute::TerrainType,
+        AttributeValue::TerrainType(WangSetType::Edge),
+    );
+    assert_eq!(tileset(&editor, doc).wang_sets[0].kind, WangSetType::Edge);
+    assert_eq!(Attribute::TerrainType.choices().len(), 3);
 }

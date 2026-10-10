@@ -18,7 +18,8 @@ use crate::error::EditError;
 use crate::history::{MergeKey, Tx};
 use crate::properties::{
     Attribute, AttributeValue, Change, PropertySet, Step, set_layer_attribute, set_map_attribute,
-    set_object_attribute, set_tile_attribute, set_tileset_attribute,
+    set_object_attribute, set_terrain_attribute, set_terrain_set_attribute, set_tile_attribute,
+    set_tileset_attribute,
 };
 use crate::tileset_commands::drop_empty_tile_data;
 
@@ -54,7 +55,10 @@ impl Editor {
             Inspected::Map | Inspected::Layers(_) | Inspected::Objects(_) => {
                 Ok(set.apply_to_map(tx.map_mut(source.place.map_asset()?)?, change)?)
             }
-            Inspected::Tileset | Inspected::Tiles(_) => {
+            Inspected::Tileset
+            | Inspected::Tiles(_)
+            | Inspected::TerrainSet(_)
+            | Inspected::Terrain { .. } => {
                 let tileset = tx.tileset_at_mut(source.place.tileset_home()?)?;
                 let changed = set.apply_to_tileset(tileset, change)?;
                 drop_empty_tile_data(tileset, inspected.tiles());
@@ -120,6 +124,19 @@ impl Editor {
                     drop_empty_tile_data(tileset, tiles);
                     changed
                 }
+                Inspected::TerrainSet(set) => set_terrain_set_attribute(
+                    tx.tileset_at_mut(place.tileset_home()?)?,
+                    *set,
+                    attribute,
+                    value,
+                )?,
+                Inspected::Terrain { set, color } => set_terrain_attribute(
+                    tx.tileset_at_mut(place.tileset_home()?)?,
+                    *set,
+                    *color,
+                    attribute,
+                    value,
+                )?,
             };
             Ok(changed)
         })

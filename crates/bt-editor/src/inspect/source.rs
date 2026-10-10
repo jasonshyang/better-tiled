@@ -14,7 +14,7 @@ use crate::editor::Editor;
 use crate::error::EditError;
 use crate::properties::{
     AttributeRow, PropertyError, Target, layer_attributes, map_attributes, object_attributes,
-    tile_attributes, tileset_attributes,
+    terrain_attributes, terrain_set_attributes, tile_attributes, tileset_attributes,
 };
 use crate::store::{AssetId, AssetKind, TilesetHome};
 
@@ -104,9 +104,21 @@ impl Source {
                 .iter()
                 .map(|id| Target::tile(tileset, *id, types))
                 .collect(),
-            (Place::Map { .. }, Inspected::Tileset | Inspected::Tiles(_)) => Err(
-                PropertyError::NotInMap(crate::properties::TargetId::Tileset),
-            ),
+            (Place::Tileset { tileset, .. }, Inspected::TerrainSet(set)) => {
+                Ok(vec![Target::terrain_set(tileset, *set, types)?])
+            }
+            (Place::Tileset { tileset, .. }, Inspected::Terrain { set, color }) => {
+                Ok(vec![Target::terrain(tileset, *set, color.0, types)?])
+            }
+            (
+                Place::Map { .. },
+                Inspected::Tileset
+                | Inspected::Tiles(_)
+                | Inspected::TerrainSet(_)
+                | Inspected::Terrain { .. },
+            ) => Err(PropertyError::NotInMap(
+                crate::properties::TargetId::Tileset,
+            )),
             (Place::Tileset { .. }, _) => Err(PropertyError::NotInTileset(
                 crate::properties::TargetId::Map,
             )),
@@ -128,9 +140,21 @@ impl Source {
             (Place::Tileset { tileset, .. }, Inspected::Tiles(tiles)) => {
                 tile_attributes(tileset, tiles)
             }
-            (Place::Map { .. }, Inspected::Tileset | Inspected::Tiles(_)) => Err(
-                PropertyError::NotInMap(crate::properties::TargetId::Tileset),
-            ),
+            (Place::Tileset { tileset, .. }, Inspected::TerrainSet(set)) => {
+                terrain_set_attributes(tileset, *set)
+            }
+            (Place::Tileset { tileset, .. }, Inspected::Terrain { set, color }) => {
+                terrain_attributes(tileset, *set, *color)
+            }
+            (
+                Place::Map { .. },
+                Inspected::Tileset
+                | Inspected::Tiles(_)
+                | Inspected::TerrainSet(_)
+                | Inspected::Terrain { .. },
+            ) => Err(PropertyError::NotInMap(
+                crate::properties::TargetId::Tileset,
+            )),
             (Place::Tileset { .. }, _) => Err(PropertyError::NotInTileset(
                 crate::properties::TargetId::Map,
             )),
@@ -151,7 +175,10 @@ impl Editor {
             .get(doc)
             .ok_or(EditError::NoSuchDocument(doc))?;
         let place = match inspected {
-            Inspected::Tileset | Inspected::Tiles(_) => {
+            Inspected::Tileset
+            | Inspected::Tiles(_)
+            | Inspected::TerrainSet(_)
+            | Inspected::Terrain { .. } => {
                 let home = document
                     .tileset_editing()
                     .map(|editing| editing.home())

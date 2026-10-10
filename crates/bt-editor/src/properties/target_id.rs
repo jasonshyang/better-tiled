@@ -19,6 +19,15 @@ pub enum TargetId {
     Tileset,
     /// A tile of the tileset.
     Tile(TileId),
+    /// A terrain set of the tileset.
+    TerrainSet(usize),
+    /// A terrain of a terrain set of the tileset.
+    Terrain {
+        /// The set.
+        set: usize,
+        /// The terrain (1-based).
+        color: u8,
+    },
     /// The members of a class of the project, with their defaults.
     Members(CustomTypeId),
 }
@@ -31,6 +40,8 @@ impl fmt::Display for TargetId {
             TargetId::Object(id) => write!(f, "object {id}"),
             TargetId::Tileset => f.write_str("the tileset"),
             TargetId::Tile(id) => write!(f, "tile {id}"),
+            TargetId::TerrainSet(set) => write!(f, "terrain set {set}"),
+            TargetId::Terrain { set, color } => write!(f, "terrain {color} of set {set}"),
             TargetId::Members(id) => write!(f, "the members of type {id}"),
         }
     }

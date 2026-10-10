@@ -36,6 +36,7 @@ mod shown;
 mod step;
 mod target;
 mod target_id;
+mod terrain_attributes;
 mod tile_attributes;
 mod tileset_attributes;
 mod type_edit;
@@ -58,6 +59,9 @@ pub use shown::Shown;
 pub use step::Step;
 pub use target::{Origin, Target};
 pub use target_id::TargetId;
+pub use terrain_attributes::{
+    set_terrain_attribute, set_terrain_set_attribute, terrain_attributes, terrain_set_attributes,
+};
 pub use tile_attributes::{set_tile_attribute, tile_attributes};
 pub use tileset_attributes::{set_tileset_attribute, tileset_attributes};
 pub use type_edit::TypeEdit;

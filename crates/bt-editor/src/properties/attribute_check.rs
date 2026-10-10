@@ -134,6 +134,7 @@ fn takes(attribute: Attribute) -> Takes {
         | Attribute::TileRenderSize
         | Attribute::FillMode
         | Attribute::GridOrientation
+        | Attribute::TerrainType
         | Attribute::HAlign
         | Attribute::VAlign => Takes::Choice,
     }

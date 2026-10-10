@@ -31,9 +31,11 @@ pub(crate) fn map_properties(map: &Map, id: TargetId) -> Result<&Properties, Pro
             .object(object)
             .map(|object| &object.properties)
             .ok_or(PropertyError::NoSuchObject(object)),
-        TargetId::Tileset | TargetId::Tile(_) | TargetId::Members(_) => {
-            Err(PropertyError::NotInMap(id))
-        }
+        TargetId::Tileset
+        | TargetId::Tile(_)
+        | TargetId::TerrainSet(_)
+        | TargetId::Terrain { .. }
+        | TargetId::Members(_) => Err(PropertyError::NotInMap(id)),
     }
 }
 
@@ -51,9 +53,11 @@ pub(crate) fn map_properties_mut(
         TargetId::Object(object) => object_mut(map, object)
             .map(|object| &mut object.properties)
             .ok_or(PropertyError::NoSuchObject(object)),
-        TargetId::Tileset | TargetId::Tile(_) | TargetId::Members(_) => {
-            Err(PropertyError::NotInMap(id))
-        }
+        TargetId::Tileset
+        | TargetId::Tile(_)
+        | TargetId::TerrainSet(_)
+        | TargetId::Terrain { .. }
+        | TargetId::Members(_) => Err(PropertyError::NotInMap(id)),
     }
 }
 
@@ -68,6 +72,17 @@ pub(crate) fn tileset_properties(
             .tile(tile)
             .map_or(&NO_PROPERTIES, |data| &data.properties)),
         TargetId::Tile(tile) => Err(PropertyError::NoSuchTile(tile)),
+        TargetId::TerrainSet(set) => tileset
+            .wang_sets
+            .get(set)
+            .map(|found| &found.properties)
+            .ok_or(PropertyError::NoSuchTerrainSet(set)),
+        TargetId::Terrain { set, color } => tileset
+            .wang_sets
+            .get(set)
+            .and_then(|found| found.colors.get(usize::from(color).wrapping_sub(1)))
+            .map(|terrain| &terrain.properties)
+            .ok_or(PropertyError::NoSuchTerrain { set, color }),
         TargetId::Map | TargetId::Layer(_) | TargetId::Object(_) | TargetId::Members(_) => {
             Err(PropertyError::NotInTileset(id))
         }
@@ -85,6 +100,17 @@ pub(crate) fn tileset_properties_mut(
             Ok(&mut tileset.tiles.entry(tile).or_default().properties)
         }
         TargetId::Tile(tile) => Err(PropertyError::NoSuchTile(tile)),
+        TargetId::TerrainSet(set) => tileset
+            .wang_sets
+            .get_mut(set)
+            .map(|found| &mut found.properties)
+            .ok_or(PropertyError::NoSuchTerrainSet(set)),
+        TargetId::Terrain { set, color } => tileset
+            .wang_sets
+            .get_mut(set)
+            .and_then(|found| found.colors.get_mut(usize::from(color).wrapping_sub(1)))
+            .map(|terrain| &mut terrain.properties)
+            .ok_or(PropertyError::NoSuchTerrain { set, color }),
         TargetId::Map | TargetId::Layer(_) | TargetId::Object(_) | TargetId::Members(_) => {
             Err(PropertyError::NotInTileset(id))
         }

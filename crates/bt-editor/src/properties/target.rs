@@ -170,6 +170,48 @@ impl<'a> Target<'a> {
         ))
     }
 
+    /// A terrain set of the tileset: its properties, under its class's members.
+    pub fn terrain_set(
+        tileset: &'a Tileset,
+        set: usize,
+        types: &'a CustomTypes,
+    ) -> Result<Target<'a>, PropertyError> {
+        let found = tileset
+            .wang_sets
+            .get(set)
+            .ok_or(PropertyError::NoSuchTerrainSet(set))?;
+        Ok(Target::of_class(
+            TargetId::TerrainSet(set),
+            &found.properties,
+            &found.class,
+            ClassUsage::WANG_SET,
+            types,
+        ))
+    }
+
+    /// A terrain of a terrain set of the tileset: its properties, under its class's members.
+    pub fn terrain(
+        tileset: &'a Tileset,
+        set: usize,
+        color: u8,
+        types: &'a CustomTypes,
+    ) -> Result<Target<'a>, PropertyError> {
+        let terrain = tileset
+            .wang_sets
+            .get(set)
+            .ok_or(PropertyError::NoSuchTerrainSet(set))?
+            .colors
+            .get(usize::from(color).wrapping_sub(1))
+            .ok_or(PropertyError::NoSuchTerrain { set, color })?;
+        Ok(Target::of_class(
+            TargetId::Terrain { set, color },
+            &terrain.properties,
+            &terrain.class,
+            ClassUsage::WANG_COLOR,
+            types,
+        ))
+    }
+
     /// The members of the project's class `id`, with their defaults (the Custom Types editor's
     /// class); they inherit nothing.
     pub fn members(types: &'a CustomTypes, id: CustomTypeId) -> Result<Target<'a>, PropertyError> {

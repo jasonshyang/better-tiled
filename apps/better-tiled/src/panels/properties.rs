@@ -236,6 +236,8 @@ fn title(inspected: &Inspected) -> String {
             [tile] => format!("Tile {tile}"),
             _ => format!("{} Tiles", tiles.len()),
         },
+        Inspected::TerrainSet(_) => "Terrain Set".to_owned(),
+        Inspected::Terrain { .. } => "Terrain".to_owned(),
     }
 }
 

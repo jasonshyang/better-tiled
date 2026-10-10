@@ -158,8 +158,10 @@ pub enum Attribute {
     Margin,
     /// The pixels between an atlas's tiles; read-only.
     Spacing,
-    /// A tile's relative weight for random painting and terrain filling.
+    /// A tile's or a terrain's relative weight for random painting and terrain filling.
     Probability,
+    /// Which lanes a terrain set uses.
+    TerrainType,
 }
 
 impl Attribute {
@@ -238,6 +240,7 @@ impl Attribute {
             Attribute::Margin => "Margin",
             Attribute::Spacing => "Spacing",
             Attribute::Probability => "Probability",
+            Attribute::TerrainType => "Type",
         }
     }
 
@@ -298,6 +301,13 @@ impl Attribute {
             Attribute::DrawOrder => [DrawOrder::TopDown, DrawOrder::Index]
                 .map(AttributeValue::DrawOrder)
                 .to_vec(),
+            Attribute::TerrainType => [
+                bt_core::WangSetType::Corner,
+                bt_core::WangSetType::Edge,
+                bt_core::WangSetType::Mixed,
+            ]
+            .map(AttributeValue::TerrainType)
+            .to_vec(),
             Attribute::ObjectAlignment => [
                 Alignment::Unspecified,
                 Alignment::TopLeft,

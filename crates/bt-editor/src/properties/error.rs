@@ -19,6 +19,17 @@ pub enum PropertyError {
     /// The tileset has no tile with this id.
     #[error("the tileset has no tile {0}")]
     NoSuchTile(TileId),
+    /// The tileset has no terrain set at this index.
+    #[error("the tileset has no terrain set {0}")]
+    NoSuchTerrainSet(usize),
+    /// The terrain set has no terrain with this index.
+    #[error("terrain set {set} has no terrain {color}")]
+    NoSuchTerrain {
+        /// The set.
+        set: usize,
+        /// The terrain.
+        color: u8,
+    },
     /// A target of a tileset was given a map to change.
     #[error("{0} is not part of a map")]
     NotInMap(TargetId),
