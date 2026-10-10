@@ -12,6 +12,7 @@
 mod context;
 mod error;
 mod export;
+mod feet;
 pub mod grid;
 mod history;
 mod names;
@@ -22,6 +23,7 @@ mod words;
 pub use context::{Context, Selection};
 pub use error::{Error, NameKind};
 pub use export::{ExportFormat, ExportOutcome};
+pub use feet::{Feet, pixel_to_point, point_to_pixel, standing_cell};
 pub use history::{
     EditToKeep, History, HistoryError, KEPT_PER_MAP, KeptEdit, UndoOutcome, Undone, fingerprint,
 };

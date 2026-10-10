@@ -169,11 +169,11 @@ pub enum Error {
         /// What reading it said.
         error: bt_terrain::TerrainError,
     },
-    /// An object's tile is of a tileset the map does not have.
-    #[error("object #{id}'s tile is of a tileset the map does not have")]
+    /// A tile of a tileset the map does not have.
+    #[error("tile {tile} is of a tileset the map does not have")]
     NoTileset {
-        /// The object.
-        id: u32,
+        /// The tile's id.
+        tile: u32,
     },
     /// An object that is not a tile object, where only those stand by their feet.
     #[error("object #{id} is not a sprite or another tile object, so it has no foot")]
