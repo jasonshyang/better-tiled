@@ -1,0 +1,21 @@
+[package]
+name = "bt-edit"
+description = "The logic behind better-tiled's editing commands as functions over maps: selections, fills, the brush, the clipboard, carried selections, and map, layer, tileset and object commands"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+bt-utils.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+
+[lints]
+workspace = true

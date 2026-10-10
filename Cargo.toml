@@ -11,6 +11,7 @@ authors = ["Jason Yang"]
 [workspace.dependencies]
 # Our crates.
 bt-core = { path = "crates/bt-core" }
+bt-edit = { path = "crates/bt-edit" }
 bt-editor = { path = "crates/bt-editor" }
 bt-image = { path = "crates/bt-image" }
 bt-render = { path = "crates/bt-render" }

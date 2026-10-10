@@ -203,6 +203,20 @@ impl Map {
         walk(&self.layers, 0, &mut visit);
     }
 
+    /// Visits every layer depth-first in draw order, parents before their children, to change
+    /// it.
+    pub fn for_each_layer_mut(&mut self, mut visit: impl FnMut(&mut Layer)) {
+        fn walk(layers: &mut [Layer], visit: &mut dyn FnMut(&mut Layer)) {
+            for layer in layers {
+                visit(layer);
+                if let Some(children) = layer.children_mut() {
+                    walk(children, visit);
+                }
+            }
+        }
+        walk(&mut self.layers, &mut visit);
+    }
+
     /// The layer with `id`, anywhere in the tree.
     pub fn layer(&self, id: LayerId) -> Option<&Layer> {
         fn find(layers: &[Layer], id: LayerId) -> Option<&Layer> {
@@ -384,6 +398,9 @@ mod tests {
         assert_eq!(map.layer_path(LayerId(1)), Some(vec![LayerId(1)]));
         assert_eq!(map.layer_path(LayerId(9)), None);
         map.layer_mut(LayerId(3)).unwrap().name = "renamed".into();
+        let mut order = Vec::new();
+        map.for_each_layer_mut(|layer| order.push(layer.id.0));
+        assert_eq!(order, [1, 2, 3]);
         assert_eq!(map.layer(LayerId(3)).unwrap().name, "renamed");
         let mut visited = Vec::new();
         map.for_each_layer(|layer, depth| visited.push((layer.id.0, depth)));

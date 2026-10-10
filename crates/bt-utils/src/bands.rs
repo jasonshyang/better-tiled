@@ -13,22 +13,36 @@ pub fn banded_rects(cells: impl IntoIterator<Item = IVec2>) -> Vec<IRect> {
     cells.sort_unstable_by_key(|p| (p.y, p.x));
     cells.dedup();
 
-    let mut rows: Vec<Row> = Vec::new();
+    let mut runs: Vec<IRect> = Vec::new();
     for p in cells {
-        match rows.last_mut() {
-            Some(row) if row.y == p.y => match row.runs.last_mut() {
-                Some(run) if run.end + 1 == p.x => run.end = p.x,
-                _ => row.runs.push(Run {
-                    start: p.x,
-                    end: p.x,
-                }),
-            },
-            _ => rows.push(Row {
+        match runs.last_mut() {
+            Some(run) if run.y == p.y && run.x + run.w == p.x => run.w += 1,
+            _ => runs.push(IRect {
+                x: p.x,
                 y: p.y,
-                runs: vec![Run {
-                    start: p.x,
-                    end: p.x,
-                }],
+                w: 1,
+                h: 1,
+            }),
+        }
+    }
+    banded_runs(runs)
+}
+
+/// Rows already split into maximal runs, as `QRegion`'s y-x bands (see [`banded_rects`]). The
+/// runs are one-row rectangles given row by row from the top, left to right, with no two of a
+/// row touching; a set kept as runs is banded without visiting its cells.
+pub fn banded_runs(runs: impl IntoIterator<Item = IRect>) -> Vec<IRect> {
+    let mut rows: Vec<Row> = Vec::new();
+    for run in runs {
+        let run_columns = Run {
+            start: run.x,
+            end: run.x + run.w - 1,
+        };
+        match rows.last_mut() {
+            Some(row) if row.y == run.y => row.runs.push(run_columns),
+            _ => rows.push(Row {
+                y: run.y,
+                runs: vec![run_columns],
             }),
         }
     }

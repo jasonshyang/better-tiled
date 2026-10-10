@@ -112,6 +112,19 @@ impl Chunk {
         }
     }
 
+    /// Passes every non-empty cell through `rewrite`; how many changed.
+    pub(crate) fn rewrite_cells(&mut self, rewrite: &mut impl FnMut(Cell) -> Cell) -> usize {
+        let mut changed = 0;
+        for slot in self.cells.iter_mut().filter(|c| !c.is_empty()) {
+            let cell = rewrite(*slot);
+            if cell != *slot {
+                *slot = cell;
+                changed += 1;
+            }
+        }
+        changed
+    }
+
     /// The cells, row by row.
     pub fn cells(&self) -> &[Cell; CHUNK_AREA] {
         &self.cells

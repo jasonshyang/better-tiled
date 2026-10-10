@@ -118,6 +118,24 @@ impl TileLayer {
         }
     }
 
+    /// Passes every non-empty cell through `rewrite` (to renumber tilesets, swap tiles, or
+    /// erase a tileset's cells by returning the empty cell) and returns how many changed. Only
+    /// the chunks that change are copied from what a snapshot shares.
+    pub fn rewrite_cells(&mut self, mut rewrite: impl FnMut(Cell) -> Cell) -> usize {
+        let mut changed = 0;
+        for chunk in self.chunks.values_mut() {
+            // Rewritten in a copy, so each cell goes through `rewrite` once and a chunk that
+            // stays the same stays shared.
+            let mut copy = Chunk::clone(chunk);
+            let count = copy.rewrite_cells(&mut rewrite);
+            if count > 0 {
+                *chunk = Arc::new(copy);
+                changed += count;
+            }
+        }
+        changed
+    }
+
     /// The allocated chunks, row by row.
     pub fn chunks(&self) -> impl Iterator<Item = LayerChunk<'_>> {
         self.chunks
@@ -240,6 +258,21 @@ mod tests {
                 IVec2::new(20, 0)
             ]
         );
+    }
+
+    #[test]
+    fn rewriting_copies_only_the_chunks_it_changes() {
+        let mut a = TileLayer::infinite(UVec2::ZERO);
+        a.set_cell(IVec2::new(0, 0), tile(1)).unwrap();
+        a.set_cell(IVec2::new(40, 0), tile(2)).unwrap();
+        let mut b = a.clone();
+        let changed = b.rewrite_cells(|cell| if cell == tile(1) { tile(9) } else { cell });
+        assert_eq!(changed, 1);
+        assert_eq!(b.cell(IVec2::new(0, 0)), tile(9));
+        let far = ChunkPos::of(IVec2::new(40, 0));
+        assert!(Arc::ptr_eq(a.chunk(far).unwrap(), b.chunk(far).unwrap()));
+        assert_eq!(b.rewrite_cells(|_| Cell::EMPTY), 2);
+        assert_eq!(b.cells().count(), 0);
     }
 
     #[test]

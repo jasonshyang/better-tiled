@@ -555,6 +555,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bt-edit"
+version = "0.1.0"
+dependencies = [
+ "bt-core",
+ "bt-test-data",
+ "bt-utils",
+ "glam",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "bt-editor"
 version = "0.1.0"
 dependencies = [
