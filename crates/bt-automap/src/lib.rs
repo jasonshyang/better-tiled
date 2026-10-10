@@ -33,12 +33,15 @@ mod problem;
 )]
 mod rng;
 mod rule_ref;
+#[expect(dead_code, reason = "the engine, which comes next, uses the rules")]
+mod rulemap;
 #[expect(
     dead_code,
-    reason = "the rule set and the engine, which come next, use it"
+    reason = "the engine and the files, which come next, use the table and the problems"
 )]
-mod rulemap;
+mod rules;
 
 pub use problem::{Problem, ProblemKind, Severity};
 pub use rule_ref::RuleRef;
 pub use rulemap::RuleMap;
+pub use rules::{LockedOutput, Report, RuleSet, RuleSetBuilder};
