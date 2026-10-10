@@ -17,7 +17,8 @@ mod run;
 use std::io::Write;
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::error::ErrorKind;
+use clap::{CommandFactory, Parser};
 
 use crate::cli::Cli;
 use crate::exit::Status;
@@ -37,6 +38,11 @@ fn main() -> ExitCode {
                 Status::Done
             };
             let _ = error.print();
+            if error.kind() == ErrorKind::UnknownArgument
+                && let Some(known) = known_options(std::env::args().skip(1))
+            {
+                eprintln!("\n{known}");
+            }
             return status.code();
         }
     };
@@ -53,4 +59,20 @@ fn main() -> ExitCode {
             Status::Failed.code()
         }
     }
+}
+
+/// The options of the command `args` names, for an unknown option's message: `bt view takes
+/// --region, --layers, …`.
+fn known_options(args: impl Iterator<Item = String>) -> Option<String> {
+    let table = Cli::command();
+    let name = args.into_iter().find(|arg| !arg.starts_with('-'))?;
+    let command = table.find_subcommand(&name)?;
+    let options: Vec<String> = command
+        .get_arguments()
+        .chain(table.get_arguments())
+        .filter_map(|argument| argument.get_long())
+        .filter(|long| *long != "help" && *long != "version")
+        .map(|long| format!("--{long}"))
+        .collect();
+    Some(format!("bt {name} takes {}", options.join(", ")))
 }
