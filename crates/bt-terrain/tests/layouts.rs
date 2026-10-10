@@ -13,6 +13,7 @@ use bt_core::{TileId, Tileset, TilesetImage, WangId, WangSetType};
 use bt_image::DecodedImage;
 use bt_terrain::TerrainColor;
 use bt_terrain::layouts::{Fit, KnownTerrains, LAYOUTS, Layout, Samples, detect, places};
+use bt_test_data::fixtures::{TerrainSetBuilder, corners};
 use glam::UVec2;
 
 use common::pictures::*;
@@ -429,22 +430,12 @@ fn label_all_groups_blocks_that_look_alike() {
         "grass, dirt, then water"
     );
     assert_eq!(known.terrain_count(), 3);
-    // A set that already labels grass as its second terrain: grass blocks get it.
-    let mut set = bt_core::WangSet {
-        name: "Ground".to_owned(),
-        class: String::new(),
-        kind: WangSetType::Corner,
-        tile: None,
-        colors: vec![
-            common::terrain_color("Dirt"),
-            common::terrain_color("Grass"),
-        ],
-        tiles: Default::default(),
-        properties: Default::default(),
-    };
-    // The grass island's middle tile, all grass.
-    set.tiles
-        .insert(TileId(16 + 1), WangId::from_lanes([0, 2, 0, 2, 0, 2, 0, 2]));
+    // A set that already labels grass as its second terrain (on the grass island's middle tile,
+    // all grass): grass blocks get it.
+    let set = TerrainSetBuilder::new(WangSetType::Corner)
+        .terrains(&["Dirt", "Grass"])
+        .label(16 + 1, corners([2; 4]))
+        .build();
     let known = KnownTerrains::from_set(&samples, &set, &[]);
     let guessed = known.guess(&samples, &fits[0]);
     assert_eq!(

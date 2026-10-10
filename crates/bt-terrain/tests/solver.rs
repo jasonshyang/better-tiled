@@ -7,10 +7,13 @@
 
 mod common;
 
-use bt_core::{Cell, Lane, TileId, WangSetType};
+use bt_core::{Cell, Lane, TileId, WangId, WangSetType};
 use bt_terrain::{
     BrushTarget, Cause, FillRequest, PaintRequest, Terrain, TerrainColor, TerrainError, fill,
     paint, preview_fill, preview_paint,
+};
+use bt_test_data::fixtures::{
+    TerrainSetBuilder, combination_tile, corners, edges, every_combination,
 };
 use glam::{IVec2, UVec2};
 
@@ -23,7 +26,7 @@ fn all_sand_map(size: u32) -> (bt_core::Map, Terrain) {
     let map = map_with(
         sand_and_grass(),
         UVec2::splat(size),
-        Some(combination_tile(2, [1, 1, 1, 1])),
+        combination_tile(2, [1, 1, 1, 1]),
     );
     let terrain = Terrain::new(&map, slot(), 0).unwrap();
     (map, terrain)
@@ -38,23 +41,23 @@ fn painting_a_corner_turns_the_four_tiles_around_it() {
     assert!(report.invalid.is_empty(), "{report:?}");
     // The vertex at the top-left of (3, 3) is grass for the four tiles that meet there.
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(3, 3)),
+        wang_at(&map, &terrain, IVec2::new(3, 3)),
         corners([1, 1, 1, 2])
     );
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(2, 3)),
+        wang_at(&map, &terrain, IVec2::new(2, 3)),
         corners([2, 1, 1, 1])
     );
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(3, 2)),
+        wang_at(&map, &terrain, IVec2::new(3, 2)),
         corners([1, 1, 2, 1])
     );
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(2, 2)),
+        wang_at(&map, &terrain, IVec2::new(2, 2)),
         corners([1, 2, 1, 1])
     );
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(0, 0)),
+        wang_at(&map, &terrain, IVec2::new(0, 0)),
         corners([1, 1, 1, 1])
     );
     assert_eq!(
@@ -72,7 +75,7 @@ fn a_preview_is_the_paint_and_a_seed_decides_the_same_way_twice() {
     // Two plain sand tiles, so choices are random.
     let mut tileset = sand_and_grass();
     let set = &mut tileset.wang_sets[0];
-    set.tiles.insert(TileId(100), plain(1));
+    set.tiles.insert(TileId(100), corners([1; 4]));
     let map = map_with(tileset, UVec2::splat(8), None);
     let terrain = Terrain::new(&map, slot(), 0).unwrap();
     let cells: Vec<IVec2> = bt_utils::IRect::from_min_size(IVec2::ZERO, IVec2::splat(8))
@@ -105,11 +108,6 @@ fn a_preview_is_the_paint_and_a_seed_decides_the_same_way_twice() {
     );
 }
 
-/// A corner label with every corner the same terrain.
-fn plain(color: u8) -> bt_core::WangId {
-    bt_core::WangId::from_lanes(corners([color; 4]))
-}
-
 #[test]
 fn a_fill_with_a_terrain_is_that_terrain_inside_and_connects_at_its_border() {
     let (map, terrain) = all_sand_map(8);
@@ -127,10 +125,10 @@ fn a_fill_with_a_terrain_is_that_terrain_inside_and_connects_at_its_border() {
     assert!(report.invalid.is_empty(), "{report:?}");
     // The middle is grass; the ring meets the sand around it.
     for p in [IVec2::new(3, 3), IVec2::new(4, 4), IVec2::new(3, 4)] {
-        assert_eq!(lanes_at(&filled, &terrain, p), corners([2, 2, 2, 2]), "{p}");
+        assert_eq!(wang_at(&filled, &terrain, p), corners([2, 2, 2, 2]), "{p}");
     }
     assert_eq!(
-        lanes_at(&filled, &terrain, IVec2::new(2, 2)),
+        wang_at(&filled, &terrain, IVec2::new(2, 2)),
         corners([1, 2, 1, 1])
     );
     assert_consistent(&filled, &terrain, &[]);
@@ -248,12 +246,11 @@ fn a_best_tile_of_probability_zero_is_never_placed() {
 
 #[test]
 fn edge_sets_paint_the_edge_and_its_twin() {
-    let labels: Vec<[u8; 8]> = every_combination(2).into_iter().map(edges).collect();
-    let mut map = map_with(
-        tileset(WangSetType::Edge, &["Path", "Grass"], &labels),
-        UVec2::splat(4),
-        Some(TileId(15)),
-    );
+    let paths = TerrainSetBuilder::new(WangSetType::Edge)
+        .terrains(&["Path", "Grass"])
+        .every_combination()
+        .added_to(atlas());
+    let mut map = map_with(paths, UVec2::splat(4), Some(TileId(15)));
     let terrain = Terrain::new(&map, slot(), 0).unwrap();
     // All grass; a path across the edge between (1, 1) and (2, 1).
     let report = paint(
@@ -266,11 +263,11 @@ fn edge_sets_paint_the_edge_and_its_twin() {
     .unwrap();
     assert!(report.invalid.is_empty());
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(1, 1)),
+        wang_at(&map, &terrain, IVec2::new(1, 1)),
         edges([2, 1, 2, 2])
     );
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(2, 1)),
+        wang_at(&map, &terrain, IVec2::new(2, 1)),
         edges([2, 2, 2, 1])
     );
     assert_consistent(&map, &terrain, &[]);
@@ -295,7 +292,7 @@ fn infinite_layers_paint_anywhere_and_finite_ones_stop_at_their_edge() {
     .unwrap();
     assert!(report.invalid.is_empty());
     assert_eq!(
-        lanes_at(&finite, &terrain, IVec2::ZERO),
+        wang_at(&finite, &terrain, IVec2::ZERO),
         corners([1, 1, 1, 2])
     );
 
@@ -316,9 +313,9 @@ fn infinite_layers_paint_anywhere_and_finite_ones_stop_at_their_edge() {
     )
     .unwrap();
     assert!(report.invalid.is_empty(), "{report:?}");
-    assert_eq!(lanes_at(&infinite, &terrain, far), corners([2, 2, 2, 2]));
+    assert_eq!(wang_at(&infinite, &terrain, far), corners([2, 2, 2, 2]));
     assert_eq!(
-        lanes_at(&infinite, &terrain, far - IVec2::ONE),
+        wang_at(&infinite, &terrain, far - IVec2::ONE),
         corners([1, 2, 1, 1])
     );
 }
@@ -331,11 +328,11 @@ fn symmetry_paints_the_half_turn_too_on_finite_maps_only() {
         .mirror(true);
     paint(&mut map, &request).unwrap();
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(1, 1)),
+        wang_at(&map, &terrain, IVec2::new(1, 1)),
         corners([2, 2, 2, 2])
     );
     assert_eq!(
-        lanes_at(&map, &terrain, IVec2::new(4, 4)),
+        wang_at(&map, &terrain, IVec2::new(4, 4)),
         corners([2, 2, 2, 2])
     );
     assert_consistent(&map, &terrain, &[]);
@@ -372,7 +369,7 @@ fn requests_name_what_they_cannot_find() {
 
 /// Sand–grass and sand–water tiles, but none where grass meets water.
 fn three_terrains() -> bt_core::Tileset {
-    let mut labels: Vec<[u8; 8]> = every_combination(2).into_iter().map(corners).collect();
+    let mut labels: Vec<WangId> = every_combination(2).into_iter().map(corners).collect();
     for c in every_combination(2) {
         let water = c.map(|x| if x == 2 { 3 } else { 1 });
         if water != [1, 1, 1, 1] {
@@ -388,7 +385,7 @@ fn a_stroke_says_what_it_pushed_back_and_the_tile_that_would_have_kept_it() {
     let water = TileId(every_combination(2).len() as u32 + 14);
     let map = map_with(tileset, UVec2::splat(8), Some(water));
     let terrain = Terrain::new(&map, slot(), 0).unwrap();
-    assert_eq!(lanes_at(&map, &terrain, IVec2::ZERO), corners([3, 3, 3, 3]));
+    assert_eq!(wang_at(&map, &terrain, IVec2::ZERO), corners([3, 3, 3, 3]));
     let request = PaintRequest::new(GROUND, &terrain, GRASS)
         .targets(vec![BrushTarget::Corner(IVec2::splat(4))]);
     let preview = preview_paint(&map, &request).unwrap();
@@ -416,13 +413,9 @@ fn a_stroke_over_another_sets_tiles_says_so() {
     let mut tileset = sand_and_grass();
     let mut paths = tileset.wang_sets[0].clone();
     paths.name = "Paths".to_owned();
-    paths.tiles = [(TileId(200), plain(1))].into_iter().collect();
+    paths.tiles = [(TileId(200), corners([1; 4]))].into_iter().collect();
     tileset.wang_sets.push(paths);
-    let mut map = map_with(
-        tileset,
-        UVec2::splat(4),
-        Some(combination_tile(2, [1, 1, 1, 1])),
-    );
+    let mut map = map_with(tileset, UVec2::splat(4), combination_tile(2, [1, 1, 1, 1]));
     map.layers[0]
         .as_tile_layer_mut()
         .unwrap()
