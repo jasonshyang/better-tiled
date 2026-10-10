@@ -156,8 +156,8 @@ Each crate depends only on crates in the layers below it. The table lists the ex
 apps        better-tiled                                   bt
             ───────────────────────────────────────────────────────────
 layer 4     bt-editor          bt-script        bt-godot      bt-live
-layer 3     bt-edit   bt-terrain   bt-automap   bt-project   bt-render
-layer 2     bt-tmx
+layer 3     bt-edit   bt-terrain   bt-automap   bt-render
+layer 2     bt-tmx    bt-project
 layer 1     bt-core                                          bt-image
 layer 0     bt-utils
 ```
@@ -171,8 +171,8 @@ layer 0     bt-utils
 | `bt-render` | `bt-core`, `bt-image` |
 | `bt-edit` | `bt-core` |
 | `bt-terrain` | `bt-core`, `bt-image` (autotile layout detection reads pixels) |
-| `bt-automap` | `bt-core`, `bt-tmx` (rule maps are Tiled maps; confined to one module, §10.2) |
-| `bt-project` | `bt-core` |
+| `bt-automap` | `bt-core`, `bt-tmx` (rule maps are Tiled maps; confined to one module, §10.2), `bt-project` (the AutoMap record its layers module writes and restores, §10.3) |
+| `bt-project` | `bt-utils`, `bt-core` |
 | `bt-live` | `bt-utils` |
 | `bt-godot` | `bt-core`, `bt-image`, `bt-project` |
 | `bt-editor` | `bt-core`, `bt-tmx`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
