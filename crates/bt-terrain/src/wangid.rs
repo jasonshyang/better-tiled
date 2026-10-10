@@ -172,6 +172,22 @@ pub(crate) fn lane_of(index: usize) -> Lane {
     }
 }
 
+/// The lane at column `x` and row `y` of a tile's 3×3 grid; the centre has none (Tiled's
+/// `indexByGrid`).
+pub(crate) fn lane_by_grid(x: i32, y: i32) -> Option<usize> {
+    match (x, y) {
+        (0, 0) => Some(7),
+        (1, 0) => Some(0),
+        (2, 0) => Some(1),
+        (0, 1) => Some(6),
+        (2, 1) => Some(2),
+        (0, 2) => Some(5),
+        (1, 2) => Some(4),
+        (2, 2) => Some(3),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,6 +246,8 @@ mod tests {
     fn lane_neighbours_and_the_grid() {
         assert_eq!((opposite(1), next(7), previous(0)), (5, 0, 7));
         assert!(is_corner(3) && !is_corner(4));
+        assert_eq!(lane_by_grid(0, 0), Some(7));
+        assert_eq!(lane_by_grid(1, 1), None);
         assert_eq!(lane_of(5), Lane::BottomLeft);
         assert_eq!(lane_of(5).index(), 5);
     }

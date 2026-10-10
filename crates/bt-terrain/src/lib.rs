@@ -14,6 +14,7 @@
 //! (`reference/tiled/src/libtiled/wangset.cpp`). Tiled's editor code is GPL-2.0-or-later and is
 //! used here under GPL-3.0-or-later. `docs/design/07-terrain.md` is the design.
 
+mod brush;
 mod color;
 mod diagnose;
 mod error;
@@ -24,6 +25,7 @@ mod terrain;
 mod topology;
 mod wangid;
 
+pub use brush::{Stroke, hit_test, line_targets};
 pub use color::TerrainColor;
 pub use diagnose::{Cause, Needed};
 pub use error::TerrainError;

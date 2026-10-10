@@ -50,6 +50,11 @@ impl Topology {
         self.hex
     }
 
+    /// The map's geometry.
+    pub(crate) fn geometry(&self) -> &MapGeometry {
+        &self.geometry
+    }
+
     /// The cells across each lane of `p`, in lane order.
     pub(crate) fn around(&self, p: IVec2) -> [IVec2; LANE_COUNT] {
         if !self.hex {
