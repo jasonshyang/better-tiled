@@ -22,3 +22,4 @@ mod rows;
 mod schema;
 
 pub use error::Error;
+pub use schema::{Document, MapEntry, Note};
