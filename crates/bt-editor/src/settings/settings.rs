@@ -71,6 +71,9 @@ pub struct General {
     pub history_limit: usize,
     /// Notice files changed by other programs: reload them, or ask when they hold unsaved work.
     pub watch_files: bool,
+    /// Let `bt` work with the open maps: the editor listens for it (`11-live-link.md`). There
+    /// is no live link on Windows.
+    pub live_link: bool,
 }
 
 impl Default for General {
@@ -81,6 +84,7 @@ impl Default for General {
             recovery: true,
             history_limit: crate::history::DEFAULT_HISTORY_LIMIT,
             watch_files: true,
+            live_link: true,
         }
     }
 }

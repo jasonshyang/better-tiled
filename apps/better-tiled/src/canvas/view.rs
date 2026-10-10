@@ -14,7 +14,7 @@ use glam::{DVec2, IVec2, UVec2};
 
 use super::camera::{Camera, ViewTransform};
 use super::gesture::{GestureReader, Pointer, ReadFrame};
-use super::overlay::{OverlayInput, overlay_vectors};
+use super::overlay::{MarkShape, OverlayInput, mark_shapes, overlay_vectors};
 use super::paint::CanvasGpu;
 use crate::tools::{Overlay, ToolBox, ToolContext, region_polygons};
 
@@ -68,6 +68,8 @@ pub(crate) struct Canvas {
     selection_outline: Option<SelectionOutline>,
     /// The selected objects' frames, kept while the selection and the map stay the same.
     objects_outline: Option<ObjectsOutline>,
+    /// The marks `bt` made, kept while they and the grid stay the same.
+    marks_outline: Option<MarksOutline>,
     /// The current layer's offset (its groups' included): the tools measure the pointer from it
     /// and the grid, the selection and the hovered cell are drawn at it, as in Tiled.
     layer_offset: DVec2,
@@ -79,6 +81,14 @@ struct SelectionOutline {
     region: TileRegion,
     geometry: MapGeometry,
     polygons: Vec<Vec<DVec2>>,
+}
+
+/// The marks' shapes on screen, with what they were worked out from.
+#[derive(Clone, Debug)]
+struct MarksOutline {
+    marks: Vec<bt_editor::Mark>,
+    geometry: MapGeometry,
+    shapes: Vec<MarkShape>,
 }
 
 /// The selected objects' frames on screen, with what they were worked out from.
@@ -292,6 +302,27 @@ impl Canvas {
             .map_or(&[], |o| o.polygons.as_slice())
     }
 
+    /// The marks `bt` made on the document's map, worked out again only when they or the grid
+    /// changed.
+    fn mark_shapes(&mut self, frame: &CanvasFrame<'_>) -> &[MarkShape] {
+        let marks = frame.editor.marks(frame.doc);
+        let geometry = frame.map.geometry();
+        let fresh = self
+            .marks_outline
+            .as_ref()
+            .is_some_and(|o| o.marks == marks && o.geometry == geometry);
+        if !fresh {
+            self.marks_outline = Some(MarksOutline {
+                marks: marks.to_vec(),
+                shapes: mark_shapes(&geometry, marks),
+                geometry,
+            });
+        }
+        self.marks_outline
+            .as_ref()
+            .map_or(&[], |o| o.shapes.as_slice())
+    }
+
     /// The selected objects' frames, worked out again only when the selection or the map
     /// changed.
     fn object_polygons(&mut self, frame: &CanvasFrame<'_>) -> &[Vec<DVec2>] {
@@ -385,6 +416,11 @@ impl Canvas {
             Vec::new()
         };
         let objects = self.object_polygons(frame).to_vec();
+        let marks = if cells {
+            self.mark_shapes(frame).to_vec()
+        } else {
+            Vec::new()
+        };
         let overlays = overlay_vectors(&OverlayInput {
             map: frame.map,
             visible: view.render_camera().visible_rect(viewport_px(view)),
@@ -402,6 +438,7 @@ impl Canvas {
                     .document(frame.doc)
                     .is_some_and(|d| d.selection().carries_tiles()),
             tool: &self.tool_overlay.vectors,
+            marks: &marks,
         });
         let layers = if frame.toggles.highlight_current_layer {
             LayerVisibility::default().highlight(

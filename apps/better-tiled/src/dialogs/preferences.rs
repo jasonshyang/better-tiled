@@ -124,6 +124,10 @@ impl PreferencesDialog {
             &mut general.watch_files,
             "Notice files changed by other programs",
         );
+        ui.add_enabled_ui(cfg!(unix), |ui| {
+            ui.checkbox(&mut general.live_link, "Let bt work with the open maps")
+                .on_disabled_hover_text("bt works with files only on Windows");
+        });
         ui.horizontal(|ui| {
             ui.label("Undo steps kept per document");
             ui.add(egui::DragValue::new(&mut general.history_limit).range(10..=100_000));

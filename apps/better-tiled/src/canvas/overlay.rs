@@ -1,13 +1,15 @@
-//! What the canvas draws over the map: the map's border, the tile grid and the hovered cell,
-//! as vector items in world pixels with strokes in device pixels.
+//! What the canvas draws over the map: the map's border, the tile grid, the hovered cell and
+//! the marks `bt` made, as vector items in world pixels with strokes in device pixels.
 
 use std::sync::Arc;
 
-use bt_core::{Color, Map};
-use bt_editor::Settings;
-use bt_render::{Dash, GridStyle, VectorItem, grid_vectors};
-use bt_utils::DRect;
+use bt_core::{Color, HAlign, Map, MapGeometry, VAlign};
+use bt_editor::{Mark, Settings, TileRegion};
+use bt_render::{Dash, GridStyle, TextItem, VectorItem, grid_vectors};
+use bt_utils::{DRect, IRect};
 use glam::{DVec2, IVec2};
+
+use crate::tools::region_polygons;
 
 /// What the overlays of a frame depend on.
 pub(crate) struct OverlayInput<'a> {
@@ -36,6 +38,84 @@ pub(crate) struct OverlayInput<'a> {
     pub(crate) carrying: bool,
     /// What the current tool draws.
     pub(crate) tool: &'a [VectorItem],
+    /// The marks `bt` made on the map.
+    pub(crate) marks: &'a [MarkShape],
+}
+
+/// The colours marks take in turn: bright, and unlike the selection's blue.
+const MARK_PALETTE: [Color; bt_editor::MARK_COLORS as usize] = [
+    Color::rgba(255, 64, 160, 255),
+    Color::rgba(255, 150, 0, 255),
+    Color::rgba(40, 200, 90, 255),
+    Color::rgba(230, 200, 0, 255),
+    Color::rgba(170, 80, 255, 255),
+];
+
+/// The most cells a mark tints; beyond them it is outlined only.
+const MOST_TINTED_CELLS: usize = 20_000;
+
+/// The size of a mark's label, in device pixels.
+const MARK_LABEL_PX: f32 = 13.0;
+
+/// A mark as the canvas draws it, in world pixels.
+#[derive(Clone, Debug)]
+pub(crate) struct MarkShape {
+    /// Its cells, row run by row run, to tint (none beyond [`MOST_TINTED_CELLS`]).
+    tint: Vec<Vec<DVec2>>,
+    /// Its outline.
+    outline: Vec<Vec<DVec2>>,
+    /// Its label and where it is written: above the first row's left end.
+    label: String,
+    label_at: DVec2,
+    color: Color,
+}
+
+/// The shapes of `marks` on a map of `geometry`.
+pub(crate) fn mark_shapes(geometry: &MapGeometry, marks: &[Mark]) -> Vec<MarkShape> {
+    marks
+        .iter()
+        .filter_map(|mark| {
+            let first = *mark.cells.first()?;
+            let color = MARK_PALETTE
+                .get(usize::from(mark.color))
+                .copied()
+                .unwrap_or(MARK_PALETTE[0]);
+            let tint = if mark.cells.len() <= MOST_TINTED_CELLS {
+                row_runs(&mark.cells)
+                    .into_iter()
+                    .flat_map(|run| geometry.rect_outline(run))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let corner = geometry
+                .tile_polygon(first)
+                .into_iter()
+                .fold(DVec2::splat(f64::INFINITY), DVec2::min);
+            Some(MarkShape {
+                tint,
+                outline: region_polygons(
+                    geometry,
+                    &TileRegion::from_cells(mark.cells.iter().copied()),
+                ),
+                label: mark.label.clone(),
+                label_at: corner,
+                color,
+            })
+        })
+        .collect()
+}
+
+/// Cells sorted by row then column, as runs of one row each.
+fn row_runs(cells: &[IVec2]) -> Vec<IRect> {
+    let mut runs: Vec<IRect> = Vec::new();
+    for &cell in cells {
+        match runs.last_mut() {
+            Some(run) if run.y == cell.y && run.x + run.w == cell.x => run.w += 1,
+            _ => runs.push(IRect::from_min_size(cell, IVec2::ONE)),
+        }
+    }
+    runs
 }
 
 /// The colour of the ants of a selection that carries its tiles.
@@ -106,6 +186,22 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
                 .translated(offset),
         );
     }
+    for mark in input.marks {
+        for run in &mark.tint {
+            items.push(VectorItem::polygon(run.clone()).fill(with_alpha(mark.color, 56)));
+        }
+        for outline in &mark.outline {
+            items.push(VectorItem::polygon(outline.clone()).stroke(mark.color, line * 2.0));
+        }
+        if !mark.label.is_empty() {
+            items.push(VectorItem::text(
+                TextItem::new(mark.label.clone(), mark.label_at)
+                    .screen_size(MARK_LABEL_PX * input.pixels_per_point)
+                    .color(mark.color)
+                    .align(HAlign::Left, VAlign::Bottom),
+            ));
+        }
+    }
     items.extend(input.tool.iter().cloned());
     if let Some(cell) = input.hover
         && (input.map.infinite || map_cells.contains(cell))
@@ -145,6 +241,7 @@ mod tests {
             objects: &[],
             carrying: false,
             tool: &[],
+            marks: &[],
         }
     }
 
@@ -240,5 +337,60 @@ mod tests {
                 .as_ref(),
             "the grid's first line moves with the layer"
         );
+    }
+
+    #[test]
+    fn marks_are_tinted_run_by_run_outlined_and_labelled_in_their_colours() {
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(8))
+            .build()
+            .unwrap();
+        let settings = Settings::default();
+        let cells = vec![
+            IVec2::new(1, 1),
+            IVec2::new(2, 1),
+            IVec2::new(1, 2),
+            IVec2::new(5, 5),
+        ];
+        let marks = [
+            Mark {
+                label: "bridge".into(),
+                cells,
+                color: 1,
+            },
+            Mark {
+                label: String::new(),
+                cells: vec![IVec2::ZERO],
+                color: 0,
+            },
+        ];
+        let shapes = mark_shapes(&map.geometry(), &marks);
+        assert_eq!(shapes[0].tint.len(), 3, "a run per row");
+        assert_eq!(shapes[0].outline.len(), 2, "two separate parts");
+        assert_eq!(
+            shapes[0].label_at,
+            DVec2::new(16.0, 16.0),
+            "above the first row's left end"
+        );
+        let drawn = overlay_vectors(&OverlayInput {
+            marks: &shapes,
+            hover: None,
+            ..input(&map, &settings, false)
+        });
+        assert_eq!(
+            drawn.len(),
+            1 + (3 + 2 + 1) + (1 + 1),
+            "the border; tints, outlines and a label; no label when it is empty"
+        );
+        let label = VectorItem::text(
+            TextItem::new("bridge", DVec2::new(16.0, 16.0))
+                .screen_size(MARK_LABEL_PX * 2.0)
+                .color(MARK_PALETTE[1])
+                .align(HAlign::Left, VAlign::Bottom),
+        );
+        assert!(drawn.contains(&label));
+        let tint =
+            VectorItem::polygon(shapes[0].tint[0].clone()).fill(with_alpha(MARK_PALETTE[1], 56));
+        assert!(drawn.contains(&tint), "in the mark's colour");
+        assert_ne!(MARK_PALETTE[0], MARK_PALETTE[1]);
     }
 }
