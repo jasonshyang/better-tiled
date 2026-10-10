@@ -13,15 +13,16 @@ so better-tiled's are its correctness argument.*
 - **Nothing skips quietly.** A test whose data, GPU or Godot is missing fails, naming what is
   missing. `BT_SKIP_MISSING_TEST_DATA=1` turns that into a skip that prints what it skipped, and
   CI checks the skips it allows (§11).
-- **Values, not prose.** Reports, warnings and problems are typed; tests assert the values. A few
-  snapshot tests pin wording so a sentence does not drift, and they are the only place a test
-  compares prose.
+- **Values, not prose.** Reports, warnings and problems are typed; tests assert the values. A
+  few snapshot tests pin wording so a sentence does not drift, and they are the only place a
+  test compares prose.
 - **Deterministic.** Every random choice in the code takes a seed; every random test takes a
   seed from the environment or a fixed default and prints it on failure; no test reads a clock
   except the timing checks, which assert only in optimised builds; no test uses the network.
-- **Isolated.** Each test writes in a folder of its own under Cargo's temporary directory, named
-  after the test and the process, and removes it; library and application code take their
-  folders as values, so no test touches the user's data folder, runtime folder or settings.
+- **Isolated.** Each test writes in a folder of its own under the system's temporary folder
+  (`better-tiled-tests/`), named after the test and the process, and removes it
+  (`bt-test-data::Scratch`); library and application code take their folders as values, so no
+  test touches the user's data folder, runtime folder or settings.
 - **Fast by default.** `cargo test --workspace` finishes in under two minutes on the development
   machine in the test profile. Suites that take longer (headless Godot, the real-map exports,
   the pack's full-map renders) run in the same command but are named so they can be run alone.
@@ -49,21 +50,24 @@ Two folders hold data the repository does not: `reference/` and `assets/`. Both 
 git-ignored.
 
 - **`reference/tiled/`** is a sparse checkout of Tiled's repository at the commit pinned in
-  `scripts/fetch-reference.sh`: `examples/`, `tests/automapping/`, `tests/wangtiles/`,
-  `src/libtiled/`, `src/tiled/` and `docs/manual/`. The script clones with blobs filtered,
-  checks out the pinned commit and leaves a `reference/PINNED` file naming it; updating Tiled's
-  version is one line. Nothing from it is ever committed here: copies drift and carry Tiled's
-  licences along.
+  `scripts/fetch-reference.sh`: the folders `docs/`, `examples/`, `src/` and `tests/` (a
+  sparse checkout takes whole folders). The script clones with blobs filtered, turns git's line
+  ending conversion off so that files compare byte for byte on Windows too, checks out the
+  pinned commit and leaves a `reference/PINNED` file naming it; updating Tiled's version is one
+  line. Nothing from it is ever committed here: copies drift and carry Tiled's licences along.
+  The repository's `.gitattributes` keeps the line endings of the committed fixtures, goldens
+  and vectors for the same reason.
 - **`assets/`** holds the purchased packs. They never leave the development machine, so every
   test that reads them skips on CI and says so.
 
 `bt-test-data` finds both: `test_data(relative) -> Option<PathBuf>` returns the path in this
 checkout or, from a git worktree, in the main checkout (so worktrees share one copy), and
 fails the test when it is missing unless the skip variable is set, in which case it prints
-"skipping: … is missing" and returns `None` for the test to return early. `missing(what)` does
-the same for anything else a test needs (a GPU adapter, Godot). The crate also holds the
-shared fixtures (§4) and depends on `bt-core` and `bt-image` for them; `bt-core` and `bt-image`
-build their own inputs inline.
+"skipping: … is missing" and returns `None` for the test to return early. `missing(what, hint)`
+does the same for anything else a test needs (a GPU adapter, Godot). Every skip is also
+appended to the file `BT_SKIP_LOG` names, which CI checks (§11). The crate depends on nothing
+of ours; the shared fixtures (§4) join it with M1, the first milestone whose tests need them,
+and until then each crate builds its inputs inline.
 
 ## 4. Fixtures
 
@@ -76,10 +80,10 @@ build their own inputs inline.
 - **Committed only when small and ours:** the dialect fixtures of `02-file-formats.md`, §16,
   one per legacy row; the golden images and snapshot texts; the fuzz corpora. Nothing of
   Tiled's or of a pack's is committed.
-- **Shared builders** live in `bt-test-data::fixtures`: `Scratch` (a folder per test),
-  `grid` (ASCII grids to tile layers and rule maps), `atlas` (drawn tilesets with Wang sets,
-  classes and sprites), `map` (a map with those tilesets and named layers). Each crate's
-  `tests/common` adds what only it needs.
+- **Shared builders**: `Scratch` (a folder per test) is in `bt-test-data`. With M1,
+  `bt-test-data::fixtures` adds `grid` (ASCII grids to tile layers and rule maps), `atlas`
+  (drawn tilesets with Wang sets, classes and sprites) and `map` (a map with those tilesets and
+  named layers). Each crate's `tests/common` adds what only it needs.
 
 ## 5. Oracles and goldens
 
@@ -135,10 +139,13 @@ flood fills equal a plain search (`bt-edit`), random transaction sequences undo 
 and keep dirty states right (`bt-editor`), script round trips through the parser
 (`bt-script`), and a project file with unknown keys survives any edit (`bt-project`).
 
-The readers (`bt-tmx`'s XML, JSON, CSV, base64 and decompression; `bt-godot`'s scene reader;
-`bt-live`'s wire) also have libFuzzer targets under `fuzz/`, with a small committed corpus
-each, run by hand and by a weekly workflow; the normal suite runs a seeded mutation pass over
-the same readers in a few seconds.
+The readers also have libFuzzer targets under `fuzz/`, a workspace of its own because it
+needs a nightly toolchain, with a small committed corpus each, run by hand and by a weekly
+workflow. `bt-tmx`'s are `xml_map`, `json_map`, `tileset`, `layer_data` (CSV, base64 and
+decompression) and `project_world`; `bt-godot`'s scene reader and `bt-live`'s wire get theirs
+with their crates. The normal suite runs a seeded mutation pass over the same readers in a few
+seconds (`bt-tmx`'s `tests/mutation.rs`). The deflate test is the one generator not taken from
+`bt-utils::rng`: its inputs must equal those of the script that asked zlib for its vectors.
 
 ## 7. The editor harness
 
@@ -199,29 +206,34 @@ windowed check and read the result.
 
 ## 11. Continuous integration
 
-GitHub Actions, on every push and pull request, one job per platform (macOS, Linux, Windows)
-with the toolchain pinned by `rust-toolchain.toml` and the build cached:
+GitHub Actions (`.github/workflows/ci.yml`), on every push and pull request, one job per
+platform (macOS, Linux, Windows) with the toolchain pinned by `rust-toolchain.toml` and the
+build cached:
 
-1. `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings`;
+1. `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`;
 2. `scripts/fetch-reference.sh`, which fails the job when the pinned commit cannot be fetched;
 3. Godot installed on Linux (the official headless binary at a pinned version), so the headless
-   suites run there; macOS and Windows allow the Godot skip;
-4. `cargo test --workspace` in the test profile with `BT_SKIP_MISSING_TEST_DATA=1` and the
-   renderer on the software adapter where the platform has one (lavapipe on Linux, WARP on
-   Windows) and the runner's Metal device on macOS;
-5. the test output's "skipping:" lines are collected, and the job fails if any names something
-   other than `assets/` (or Godot, off Linux): a skip of `reference/` means the fetch or a path
-   is broken, not that the data is private;
-6. on failure, the golden difference folder and the test log are uploaded as artifacts.
+   suites run there; macOS and Windows allow the Godot skip. This step comes with M5, the
+   milestone of the Godot export;
+4. `cargo test --workspace` in the test profile with `BT_SKIP_MISSING_TEST_DATA=1` and
+   `BT_SKIP_LOG` set. From M1, the renderer runs on the software adapter where the platform has
+   one (lavapipe on Linux, WARP on Windows) and on the runner's Metal device on macOS;
+5. `check-skips` (a program of `bt-test-data`) reads the skip log and fails the job if a skip
+   names something other than `assets/` (or Godot, off Linux): a skip of `reference/` means the
+   fetch or a path is broken, not that the data is private;
+6. on failure, the skip log is uploaded as an artifact, and from M1 the golden difference
+   folder too.
 
-A weekly workflow runs the fuzz targets for a fixed time and the `--ignored`-free long suites
-in release mode. The purchased packs are never uploaded anywhere.
+A weekly workflow (`.github/workflows/fuzz.yml`) runs each fuzz target for ten minutes and
+keeps what failed; the long suites in release mode join it when they exist. The purchased
+packs are never uploaded anywhere.
 
 ## 12. Running
 
 | Variable | Effect |
 |---|---|
 | `BT_SKIP_MISSING_TEST_DATA=1` | missing data, GPU or Godot skips the test, loudly |
+| `BT_SKIP_LOG=file` | every skip is appended to this file, for `check-skips` |
 | `BT_UPDATE_GOLDENS=1` | rewrites goldens and snapshots from the current output |
 | `BT_GOLDEN_DIFF_DIR=dir` | failing comparisons write actual output and difference pictures there |
 | `BT_FUZZ_SEED`, `BT_FUZZ_CASES` | the randomised tests' seed and count |
@@ -240,4 +252,4 @@ once each need their own target directory (`CARGO_TARGET_DIR`), never a shared o
 | `bt-test-data` | files in the checkout are found; a worktree finds the main checkout; missing data fails with the variable named, or skips with a message |
 | fixtures | each builder round-trips through `bt-tmx` and reads back equal; grids parse every token and refuse unknown ones |
 | goldens | the comparison reports the first differing pixel or line; the update variable rewrites exactly what differs |
-| CI | the skip filter fails on a `reference/` skip and passes an `assets/` skip (a unit test of the script) |
+| CI | the skip filter fails on a `reference/` skip and passes an `assets/` skip (a unit test of `disallowed_skips`, which `check-skips` runs) |

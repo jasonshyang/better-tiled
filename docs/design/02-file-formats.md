@@ -1,10 +1,11 @@
 # File formats — `bt-tmx` and `bt-image`
 
-*2026-10-09. The design of the crate that reads and writes Tiled's files and the crate that
-reads image files. The high-level design (`00-high-level-design.md`, §5) states the goal: every
-file Tiled 1.0 and later writes opens, a saved file is byte for byte what Tiled would write, and
-nothing is dropped silently. This doc says how. Tiled's own sources are cited as
-`reference/tiled/src/...`; its format documentation is `reference/tiled/docs/reference/`.*
+*2026-10-09; as built at the end of M0, 2026-10-10. The design of the crate that reads and
+writes Tiled's files and the crate that reads image files. The high-level design
+(`00-high-level-design.md`, §5) states the goal: every file Tiled 1.0 and later writes opens, a
+saved file is byte for byte what Tiled would write, and nothing is dropped silently. This doc
+says how. Tiled's own sources are cited as `reference/tiled/src/...`; its format documentation
+is `reference/tiled/docs/reference/`.*
 
 ## 1. Scope and files
 
@@ -79,26 +80,33 @@ other file kinds.
 ### 4.1 The loader
 
 ```rust
-let loader = Loader::builder()
-    .custom_types(types)                   // Arc<CustomTypes>; the project's, for JSON class values
-    .automap_tiles(AutomapTiles::builtin()) // the tileset `:/automap-tiles.tsx` resolves to
+let mut loader = Loader::builder()
+    .custom_types(types)        // Arc<CustomTypes>; the project's, for JSON class values
+    .automap_tiles(tileset)     // what `:/automap-tiles.tsx` stands for; the built-in one by default
     .build();
-let LoadedMap { map, warnings } = loader.load_map(path)?;
+let Loaded { value: map, warnings } = loader.load_map(path)?;
 ```
 
-| Function | What |
+| Loader method | What |
 |---|---|
 | `load_map(path)`, `parse_map(text, path)` | a map with its external tilesets and templates; `path` is where the map is considered to be, so relative references resolve against its directory |
-| `load_tileset(path)`, `parse_tileset(text, path)` | a tileset, cached (§4.2) |
-| `load_template(path)`, `parse_template(text, path)` | a template, cached |
-| `load_world(path)` | a world, its properties decoded with the loader's custom types |
-| `load_project(path)` | a project with its custom types; a legacy `objectTypesFile` is imported and cleared |
-| `load_object_types(path)` | legacy object types as classes usable for objects and tiles |
-| `load_stamp(path)` | a saved brush |
-| `parse_rules_file(path)` | the rule maps a `rules.txt` lists (§13.4) |
-| `parse_fragment(text, path)` | tiles or objects from clipboard text (§13.5) |
+| `load_tileset(path)`, `parse_tileset(text, path)` | a tileset, cached (§4.2) when loaded |
+| `load_template(path)`, `parse_template(text, path)` | a template, cached when loaded |
+| `load_world(path)`, `parse_world(text, path)` | a world, its properties decoded with the loader's custom types |
+| `load_stamp(path)`, `parse_stamp(text, path)` | a saved brush with the tilesets its variations use |
+| `parse_fragment(text, path)` | tiles or objects from clipboard text found anywhere (§13.5) |
 | `insert_tileset(path, tileset)` | use this value for the file at `path` until the file changes (an unsaved version) |
 | `invalidate(path)`, `clear_cache()` | forget a cached file, or all |
+
+| Free function | What |
+|---|---|
+| `load_project(path)`, `parse_project(text, path)` | a project with its custom types (it brings its own, so no loader); a legacy `objectTypesFile` is imported and cleared |
+| `load_object_types(path)`, `parse_object_types(text, path)` | legacy object types as classes usable for objects and tiles |
+| `parse_rules_file(path)` | the rule maps a `rules.txt` lists (§13.4) |
+| `resolve_world_maps(world, world_path)` | a world's maps, listed and found by its patterns (§13.1) |
+| `fragment_text(map, loader)` | a map as clipboard text (§13.5) |
+| `rebase_file_references(map, from_dir, to_dir)` | Save As (§12.3) |
+| `builtin_automap_tiles()` | the built-in rule tileset (§10) |
 
 Every loaded value comes back as `Loaded<T> { value: T, warnings: Vec<Warning> }`. The loader
 holds no process-global state; two loaders with different custom types coexist.
@@ -117,10 +125,11 @@ a chain that reaches itself is an error. `insert_tileset` registers an unsaved v
 
 The format is read from the contents first: a first non-blank character of `<` is XML, `{` is
 JSON, and text with a later line starting with `{` is a JavaScript-wrapped map. Only when the
-contents decide nothing does the extension decide (`.tmx/.tsx/.tx/.xml` XML; `.tmj/.tsj/.tj/.json`
-JSON; `.js` JavaScript), and a file with neither is read as XML. So a `.tmx` map may reference
-a `.tsj` tileset and a `.json` file is opened without parsing it twice. A JSON file's `type`
-key, when present, must name the kind asked for; files from before Tiled 1.0 have no `type`.
+contents decide nothing does the extension decide (`.tmx/.tsx/.tx/.xml` XML;
+`.tmj/.tsj/.tj/.json` JSON; `.js` JavaScript), and a file with neither is read as XML. So a
+`.tmx` map may reference a `.tsj` tileset and a `.json` file is opened without parsing it twice.
+A JSON file's `type` key, when present, must name the kind asked for; files from before Tiled
+1.0 have no `type`.
 
 ### 4.4 Text
 
@@ -164,11 +173,11 @@ Warning { file: PathBuf, kind: WarningKind, message: String, target: Option<Targ
 `WarningKind` names what went wrong so that the Issues panel and `bt` can group and act:
 `MissingFile`, `InvalidValue`, `UnknownGid`, `CorruptLayerData`, `DuplicateId`, `UnknownKey`,
 `LegacyShape`, `InvalidWangId`, `InvalidPattern`, `UnknownPropertyType`, `CircularClass`,
-`Renumbered`. `Target` points at the layer, object, tileset or tile concerned when there is
-one. Warnings are deduplicated (a cached tileset used twice reports once) and carry the file's
-name, so a map's warnings tell which of its files each one came from. The write error that
-refuses a read-only file carries `Refused` from `bt-utils` and is asked for with
-`Error::refused()`.
+`Renumbered`. `Target` points at what is concerned when there is one: `Layer(LayerId)`,
+`Object(ObjectId)`, `Tileset(name)` or `Tile { tileset: name, tile }`. Warnings are deduplicated
+(a cached tileset used twice reports once) and carry the file's name, so a map's warnings tell
+which of its files each one came from. The write error that refuses a read-only file carries
+`Refused` from `bt-utils` and is asked for with `Error::refused()`.
 
 ## 6. Global tile ids
 
@@ -182,10 +191,10 @@ the range starting at its `firstgid`, and four flag bits:
 | 29 | `0x2000_0000` | flipped anti-diagonally; 60° turn on hexagonal maps |
 | 28 | `0x1000_0000` | 120° turn on hexagonal maps; masked on every orientation |
 
-`gid::split` and `gid::join` convert between a raw gid and a `(gid, Flip)` pair. Reading uses a
-`GidMapper` of `firstgid → TilesetSlot`: the tileset with the largest `firstgid ≤ gid` owns the
-gid, the local id is the difference, gid 0 is the empty cell (flags on 0 are ignored), and a
-gid past the end of a tileset is attributed to it anyway, as Tiled does, so references to
+`gid::split` and `gid::join` convert between a raw gid and a `SplitGid { gid, flip }`. Reading
+uses a `GidMapper` of `firstgid → TilesetSlot`: the tileset with the largest `firstgid ≤ gid`
+owns the gid, the local id is the difference, gid 0 is the empty cell (flags on 0 are ignored),
+and a gid past the end of a tileset is attributed to it anyway, as Tiled does, so references to
 tiles of a tileset whose image is missing survive. A gid below the first `firstgid`, or any gid
 when the file declares no tilesets, is an empty cell with one aggregated `UnknownGid` warning
 per layer. Gids exist nowhere outside this crate.
@@ -210,15 +219,16 @@ per layer. Gids exist nowhere outside this crate.
 A property's `type` attribute is absent for strings in XML and present in JSON; a custom type
 is named by `propertytype` (lower-case in maps, tilesets, worlds and project properties,
 camel-case `propertyType` inside the project's type definitions, both accepted). JSON class
-values carry no member types, so decoding them needs the project's custom types: the loader's
-`Decoder` looks each member up in the class to give it its type (a file member becomes a path,
-an object member an id). Without the type, the raw JSON value is kept with its type name, and
-written back unchanged.
+values carry no member types, so decoding them needs the project's custom types: the
+`PropertyDecoder` gives each member the type of the class's member of that name (a file member
+becomes a path, an object member an id). A member the class lacks, or every member when the
+loader has no such class, is typed after its JSON form: text a string, a number an int or a
+float.
 
 ### 7.2 What is kept
 
 The model stores values in their file form (`01-data-model.md`, §9), so the loader converts
-nothing it does not have to. After reading, `CustomTypes::normalize` brings enum values and
+nothing it does not have to. After reading, `CustomTypes::normalize_all` brings enum values and
 class members into their types' storage form, as Tiled does when its project is loaded. A
 `propertytype` naming a type the project lacks is **kept**; Tiled drops the link on the next
 save, which is the one place its format loses data, and there is no reason to copy that.
@@ -266,9 +276,16 @@ zlib and gzip streams must be the bytes zlib produces for Tiled's call
 (`deflateInit2(level, Z_DEFLATED, 15 (+16), 8, Z_DEFAULT_STRATEGY)` followed by one
 `deflate(Z_FINISH)`), or every save of an unchanged map would rewrite all its layer data. The
 `deflate` module is a port of the parts of zlib's `deflate.c` and `trees.c` that call uses:
-levels 1–9 (`-1` is 6), the default strategy, a 32 K window, `memLevel` 8, all input at hand.
-It is the one place in the workspace that reproduces another program's bytes rather than its
-behaviour, and it carries zlib's notice. Golden vectors generated with zlib itself pin it.
+levels 1–9, the default strategy, a 32 K window, `memLevel` 8, all input at hand. As in Tiled,
+level `-1` is zlib's default (6) and every other level is clamped to 1–9. It is the one place
+in the workspace that reproduces another program's bytes rather than its behaviour, and it
+carries zlib's notice. It is also the one module allowed to index slices: it keeps zlib's array
+arithmetic, whose indices zlib's invariants bound. 800 vectors generated with zlib 1.2.12
+(`scripts/deflate-vectors.py`) pin it: every level, both wrappers, inputs up to 200,000 bytes.
+
+A gzip member names no file and no time and gives Unix (3) as its system, as Tiled's Linux
+builds write it. Tiled's macOS and Windows builds write their own system codes in that byte, so
+a gzip map they saved comes back with that one byte changed.
 
 zstd is decoded with `ruzstd` and encoded at its fastest level whatever the map's compression
 level says, because no pure-Rust encoder offers zlib-style levels. A zstd map therefore saves
@@ -319,7 +336,8 @@ read is also written, in today's form.
 
 - A JSON layer without `visible` or `opacity` is visible and opaque, as the documentation
   says; Tiled loads it invisible (`varianttomapconverter.cpp:607`), which is a bug.
-- `next_layer_id` and `next_object_id` lower than an id in use are raised, with a warning.
+- `next_layer_id` and `next_object_id` not above an id in use are raised, with a warning when
+  the file stated them.
 - A trailing comma in CSV data is accepted.
 - A `propertytype` naming an unknown type is kept (§7.2).
 - A world pattern that does not compile is kept with a warning, so saving the world does not
@@ -335,15 +353,23 @@ size from its header through `bt-image` (never decoding it) and counts `columns`
 `tile_count` from the real image, as Tiled does; the declared `<image width height>` stays in
 the `ImageRef` as the size the file was written for, which is what "the image changed size"
 compares against. A missing image keeps the declared size, so the tile count is still known.
-Collection tiles ignore a per-tile `trans` and declared size, as Tiled does.
+Collection tiles ignore a per-tile `trans` and declared size, as Tiled does. An image the file
+gives no size gets the size its header states.
+
+The writer writes the declared size and counts `columns` and `tilecount` from it, so a tileset
+whose image changed size is written as it was read until the editor records the new size
+(`05-editor-core.md`). An atlas tile inside the declared grid holds an entry only when it has
+data: the loader drops empty entries there (a tile that had only terrain corners, say).
 
 Embedded images (`<image format="png"><data encoding="base64">…`) are kept as bytes in the
 model and decoded by content hash. Nothing is written to a temporary folder while loading.
 
 The built-in rule tileset `:/automap-tiles.tsx` (five tiles: Negate, Ignore, NonEmpty, Empty,
-Other, each with a `MatchType` property) is a value the loader is built with: its definition
-and its image bytes are compiled into the binary, and a map that references it writes the
-reference back verbatim.
+Other, each with a `MatchType` property) is a value the loader is built with
+(`builtin_automap_tiles()` by default): its definition and its image are compiled into the
+binary, and a map that references it writes the reference back verbatim. The image is drawn
+for this project (`scripts/automap-tiles-png.py` writes `automap-tiles.png`), not copied from
+Tiled's editor, whose sources are GPL.
 
 ## 11. Templates
 
@@ -351,26 +377,29 @@ A template instance in a map is written with only what it overrides (`01-data-mo
 §8). The loader gives an instance the template's values for every other field and records the
 overrides it read: `name` and `size` when present and non-empty, `rotation`, `opacity` and
 `visible` when the key exists, `tile` when `gid` is non-zero, the shape when a shape element
-exists, the text flags when `<text>` exists. The writer diffs the instance against the
-template value held in the loader's cache; it reads no file. A template's own tileset uses
-`firstgid="1"` in a gid space of its own.
+exists, the text flags when `<text>` exists. The writer states a field when its override flag
+is set or it differs from the template held by the loader passed with `WriteRequest::loader`;
+it reads no file, and without a loader the flags alone decide. An instance's own properties
+are those that differ from the template's. A template's own tileset uses `firstgid="1"` in a
+gid space of its own.
 
 ## 12. Writing
 
 ### 12.1 Requests
 
 ```rust
-WriteRequest::new(&map, path)
+WriteRequest::for_map(&map, path)         // or for_tileset, for_template, for_world, for_project, for_stamp
     .format(Format::Json)                 // default: from the extension, else XML
-    .custom_types(&types)                 // for template diffs and class members
+    .loader(&loader)                      // the templates instances differ from, the custom types
     .export(ExportOptions { embed_tilesets, detach_templates, resolve_types_and_properties, minimize })
     .safe_writing(false)                  // default: true
+    .compatibility_version(version)       // the `version` a new file gets; latest by default
     .write()?;                            // -> Vec<Warning>, e.g. a renumbered firstgid
 ```
 
-The same request renders to a `String` (`to_string()`) for the clipboard, the live link and
-tests. `write_tileset`, `write_template`, `write_world`, `write_project`, `write_stamp` follow
-the same shape. Export options apply to a clone, as Tiled's `ExportHelper` does: external
+The same request renders to text without writing (`render() -> Rendered { text, warnings }`)
+for the live link and tests; `fragment_text(map, loader)` renders a map as clipboard text
+(§13.5). Export options apply to a clone, as Tiled's `ExportHelper` does: external
 tilesets cloned in and their image paths re-relativised; template instances detached with
 their template's class and properties baked in and the template's tileset added; classes and
 tiles resolved into every object's and element's properties; minimized output. A plain save
@@ -390,9 +419,10 @@ The printers reproduce Tiled's writers (`reference/tiled/src/libtiled/mapwriter.
   `<image>` before its `<properties>`, a Wang set's `<properties>` last, and so on.
 - **Omission rules**: an attribute is omitted when it has its default (opacity 1, visible,
   unlocked, rotation 0, `spacing`/`margin` 0 in XML but always written in JSON, and the rest of
-  Tiled's list), and a `<tile>` of an atlas is written only when it has data unless any tile is
-  out of order, in which case all are; collection tiles are always written; Wang tiles sorted
-  by id; properties sorted by name.
+  Tiled's list). A collection lists every tile in display order. An atlas lists its tiles
+  with data by id, unless the ids beyond its grid leave a gap (Tiled's `anyTileOutOfOrder`);
+  then it lists every tile of the grid and those beyond. Wang tiles are sorted by id and
+  properties by name.
 - **Numbers**: integers as decimal; reals in XML as `QString::number(double)` gives them,
   `%g` with six significant digits (`146.97`, `693.727`, `1.23457e+06`, exponents with a sign
   and at least two digits); `float` custom properties as the shortest form that reads back
@@ -401,21 +431,23 @@ The printers reproduce Tiled's writers (`reference/tiled/src/libtiled/mapwriter.
   without `#`, JSON's `transparentcolor` with it.
 - **Line endings**: LF inside the crate; the `FileFormat`'s ending applied to the whole text
   at the end.
-- **`version`**: the one the file had; for a new file, the compatibility version's
-  (`1.10` by default, `1.11` for "latest"). `tiledversion`: the one the file had; for a new
-  file, the Tiled version whose format this crate targets, a constant in `names`. The class
-  spelling follows the compatibility version (`class` for 1.9, else `type`).
-- **Global ids**: each tileset keeps its `first_gid` hint when the hints form a sequence that
-  does not overlap (each tileset's used span fits before the next hint); otherwise it gets
-  Tiled's running sum, `1` plus each earlier tileset's `max(next_tile_id, tile_count, used
-  span)`, and a `Renumbered` warning names it.
+- **`version`**: the one the file had; for a new file, the compatibility version's (`1.11`
+  for the default, latest). `tiledversion`: the one the file had; for a new file, the Tiled
+  version whose format this crate targets (`TILED_VERSION` in `names`, 1.12.2). The class
+  spelling follows the version written (`class` for 1.9, else `type`).
+- **Global ids**: each tileset keeps its `first_gid` hint when the hint is not below the end
+  of the tiles the previous tileset uses; otherwise it starts after the previous tileset's
+  whole range, `max(next_tile_id, tile_count, used span)` (Tiled's running sum), and a
+  `Renumbered` warning names it. A tileset that only template instances take tiles from,
+  without naming it, is not written.
 - **JSON layout**: Tiled's `JsonWriter` with auto-formatting: nested objects open on a new line
   at four spaces per depth with keys one space further in, `"key":value` without a space,
   array items separated by `", "` and wrapped after every `width` items (the chunk width for
   infinite maps) so tile data is row-shaped, `/` escaped as `\/`, everything beyond ASCII as
-  `\uXXXX` so files are ASCII, keys sorted. Minimized output has no whitespace. Projects,
-  worlds and object types use `QJsonDocument::toJson`'s layout: four-space indentation,
-  `"key": value`, one item per line, raw UTF-8, a trailing newline.
+  `\uXXXX` so files are ASCII, keys sorted. Minimized output has no whitespace. Reals are
+  written with fifteen significant digits (`%.15g`). Projects and worlds use
+  `QJsonDocument::toJson`'s layout: four-space indentation, `"key": value`, one item per line,
+  raw UTF-8, a trailing newline. Stamps use its compact form.
 - **CRLF, BOM, DOCTYPE** are not reproduced beyond the line ending: a file that had a byte
   order mark or a `DOCTYPE` was written before Tiled 1.0.1 and is outside the contract.
 
@@ -424,18 +456,27 @@ The printers reproduce Tiled's writers (`reference/tiled/src/libtiled/mapwriter.
 A reference is written as its original text when that text still resolves to the file's path;
 otherwise as the path relative to the written file's directory with `/` separators and `..`
 allowed; otherwise absolute. Verbatim references (`:/automap-tiles.tsx`, `ext:`, URLs) are
-written as they are. Save As rebases every reference and file property of the saved value
-through the same rule (`rebase_file_references(value, old_dir, new_dir)`), which is how a map
-moved to another folder keeps pointing at its tilesets.
+written as they are. References keep their resolved paths, so a map saved to another folder
+keeps pointing at its tilesets, images and templates with nothing to do. `file` properties are
+stored as the file wrote them, relative to it, so Save As rewrites them for the new folder
+(`rebase_file_references(map, from_dir, to_dir)`, which covers the map's layers, objects and
+embedded tilesets).
 
 ### 12.4 The round-trip rule
 
-Every file in the corpora that contains `tiledversion=` (every file Tiled 1.0.1 or later
-saved) must come back identical, except files that Tiled itself would rewrite, each listed with
-its reason in the test: files written by another program in a layout Tiled never produces, a
-tileset whose `<image>` attributes are in an order Tiled does not write, a file edited by hand
-with its tiles out of order. A file outside the rule must still read back to the same model,
-apart from what the writer normalises (a missing `version`, renumbered gids).
+Every file in the corpora that records a `tiledversion` (XML `tiledversion=` or JSON
+`"tiledversion":`, so every file Tiled 1.0.1 or later saved) must come back identical, except
+files that Tiled itself would rewrite. The test lists each with its reason:
+
+| File | Why Tiled would rewrite it too |
+|---|---|
+| the Highlands Biome Map folder (`assets/`) | written by the asset pack's own tool: properties and animations on one line |
+| `examples/forest/forest.tsx`, `examples/sticker-knight/map/objs.tsx` | an `<image>` with its attributes in an order Tiled does not write |
+| `examples/sticker-knight/ui/title.json` | saved by Tiled 1.8; the JSON writer of Tiled 1.12 adds every object's opacity |
+| `src/tiled/resources/automap-tiles.tsx` | edited by hand: its tiles are listed out of order |
+
+A file outside the rule must still read back to the same model, apart from what the writer
+normalises (a missing `version`, renumbered gids).
 
 ### 12.5 Atomic writes
 
@@ -456,8 +497,10 @@ same way; Tiled writes worlds in place.
 expression must have exactly two capture groups (column, row); it is compiled with the `regex`
 crate (Perl syntax without look-around and backreferences, which no known world uses) and
 matched unanchored against the bare names of the files in the world's directory, as Tiled
-matches them; `resolve_world_maps(world)` lists the maps it finds. Written keys omit defaults
-and `maps`, `patterns` and `properties` when empty.
+matches them; `resolve_world_maps(world, world_path)` lists the maps it finds. A pattern that
+does not compile, lacks the two groups or has a zero multiplier is kept with an
+`InvalidPattern` warning and finds no maps. Written keys omit defaults and `maps`, `patterns`
+and `properties` when empty.
 
 ### 13.2 Projects
 
@@ -465,10 +508,12 @@ and `maps`, `patterns` and `properties` when empty.
 `automappingRulesFile`, `commands`, `propertyTypes`, `properties`, `compatibilityVersion`
 (1080, 1090, 1100; absent is latest; written only when not latest) and the legacy
 `objectTypesFile`. Custom types are read in two passes: every type is created with placeholder
-member values, then member values are decoded against the full set, dependency-ordered, and
-members that would make a class contain itself are dropped with a warning. A type is identified
-by name and overlapping usage; `useAs` missing means property-only (files from before 1.9).
-Unknown keys are kept and written back.
+member values, then classes' member values are decoded against the full set in dependency
+order. A member that would make a class contain itself is dropped with a `CircularClass`
+warning; of a cycle, the member Tiled finds last goes. A type is identified by name and
+overlapping usage; `useAs` missing means property-only (files from before 1.9). Unknown keys
+are kept as JSON text (`Project::unknown_keys`) and written back. `properties` and every
+class's `drawFill` are always written, as Tiled 1.12 writes them.
 
 ### 13.3 Object types
 
@@ -483,46 +528,53 @@ defaults, merged into the project's types. Read only.
 matches the case-insensitive wildcard (`*`, `?`, `[…]` sets with ranges and negation),
 anchored at both ends, and `[*]` lifts it; a path relative to the rules file names a rule map,
 or, with a `.txt` extension, another rules file read in place with the current filter, whose
-own filter changes do not leak out. Include cycles are skipped. The result is a list of
-`RuleMapEntry { path, filter }` with `applies_to(map_file_name)`; rule maps are not checked
-for existence here. A missing or unreadable rules file is an error.
+own filter changes do not leak out. Include cycles are skipped. `parse_rules_file(path)`
+returns a list of `RuleMapEntry { path, filter }` with `applies_to(map_file_name)`; rule maps
+are not checked for existence here. A missing or unreadable rules file is an error.
 
 ### 13.5 Stamps and fragments
 
-A `.stamp` file is Tiled's: `{ "name", "variations": [ { "probability", "map": { …a TMJ map… } } ] }`,
-each variation a small map with one or more tile layers, tilesets referenced by file (an
-embedded tileset is written whole). `Stamp { name, variations: Vec<StampVariation { probability,
-map: Map }> }` reads and writes it; the editor's brush model is built from it in `bt-edit`.
+A `.stamp` file is Tiled's: a name, an optional `quickStampIndex` (the number key the stamp
+is on) and `variations`, each a probability and a small TMJ map with one or more tile layers,
+tilesets referenced by file (an embedded tileset is written whole). `Stamp { name,
+quick_stamp_index, variations: Vec<StampVariation { probability, map } }` is read by
+`Loader::load_stamp` and written in `QJsonDocument`'s compact layout, as Tiled writes stamps;
+the editor's brush model is built from it in `bt-edit`.
 
 A fragment is the clipboard's text form, shared with Tiled: a map with the source map's grid
 and nothing else, its tilesets, one tile layer per copied layer in CSV (so an agent can read
-and write it), or one object layer. `parse_fragment` reads such text from anywhere, Tiled or a
-chat window included.
+and write it), or one object layer, with references as absolute paths so the text can be
+pasted anywhere. `fragment_text(map, loader)` writes it; `Loader::parse_fragment` reads it from
+text found anywhere, Tiled or a chat window included, dropping what surrounds the map.
 
 ## 14. `bt-image`
 
 ```rust
-let images = ImageStore::builder()
-    .threads(4)
+let mut images = ImageStore::builder()
+    .threads(4)                           // default: 2
     .map_images(Arc::new(map_renderer))   // impl MapImageSource; optional
-    .build();
-let handle = images.request(ImageKey::file(path, transparent));   // decoding starts in the pool
-match images.poll(&handle)? { Ready(image) | Pending | Failed(error) }
+    .build()?;
+let key = images.request(ImageRequest { input: ImageInput::File(path), transparent });
+match images.poll(&key) { Ready(image) | Pending | Failed(error) | NotRequested }
 ```
 
 | Function | What |
 |---|---|
-| `probe_size(path) -> Result<UVec2>` | the size from the file header (PNG, GIF, BMP, JPEG, WebP), without decoding |
-| `request(key)`, `poll`, `wait` | decoding on a thread pool; a completion hook (`set_waker`) lets a window repaint when an image lands |
-| `ImageKey::file(path, transparent)`, `ImageKey::bytes(hash, transparent)` | a file keyed by path and modification time, or embedded bytes keyed by content hash; the colour key is part of the key because it changes the pixels |
+| `probe_size(path)`, `probe_size_of_bytes(bytes, format)` | the size from the image's header, without decoding |
+| `decode_file(path, transparent)`, `decode_bytes(bytes, format, transparent)` | decoding on the calling thread |
+| `request(ImageRequest) -> ImageKey`, `poll(&key) -> ImagePoll` | decoding on the store's worker threads (`std` threads sharing one job queue); `set_waker` sets what a worker calls when an image lands, so a window can repaint |
+| `decode_now(ImageRequest)` | the image now, decoded on the calling thread when the store lacks it: for headless pictures and tests |
+| `ImageInput::File(path)`, `ImageInput::Bytes { bytes, format }` | a file keyed by path and modification time, or embedded bytes keyed by content hash; `format` is the format the file names, used only when the bytes do not say (TGA); the colour key is part of the key because it changes the pixels |
 | `DecodedImage { width, height, rgba: Vec<u8> }` | straight alpha; premultiplication is the renderer's business |
-| `alpha_bounds(image) -> Option<IRect>` | the smallest rectangle of pixels with alpha above a threshold |
+| `alpha_bounds(image, threshold) -> Option<IRect>` | the smallest rectangle of pixels with alpha above a threshold |
 | `bottom_center(image, threshold) -> Option<DVec2>` | the middle of the lowest row with alpha above the threshold: where a sprite's feet are |
-| `MapImageSource` | `fn render_map(&self, path: &Path) -> Result<DecodedImage, ImageError>`: a map file used as the image of a tileset, a tile or an image layer; the store detects recursion (a map whose own image is itself) and reports it |
-| `trim(keep_bytes)` | eviction under a byte budget, least recently used first |
+| `MapImageSource` | `fn render_map(&self, path, nested: &NestedImages) -> Result<DecodedImage, Error>`: a map file used as the image of a tileset, a tile or an image layer; the map's own images are decoded through `nested`, which refuses a map that would show itself |
+| `trim(keep_bytes)`, `byte_size()` | eviction under a byte budget, least recently used first; the memory the decoded pixels take |
 
-Errors are typed: `ImageError = Io | Decode { format } | Unsupported | Recursive | NoSource`.
-The `image` crate is used with only the decoders listed in §1 enabled.
+Errors are typed: `Error = Io | Decode | Unsupported | Recursive | NoMapSource | Stopped`, each
+naming its file or "an embedded image". The `image` crate is used with only the decoders listed
+in §1 enabled. `bt-tmx` uses `bt-image` only to probe sizes while loading; it never decodes
+pixels.
 
 ## 15. Module layout
 
@@ -530,41 +582,49 @@ The `image` crate is used with only the decoders listed in §1 enabled.
 crates/bt-tmx/src/
 ├── lib.rs           mod lines and pub use
 ├── loader.rs        Loader, LoaderBuilder, Loaded<T>, the cache
+├── write.rs         WriteRequest, Rendered
 ├── error.rs         Error
 ├── warning.rs       Warning, WarningKind, Target
 ├── format.rs        Format, detection, the JavaScript wrapper
 ├── text.rs          decoding, byte order marks, line endings
 ├── paths.rs         reference resolution and the written form of references
-├── gid.rs           split/join, GidMapper
-├── names.rs         every enumerated value's spelling, both directions
-├── raw/             RawMap, RawTileset, RawLayer, RawObject, RawProperty, RawWangSet …
-├── xml/             read.rs (roxmltree → raw), print.rs (raw → text, the QXmlStreamWriter emulation)
-├── json/            read.rs (serde_json → raw), print.rs (Tiled's JsonWriter), qt.rs (QJsonDocument layout)
-├── finish/          map.rs, tileset.rs, layer.rs, object.rs, property.rs, wang.rs, legacy.rs
-├── unfinish/        the model back into a raw tree
-├── data.rs          CSV and base64 payloads, chunks
-├── deflate.rs       the zlib port (levels 1–9, zlib and gzip wrappers)
-├── numbers.rs       Qt's number formatting (six digits, shortest, JSON)
+├── gid.rs           SplitGid, split and join, GidMapper
+├── names.rs         every enumerated value's spelling, both directions; TILED_VERSION
+├── raw/             the raw tree: map, tileset, tile, wang, layer, object, template, image, property, scalar
+├── xml/             read.rs (roxmltree → raw), print.rs (raw → text), writer.rs (the QXmlStreamWriter emulation)
+├── json/            read.rs (serde_json → raw), variant.rs (raw → JSON values, as maptovariantconverter),
+│                    print.rs (Tiled's JsonWriter), qt.rs (QJsonDocument's layouts)
+├── finish/          context, map (ids, gids and Map::validate's violations as warnings), tileset, wang,
+│                    layer, object, template, property
+├── unfinish/        map, tileset, layer, object, property, gids (first gids for writing)
+├── data.rs          CSV and base64 payloads
+├── deflate.rs       the zlib port (levels 1–9, zlib and gzip wrappers), with deflate_vectors.in
+├── numbers.rs       Qt's number formatting (six digits, shortest, fifteen digits) and lenient parsing
 ├── export.rs        ExportOptions applied to a clone
-├── world.rs, project.rs, object_types.rs, stamp.rs, rules.rs, fragment.rs, automap_tiles.rs
-└── validate.rs      running Map::validate after a load and turning violations into warnings
+├── rebase.rs        file properties rewritten for another folder
+├── world.rs, project.rs, object_types.rs, stamp.rs, rules.rs, fragment.rs
+└── automap_tiles.rs the built-in rule tileset, with automap-tiles.png
 ```
 
-`bt-image` is `store.rs` (the store and pool), `decode.rs`, `probe.rs`, `measure.rs` (bounds and
+Legacy shapes are converted where their element is finished (terrains in `finish/wang.rs`,
+image layer positions in `finish/layer.rs`), not in a module of their own. `bt-image` is
+`store.rs` (the store and its workers), `decode.rs`, `probe.rs`, `measure.rs` (bounds and
 feet), `key.rs`, `error.rs`.
 
 ## 16. Tests
 
 | Test | What it pins |
 |---|---|
-| Inline unit tests | detection, text decoding, lenient parsing, path resolution, gid mapping, CSV and base64 decoding, number formatting (vectors from Qt: `0.39` → `0.39`, `999999.5` → `1e+06`, `2/3` → `0.666667`), the XML writer against `QXmlStreamWriter` samples, the JSON printers against Tiled's layout |
-| Dialect fixtures | one small committed file per row of §9.1, written by hand, each with the model it must produce and the text it must write back |
-| Corpus round trip | every `.tmx`, `.tsx`, `.tx`, `.tmj`, `.tsj`, `.tj`, `.world` and `.tiled-project` under `reference/` and `assets/` (through `bt-test-data`), under the rule of §12.4, with the first differing line in the failure message |
-| Cross-syntax | a map written as JSON and read back equals the map read from XML, and the other way, for every corpus map |
-| Writer → reader | a map built in memory with every feature (every orientation, every encoding, every property kind, templates, Wang sets, infinite chunks) survives XML and JSON round trips |
-| Deflate | committed vectors produced by zlib for every level, and streams that Tiled wrote |
-| Fuzzing | the CSV, base64, decompression, XML and JSON readers on random and mutated inputs: no panic, bounded memory |
-| `bt-image` | every supported format decodes; sizes probed equal decoded sizes; colour keys; alpha bounds and feet on known sprites; recursion in map images reported |
+| Inline unit tests | detection, text decoding, lenient parsing, path resolution, gid mapping, CSV and base64 decoding, number formatting (vectors from Qt: `0.39` → `0.39`, `999999.5` → `1e+06`, `2/3` → `0.666667`), the XML writer against `QXmlStreamWriter` samples, the JSON printers against Tiled's and `QJsonDocument`'s layouts, worlds, projects (Tiled's example project written back), stamps, fragments, rules files |
+| Dialect fixtures (`tests/dialects/`) | 21 small files written by hand for the rows of §9.1, each with the warnings it must produce and the text it must write back (`.written.*` goldens; `BT_UPDATE_GOLDENS=1` rewrites them) |
+| Corpus reads (`tests/reads.rs`) | every map, tileset, template, world and project under `reference/` and `assets/` (through `bt-test-data`) reads without an error |
+| Corpus round trip (`tests/round_trip.rs`) | the same files written back under the rule of §12.4, with the first differing line in the failure message |
+| Cross-syntax (`tests/cross_syntax.rs`) | every corpus map written in the other syntax and read back equals the original, after JSON maps are put into XML's precision |
+| Writer → reader (`tests/writer_reader.rs`) | a map built in memory with every feature survives 100 combinations: five orientations, five layer data formats, finite and infinite, XML and JSON |
+| Mutation (`tests/mutation.rs`) | corpus files with bytes and values changed at random never panic, and at least a fifth of them still read; `BT_FUZZ_SEED` and `BT_FUZZ_CASES` choose the run |
+| Deflate | the 800 committed zlib vectors (§8.4), Tiled's level clamping, and round trips of random inputs at every level |
+| Fuzzing (`fuzz/`) | libFuzzer targets for XML maps, JSON maps, tilesets, layer data, and projects and worlds, run for ten minutes each a week by `.github/workflows/fuzz.yml`: no panic, bounded memory |
+| `bt-image` | every supported format decodes; sizes probed equal decoded sizes (Tiled's example images included); colour keys; alpha bounds and feet; the store's workers, waker, failures, eviction and map images, recursion included |
 
-CI runs all of them with `reference/` fetched at the pinned Tiled commit and the dialect fixtures,
-and skips, loudly, the corpus files under `assets/`.
+CI runs all of them with `reference/` fetched at the pinned Tiled commit and the dialect
+fixtures, and skips, loudly, the corpus files under `assets/`.

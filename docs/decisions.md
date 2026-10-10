@@ -375,3 +375,61 @@ repository; a separate fixtures crate.
 **Why:** a suite that passes on a machine without the data proves nothing unless it says what
 it did not run; fixtures beside their assertions stay readable; one language and few test
 dependencies keep CI simple; a gate that needs a person's eyes is not pretended to be a test.
+
+## 2026-10-10 — The zlib port keeps zlib's indexing
+
+**Decided:** `bt-tmx`'s `deflate` module, a port of zlib's `deflate.c` and `trees.c`, indexes
+slices directly, the one module where `clippy::indexing_slicing` is allowed, with its reason
+stated; 800 vectors from zlib 1.2.12 pin its output, and it handles levels as Tiled does (`-1`
+is 6, every other level is clamped to 1–9).
+**Instead of:** checked access throughout, or `flate2`'s encoder (`miniz_oxide`).
+**Why:** another encoder writes other, equally valid bytes, so every save of an unchanged map
+would rewrite its layer data; checked access would obscure a line-by-line port whose indices
+zlib's invariants bound, and the vectors catch any departure.
+
+## 2026-10-10 — gzip layer data carries Unix as its system
+
+**Decided:** a gzip member written for layer data has no name, no time and the system byte 3
+(Unix), whatever machine writes it.
+**Instead of:** the writing machine's code, as zlib writes it, or the byte each file had.
+**Why:** the bytes must not depend on the machine; Tiled's Linux builds write 3, and the gzip
+maps in Tiled's own test data have it. A gzip map saved by Tiled on macOS or Windows comes back
+with that one byte changed, which is rare because gzip is deprecated for new maps.
+
+## 2026-10-10 — Write requests per kind of value, with the loader
+
+**Decided:** a write starts from `WriteRequest::for_map`, `for_tileset`, `for_template`,
+`for_world`, `for_project` or `for_stamp`; it takes the `Loader` for the templates instances are
+compared with and for the custom types; `render()` returns `Rendered { text, warnings }`
+without writing, and `fragment_text` renders clipboard text.
+**Instead of:** one constructor over every kind with the custom types passed on their own, and
+a `write_tileset`-style function per kind.
+**Why:** one builder gives every kind the same options; the loader already holds the cached
+templates and the project's types, and writing reads no files; rendering without writing gives
+the live link and the tests the exact text a save would write.
+
+## 2026-10-10 — The built-in rule tileset has an image of its own
+
+**Decided:** the tileset behind `:/automap-tiles.tsx` is compiled into `bt-tmx` with a PNG
+drawn by `scripts/automap-tiles-png.py`.
+**Instead of:** Tiled's `automap-tiles.svg`.
+**Why:** that image is part of Tiled's editor sources, which are GPL, and `bt-tmx` is
+permissive; rules match the tiles' `MatchType` properties, not their pixels, so only the look
+differs.
+
+## 2026-10-10 — Tilesets are written for the image size they declare
+
+**Decided:** an atlas's `columns` and `tilecount` are written for the image size its file
+declares, and the loader drops atlas entries without data inside that grid.
+**Instead of:** counts from the image as it is on disk, as Tiled writes them.
+**Why:** a tileset whose image changed size since it was saved (a sheet in one of the packs
+grew taller) would otherwise be rewritten by a save that edited nothing; the editor records the
+new size when the user answers the image-changed question, and the next save writes its counts.
+
+## 2026-10-10 — Tiled's JSON files are under the byte rule too
+
+**Decided:** the round-trip rule covers every corpus file that records a `tiledversion`, XML or
+JSON, with five files listed that Tiled itself would rewrite.
+**Instead of:** holding only XML files to byte identity.
+**Why:** Tiled's JSON writer is as deterministic as its XML writer, and a JSON map saved
+unchanged must not show up as a change in version control.

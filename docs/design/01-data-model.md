@@ -1,10 +1,11 @@
 # Data model — `bt-core` and `bt-utils`
 
-*2026-10-09. The design of the two bottom crates: the primitives every crate shares and the
-pure data model of maps, tilesets, objects, properties, terrain sets, worlds and projects, with
-the grid geometry of every Tiled orientation. The high-level design (`00-high-level-design.md`,
-§3.5 and §4) says why these crates exist; this doc says what they contain and the rules that
-hold inside them. Tiled's own sources are cited as `reference/tiled/src/...`.*
+*2026-10-09; as built at the end of M0, 2026-10-10. The design of the two bottom crates: the
+primitives every crate shares and the pure data model of maps, tilesets, objects, properties,
+terrain sets, worlds and projects, with the grid geometry of every Tiled orientation. The
+high-level design (`00-high-level-design.md`, §3.5 and §4) says why these crates exist; this doc
+says what they contain and the rules that hold inside them. Tiled's own sources are cited as
+`reference/tiled/src/...`.*
 
 ## 1. Scope
 
@@ -64,12 +65,12 @@ maps fall into negative chunks.
 | `LayerId(u32)` | a layer in a map | the map; ids are never reused (`Map::next_layer_id`) |
 | `ObjectId(u32)` | an object in a map, or a collision shape in a tile | the map, or the tile |
 | `TileId(u32)` | a tile in a tileset (Tiled's "local id") | the tileset |
-| `TilesetSlot(u16)` | a tileset's index in the map's tileset list | the map |
+| `TilesetSlot` | a tileset's index in the map's tileset list (`TilesetSlot::new(index) -> Option`, below 65535) | the map |
 | `CustomTypeId(u32)` | a class or enum in a project | the project |
 
-Tilesets and templates are reached by path (external) or held by value (embedded); maps refer
-to them through `TilesetRef` and `TemplateRef`, never by pointer identity alone. Parent links
-(layer to group, object to layer) are not stored; `Map` answers them.
+Tilesets and templates are reached by path (external) or held by value (embedded); maps refer to
+them through `TilesetRef` and a template's `FileRef`, never by pointer identity alone. Parent
+links (layer to group, object to layer) are not stored; `Map` answers them.
 
 ### 2.4 Strings, names, colours
 
@@ -107,7 +108,7 @@ One concept per module; `lib.rs` is `mod` lines and explicit `pub use` lines.
 | `image_ref` | `ImageRef`, `ImageSource` |
 | `tileset` | `Tileset`, `TilesetImage`, `Alignment`, `TileRenderSize`, `FillMode`, `TilesetGrid`, `Transformations` |
 | `tile` | `TileData`, `Frame` |
-| `object` | `MapObject`, `Shape`, `ObjectOverrides`, `TemplateRef` |
+| `object` | `MapObject`, `Shape`, `ObjectOverrides` |
 | `text` | `TextData`, `HAlign`, `VAlign` |
 | `template` | `ObjectTemplate` |
 | `property` | `Properties`, `Property`, `Value` |
@@ -144,8 +145,7 @@ Map
 
 ```
 TilesetRef
-├── source: Option<String>    the reference as written in the file (None: embedded)
-├── path: Option<PathBuf>     the resolved file (None: embedded)
+├── file: Option<FileRef>     the tileset's file, as written and resolved (None: embedded)
 ├── first_gid: Option<u32>    the firstgid the file gave this tileset, a hint for the writer
 └── tileset: Arc<Tileset>
 ```
@@ -168,7 +168,7 @@ FileFormat
 ├── tiled_version: String       informational, as read
 ├── line_ending: LineEnding     Lf | CrLf, from the file's first line
 ├── layer_data: LayerDataFormat Xml | Csv | Base64 | Base64Gzip | Base64Zlib | Base64Zstd
-├── compression_level: i32      -1 = the default
+├── compression_level: Option<i32>  None = the format's default
 ├── output_chunk_size: UVec2    16×16 unless the file says otherwise
 └── export: ExportSettings      the last export target and format (File ▸ Export repeats it)
 ```
@@ -233,7 +233,8 @@ Option<ImageRef>, repeat_x, repeat_y }`.
 
 ```
 TileLayer
-├── bounds: TileBounds           Finite { width, height } | Infinite
+├── size: UVec2                  a finite layer's bounds; what the file declares for an infinite one
+├── bounds: TileBounds           Finite | Infinite
 └── chunks: BTreeMap<ChunkPos, Arc<Chunk>>
 ```
 
@@ -310,7 +311,7 @@ Tileset
 ├── fill_mode: FillMode                  Stretch | PreserveAspectFit
 ├── grid: Option<TilesetGrid>            orientation and cell size for overlays and collision editing
 ├── background_color: Option<Color>
-├── transformations: Transformations     hflip, vflip, rotate, prefer_untransformed (for terrain filling)
+├── transformations: Transformations     bit flags HFLIP, VFLIP, ROTATE, PREFER_UNTRANSFORMED (for terrain filling)
 ├── tiles: BTreeMap<TileId, TileData>    atlas: only tiles with data; collection: every tile
 ├── tile_order: Vec<TileId>              a collection's display order when not by id (Tiled 1.7+); empty = by id
 ├── wang_sets: Vec<WangSet>
@@ -336,14 +337,17 @@ TileData
 ├── image: Option<ImageRef>              collection tiles
 ├── rect: Option<IRect>                  a sub-rectangle of that image (Tiled 1.9+)
 ├── animation: Vec<Frame { tile: TileId, duration_ms: u32 }>
-├── collision: Vec<MapObject>            shapes in the tile's own pixel space, with their own ObjectIds
+├── collision: Option<CollisionGroup>    { id: LayerId, layer: ObjectLayer }: the shapes in the tile's own
+│                                        pixel space with ids unique in the tile, and the group's colour and draw order
 └── properties: Properties
 ```
 
-`ImageRef { source: ImageSource, path: PathBuf, declared_size: UVec2, transparent: Option<Color> }`
-with `ImageSource::Reference(String)` (as written) or `ImageSource::Embedded(Arc<[u8]>)`: an
-embedded image is bytes in the model, decoded through `bt-image` by content hash and written
-back as the same bytes, never a temporary file.
+`ImageRef { source: ImageSource, declared_size: UVec2, transparent: Option<Color> }` with
+`ImageSource::File(FileRef)` or `ImageSource::Embedded(EmbeddedImage { format, bytes:
+Arc<[u8]> })`: an embedded image is bytes in the model, decoded through `bt-image` by content
+hash and written back as the same bytes, never a temporary file. `ImageRef::path()` is the
+resolved file of a file image. An atlas tile inside the image the file declares holds an entry
+only when it has data; the loader drops empty entries there.
 
 ## 8. Objects
 
@@ -358,7 +362,7 @@ MapObject
 ├── opacity: f64                         Tiled 1.12
 ├── shape: Shape                         Rectangle | Ellipse | Point | Capsule | Polygon(Vec<DVec2>) | Polyline(Vec<DVec2>) | Text(TextData)
 ├── tile: Option<Cell>                   a tile object draws this tile at `size`
-├── template: Option<TemplateRef>        { source: String, path: PathBuf }
+├── template: Option<FileRef>            the template of a template instance
 ├── overrides: ObjectOverrides           which fields a template instance sets itself
 └── properties: Properties
 ```
@@ -446,7 +450,8 @@ World        { maps: Vec<WorldMap { file: FileRef, rect: IRect }>, patterns: Vec
 WorldPattern { regexp: String, multiplier: IVec2, offset: IVec2, map_size: IVec2 }  with map_rect(column, row)
 Project      { folders: Vec<FileRef>, extensions_path: FileRef, automapping_rules_file: Option<FileRef>,
                object_types_file: Option<FileRef>, commands: Vec<Command>,
-               compatibility_version: CompatibilityVersion, custom_types: CustomTypes, properties }
+               compatibility_version: CompatibilityVersion, custom_types: CustomTypes, properties,
+               unknown_keys: BTreeMap<String, String> }   keys a newer Tiled wrote, as JSON text, written back
 Command      { name, command, arguments, working_directory, shortcut, enabled, save_before_execute, show_output }
 CompatibilityVersion = Tiled1_8 | Tiled1_9 | Tiled1_10 | Latest | Other(i64)   with number() and version_string()
 FileRef      { source: String (as written), path: PathBuf (resolved) }
@@ -493,17 +498,17 @@ tile_width'   = column_width + side_offset_x              tile_height' = row_hei
 
 A column is shifted down (axis X) or a row shifted right (axis Y) when its parity matches the
 stagger index. A staggered map is the hexagonal case with a side length of zero. `geometry/hex`
-holds cube coordinates (`Hex::from_offset`, `to_offset`, `rotated`) for turning stamps by 60°
-and for terrain neighbours.
+holds cube coordinates (`Hex::from_offset`, `to_offset`, `rotated_cw`, `rotated_ccw`) for
+turning stamps by 60° and for terrain neighbours; turning a whole stamp is `bt-edit`'s.
 
 ### 13.3 Draw order
 
 `for_each_tile(exposed: DRect, f)` visits the cells a screen rectangle exposes in Tiled's draw
-order, and `draw_order_key(tile) -> (i64, i64)` is the sort key that reproduces that order
-without visiting: by row in the render order on orthogonal and oblique maps (the render order is
-honoured only there, as in Tiled), by diagonal `x + y` on isometric maps, by row on hexagonal
-and staggered maps with the stagger-axis-X variant sorting by half-row. The renderer merges
-chunks by this key on every orientation but orthogonal right-down.
+order, and `draw_order_key(tile) -> DrawOrderKey { major, minor }` is the sort key that
+reproduces that order without visiting: by row in the render order on orthogonal and oblique
+maps (the render order is honoured only there, as in Tiled), by diagonal `x + y` on isometric
+maps, by row on hexagonal and staggered maps with the stagger-axis-X variant sorting by
+half-row. The renderer merges chunks by this key on every orientation but orthogonal right-down.
 
 ### 13.4 Neighbours, outlines, grid
 
@@ -532,7 +537,8 @@ set, else bottom-centre on isometric maps and bottom-left elsewhere, and top-lef
 other object. `upright_object_rect(pos, size, alignment)`: the screen rectangle of an object
 drawn upright (tile and text objects): the projected position minus the alignment fraction of
 the size. `object_outline(object)`: the drawn outline of any object in screen space, rotation
-included, which the canvas, the headless pictures, the Godot export and `bt view` all use.
+included, which the canvas, the headless pictures, the Godot export and `bt view` all use; it is
+built with the renderer (M1), which is its first user.
 
 ## 14. Validation
 
@@ -556,13 +562,13 @@ Each module is one primitive, defined once for every crate above:
 
 | Module | API |
 |---|---|
-| `rect` | `IRect { x, y, w, h }`: integer, half-open, `from_corners` (inclusive), `min`, `max` (exclusive), `is_empty`, `contains`, `intersect`, `union`, `points()` row-major. `DRect { min, max }`: floating point, half-open, `from_min_size`, `from_points`, `size`, `intersects`, `expand`, `translate`, `to_aligned()` (Qt's `toAlignedRect`). One convention: a rect is empty when a side is not positive |
+| `rect` | `IRect { x, y, w, h }`: integer, half-open, `from_min_size`, `from_corners` (inclusive), `bounding(positions) -> Option`, `min`, `max` (exclusive), `size`, `is_empty`, `contains`, `intersection`, `union`, `translated`, `points()` row-major. `DRect { min, max }`: floating point, half-open, `from_min_size`, `from_points`, `size`, `is_empty`, `contains`, `intersects`, `intersection`, `union`, `expanded`, `translated`, `to_aligned()` (Qt's `toAlignedRect`). One convention: a rect is empty when a side is not positive |
 | `rng` | `Rng::new(seed)` (SplitMix64, `next_u64`, `next_f64`, `below(n)`), `cell_rng(seed, position)` (a generator derived from a seed and a cell, so a result depends on where, not on visit order), `RandomPicker<T>` (Tiled's weighted picker: weights, `pick`) |
-| `raster` | `points_on_line(a, b)` (Bresenham, every cell once), `points_on_ellipse(rect)`, `ellipse_region(rect)` (Zingl's rasterisers, MIT, as Tiled uses them) |
-| `bands` | `banded_rects(cells) -> Vec<IRect>`: a set of cells as the row bands `QRegion` would give, which is the order Tiled's filler and automapper visit; `bounding_rect(cells)` |
-| `hash` | `CellHasher` (a fast non-cryptographic hasher for position keys), `fnv1a_64(bytes)`, `content_hash(bytes)` for file identity |
-| `atomic_write` | `write_atomically(path, bytes, options)`: a temporary file next to the target (`.<name>.<pid>-<n>.tmp`, `create_new`), permissions copied from an existing target, `fsync`, rename, directory `fsync` on Unix; follows symbolic links; refuses with `Refused::ReadOnlyFile` or `Refused::ReadOnlyFolder` (typed, carried in the error) before writing anything; `WriteOptions { safe: bool }` for folders where the rename misbehaves; a failure leaves the original and removes the temporary file |
-| `paths` | `search_up(start, stop_rules, predicate)` (upward search stopping at a repository top and below the home folder), `relative_path(base_dir, target)` with `/` separators, `clean_path` (lexical, like `QDir::cleanPath`), `absolute_path`, `file_stem` (Qt's `completeBaseName`), `display_name` |
+| `raster` | `points_on_line(a, b, Connectivity::{Eight, Four})` (Bresenham, every cell once), `points_on_ellipse(center, radii)`, `ellipse_region(rect) -> Vec<IRect>` (one span a row) (Zingl's rasterisers, MIT, as Tiled uses them) |
+| `bands` | `banded_rects(cells) -> Vec<IRect>`: a set of cells as the row bands `QRegion` would give, which is the order Tiled's filler and automapper visit (a set's bounding rectangle is `IRect::bounding`) |
+| `hash` | `CellHasher`, `CellHashMap`, `CellHashSet` (a fast non-cryptographic hasher for position keys), `Fnv64`, `fnv1a_64(bytes)` (also the content hash of embedded images), `fnv1a_32(bytes)` |
+| `atomic_write` | `write_file(path, bytes, WriteMode::{Atomic, InPlace})`: atomically, a temporary file next to the target (`.<name>.<pid>-<n>.tmp`, the first free `n` taken with `create_new`), permissions copied from an existing target, `fsync`, rename, directory `fsync` on Unix; in place for folders where the rename misbehaves; follows symbolic links; refuses with `Refused::ReadOnlyFile` or `Refused::ReadOnlyFolder` (typed, carried in the error) before writing anything; a failure leaves the original and removes the temporary file |
+| `paths` | `search_up(start, home, found)` (upward search stopping after a repository top and before the home folder), `relative_path(base_dir, target) -> Option` with `/` separators, `clean_path` (lexical, like `QDir::cleanPath`), `absolute_path -> Result`, `file_stem` (Qt's `completeBaseName`), `display_name` |
 | `text` | `plural(n, word)`, `quoted_list`, `and_list`, `slug` (lowercase hyphenated names), `fuzzy_match(query, candidates)` with the one scoring used by every name lookup, `natural_cmp` |
 
 No module reads configuration, holds state between calls or depends on another crate of ours.

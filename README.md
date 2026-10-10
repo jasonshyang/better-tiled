@@ -16,8 +16,9 @@ line for coding agents and an export to Godot 4.
 
 The design is complete and the build is under way, milestone by milestone
 ([`docs/design/00-high-level-design.md`](docs/design/00-high-level-design.md), §17). The first
-milestone, the foundations (the workspace, the data model and the file formats), is in
-progress; there is no editor to run yet.
+milestone, the foundations, is built: the data model, image decoding, and the reading and
+writing of Tiled's files, which reads every Tiled example and test map and saves the files
+Tiled saved byte for byte. There is no editor to run yet.
 
 ## Documentation
 

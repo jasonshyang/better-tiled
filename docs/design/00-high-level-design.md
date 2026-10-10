@@ -166,7 +166,7 @@ layer 0     bt-utils
 | `bt-utils` | nothing of ours |
 | `bt-core` | `bt-utils` |
 | `bt-image` | `bt-utils` |
-| `bt-tmx` | `bt-core`, `bt-image` (image sizes for tileset checks) |
+| `bt-tmx` | `bt-utils`, `bt-core`, `bt-image` (image sizes for tileset checks) |
 | `bt-render` | `bt-core`, `bt-image` |
 | `bt-edit` | `bt-core` |
 | `bt-terrain` | `bt-core`, `bt-image` (autotile layout detection reads pixels) |
@@ -298,12 +298,12 @@ writing is an option of the write request, not a global switch.
 ICO: the formats Tiled reads), caches decoded images by path and modification time or by content
 hash for embedded bytes, reads an image's size from its header without decoding it, applies a
 colour-key transparency, and measures alpha bounds (used to find where a sprite's feet are).
-Decoding runs on a thread pool with a completion hook, so a tileset's images never stall a
-frame. There is one image store per process: the renderer, the panels and the headless
-pictures all read it, and widget textures are derived from it rather than decoded again. A map file can serve as the image of a tileset, a tile or an image layer (a picture of
-that map): the image store takes a `MapImageSource` trait object at construction, which the
-application implements with the headless renderer, so there is no global hook and no nested GPU
-device.
+Decoding runs on the store's worker threads with a completion hook, so a tileset's images never
+stall a frame. There is one image store per process: the renderer, the panels and the headless
+pictures all read it, and widget textures are derived from it rather than decoded again. A map
+file can serve as the image of a tileset, a tile or an image layer (a picture of that map): the
+image store takes a `MapImageSource` trait object at construction, which the application
+implements with the headless renderer, so there is no global hook and no nested GPU device.
 
 ## 6. Rendering (`bt-render`)
 
@@ -735,8 +735,9 @@ purchased packs, which never leave this machine.
   120 Hz) is the first-class platform, Linux and Windows build and are tested in CI. The live
   link needs Unix sockets; on Windows it is off with a message.
 - `eframe`/`egui` with `wgpu` for the window and canvas, `rfd` for file dialogs, `glam` for
-  vectors, `roxmltree` for XML, `serde_json` for JSON, `flate2`/`ruzstd` for layer data, `image`
-  for decoding, `rayon` for decoding and packing, `thiserror`/`anyhow` for errors, `log`.
+  vectors, `roxmltree` for XML, `serde_json` for JSON, `flate2`/`ruzstd` for layer data (with a
+  port of zlib's deflate for writing it), `image` for decoding, `rayon` for packing,
+  `thiserror`/`anyhow` for errors, `log`.
 - Dependencies are pinned at the workspace level; a crate takes only the features it uses.
   Dev builds optimise dependencies so the editor feels right while developing.
 
@@ -771,7 +772,7 @@ Each milestone is usable on its own and ends with its design docs updated to "as
 
 | # | Milestone | Delivers | Done when |
 |---|---|---|---|
-| M0 | Foundations | workspace, CI, `bt-utils`, `bt-core`, `bt-image`, `bt-tmx`, `bt-test-data` | every corpus file round-trips byte for byte; `bt-tmx` reads every Tiled example and test map |
+| M0 | Foundations | workspace, CI, `bt-utils`, `bt-core`, `bt-image`, `bt-tmx`, `bt-test-data` | every corpus file round-trips under the rule of `02-file-formats.md`, §12.4 (byte for byte for every file Tiled saved, apart from those Tiled itself would rewrite); `bt-tmx` reads every Tiled example and test map |
 | M1 | See it | `bt-render`, `bt-editor` (assets, transactions, settings, session, recovery), the editor shell (tabs, canvas, layers and tiles panels, pan and zoom), save | a real pack's map opens, scrolls at 120 Hz at every zoom, and saves unchanged |
 | M2 | Paint it | `bt-edit`; actions, keymap, focus, palette, preferences; the tile and object tools; properties and custom types; the tileset editor; clipboard; the watcher | a level is built from scratch in the window without touching Tiled |
 | M3 | Rules | `bt-terrain`, `bt-automap`, `bt-project`; Terrains and AutoMap panels, Explain tool, AutoMap layers, Live, autotile layouts | a pack's `rules.txt` and terrain sets give Tiled's results, with every failure explained |
@@ -781,6 +782,9 @@ Each milestone is usable on its own and ends with its design docs updated to "as
 
 Within a milestone the order is bottom-up by the dependency graph, tests first for ported
 algorithms (the oracle before the port).
+
+M0 was built on 2026-10-10; `01-data-model.md`, `02-file-formats.md` and the M0 parts of this
+doc and `13-testing.md` are as built.
 
 ## 18. Glossary
 
