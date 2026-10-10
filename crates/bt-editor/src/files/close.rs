@@ -21,7 +21,7 @@ impl Editor {
             .in_order()
             .any(|d| d.id() != doc && d.asset() == asset);
         let dirty = self.store.get(asset).is_some_and(|a| a.is_dirty());
-        if dirty && !shown_elsewhere {
+        if dirty && !shown_elsewhere && !self.map_uses(asset) {
             let names = self
                 .store
                 .get(asset)
@@ -57,7 +57,7 @@ impl Editor {
                 document.selection().current_layer,
             );
         }
-        if !self.documents.in_order().any(|d| d.asset() == asset) {
+        if !self.documents.in_order().any(|d| d.asset() == asset) && !self.map_uses(asset) {
             self.store.remove(asset);
             self.files.loaders.remove(&asset);
             self.recovery.forget(asset);
@@ -66,6 +66,14 @@ impl Editor {
         }
         self.session_changed();
         effects
+    }
+
+    /// Whether an open map uses a tileset asset (which then stays, its changes saved with it).
+    fn map_uses(&self, asset: crate::store::AssetId) -> bool {
+        self.store.assets().any(|other| match other.root() {
+            crate::store::Root::Map(map) => self.store.tilesets_of(map).contains(&asset),
+            _ => false,
+        })
     }
 
     /// Quits, asking first when anything is unsaved.

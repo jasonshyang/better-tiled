@@ -1,0 +1,147 @@
+//! The tileset editor through the editor: Edit Tileset shows a map's embedded tileset in place
+//! of the map, its tiles are selected and animated as undoable steps, the map's commands wait
+//! until the map is back, and a tileset file opens in a tab of its own and saves to its file.
+
+#![cfg(test)]
+
+mod common;
+
+use bt_core::{Frame, TileId, TilesetSlot};
+use bt_editor::{ActionId, Editor, Enabled, Intent, TilesetHome, TilesetMode, ToolKind};
+use bt_test_data::Scratch;
+use bt_test_data::fixtures::{Atlas, MapBuilder};
+use bt_tmx::WriteRequest;
+use glam::UVec2;
+
+use common::{apply, editor_in};
+
+fn frames(tiles: &[u32]) -> Vec<Frame> {
+    tiles
+        .iter()
+        .map(|&id| Frame {
+            tile: TileId(id),
+            duration_ms: 100,
+        })
+        .collect()
+}
+
+#[test]
+fn an_embedded_tileset_is_edited_in_place_of_its_map() {
+    let atlas = Atlas::builder().build_embedded().unwrap();
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(4, 3))
+        .tileset(atlas.tileset)
+        .tile_layer("ground", "1 1 1 1\n1 1 1 1\n1 1 1 1")
+        .build()
+        .unwrap();
+    let mut editor = Editor::new();
+    let doc = editor.open_new_map(map);
+    let slot = TilesetSlot::new(0).unwrap();
+    let asset = editor.document(doc).unwrap().asset();
+
+    editor.apply(Intent::EditTileset { doc, slot });
+    let editing = editor.document(doc).unwrap().tileset_editing().unwrap();
+    assert_eq!(editing.home(), TilesetHome::Embedded { map: asset, slot });
+    assert_eq!(
+        editor.enabled(ActionId::BrushTool),
+        Enabled::Disabled(Some(
+            "Brush works on the map: the tileset editor is open".to_owned()
+        ))
+    );
+
+    // Tiles are chosen, and one is animated as an undoable step on the map.
+    editor.apply(Intent::SelectTilesetTiles {
+        doc,
+        tiles: vec![TileId(1), TileId(2)],
+        current: Some(TileId(1)),
+    });
+    let animate = |editor: &mut Editor, tiles: &[u32]| {
+        editor.apply(Intent::SetTileAnimation {
+            doc,
+            tile: TileId(1),
+            frames: frames(tiles),
+        })
+    };
+    animate(&mut editor, &[1, 2, 3]);
+    let tileset = editor.edited_tileset(doc).unwrap();
+    assert_eq!(
+        tileset.tile(TileId(1)).unwrap().animation,
+        frames(&[1, 2, 3])
+    );
+    assert_eq!(
+        editor.map_of(doc).unwrap().tilesets[0]
+            .tileset
+            .tile(TileId(1)),
+        tileset.tile(TileId(1)),
+        "the map holds the change"
+    );
+    assert!(editor.has_unsaved());
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(
+        editor.edited_tileset(doc).unwrap().tile(TileId(1)),
+        None,
+        "an atlas keeps no data for a tile without any"
+    );
+    let refused = animate(&mut editor, &[1, 99]);
+    assert!(!refused.is_empty(), "a frame of a missing tile is refused");
+    assert_eq!(editor.edited_tileset(doc).unwrap().tile(TileId(1)), None);
+
+    // Collision shapes are edited with the object tools; back on the map the tile tools return.
+    editor.apply(Intent::Run(ActionId::BrushTool));
+    editor.apply(Intent::SetTilesetMode {
+        doc,
+        mode: TilesetMode::Collision,
+    });
+    assert_eq!(editor.tools().tool(), ToolKind::SelectObjects);
+    editor.apply(Intent::StopEditingTileset { doc });
+    assert!(editor.document(doc).unwrap().tileset_editing().is_none());
+    assert_eq!(editor.tools().tool().family(), bt_editor::ToolFamily::Tile);
+    assert_eq!(editor.enabled(ActionId::BrushTool), Enabled::Enabled);
+}
+
+#[test]
+fn a_tileset_file_opens_in_its_own_tab_and_saves_there() {
+    let scratch = Scratch::new("bt-editor-tileset-document").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let path = scratch.join("tiles.tsx");
+    WriteRequest::for_tileset(&atlas.tileset, &path)
+        .write()
+        .unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(path.clone()));
+    let doc = editor.current().expect("the tileset is open");
+    let editing = editor.document(doc).unwrap().tileset_editing().unwrap();
+    assert!(matches!(editing.home(), TilesetHome::Asset(_)));
+    assert!(editor.map_of(doc).is_none(), "a tileset's tab has no map");
+    assert_eq!(
+        editor.enabled(ActionId::ResizeMap),
+        Enabled::Disabled(Some(
+            "Resize Map works on the map: the tileset editor is open".to_owned()
+        ))
+    );
+
+    apply(
+        &mut editor,
+        Intent::SetTileAnimation {
+            doc,
+            tile: TileId(0),
+            frames: frames(&[0, 1]),
+        },
+    );
+    assert!(editor.has_unsaved());
+    apply(&mut editor, Intent::Run(ActionId::Save));
+    assert!(!editor.has_unsaved());
+    let saved = bt_tmx::Loader::builder()
+        .build()
+        .load_tileset(&path)
+        .unwrap()
+        .value;
+    assert_eq!(saved.tile(TileId(0)).unwrap().animation, frames(&[0, 1]));
+
+    // Opening it again shows the same tab.
+    let tabs = editor.documents().in_order().count();
+    apply(&mut editor, Intent::Open(path));
+    assert_eq!(editor.documents().in_order().count(), tabs);
+}

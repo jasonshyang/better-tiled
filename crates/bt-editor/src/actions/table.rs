@@ -12,25 +12,26 @@ pub enum Context {
     Always,
     /// With a document open, a map or a tileset.
     Document,
-    /// With a map open.
+    /// With a map open (and not its tileset editor).
     Map,
     /// With a map open whose current layer is a tile layer.
     TileLayer,
-    /// With a map open whose current layer is an object layer.
+    /// With a map open whose current layer is an object layer, or the tileset editor's
+    /// collision shapes.
     ObjectLayer,
-    /// With a tileset open in a tab of its own.
+    /// With the tileset editor open: a tileset's tab, or a map's while it edits a tileset.
     Tileset,
 }
 
 impl Context {
     /// Whether commands of the two contexts can apply at once, so that one key cannot serve
-    /// both: a tile layer and an object layer are never current together, nor a map and a
-    /// tileset.
+    /// both: a tile layer and an object layer are never current together, nor a map and the
+    /// tileset editor, which edits collision shapes with the object tools.
     pub fn overlaps(self, other: Context) -> bool {
         use Context::{Always, Document, Map, ObjectLayer, TileLayer, Tileset};
         match (self, other) {
             (Always | Document, _) | (_, Always | Document) => true,
-            (Tileset, Tileset) => true,
+            (Tileset, Tileset | ObjectLayer) | (ObjectLayer, Tileset) => true,
             (Tileset, _) | (_, Tileset) => false,
             (TileLayer, ObjectLayer) | (ObjectLayer, TileLayer) => false,
             (Map | TileLayer | ObjectLayer, Map | TileLayer | ObjectLayer) => true,
@@ -694,6 +695,8 @@ mod tests {
         assert!(!Context::TileLayer.overlaps(Context::ObjectLayer));
         assert!(Context::Map.overlaps(Context::TileLayer));
         assert!(!Context::Tileset.overlaps(Context::Map));
+        assert!(!Context::Tileset.overlaps(Context::TileLayer));
+        assert!(Context::Tileset.overlaps(Context::ObjectLayer));
         assert!(Context::Document.overlaps(Context::Tileset));
         assert_eq!(
             ActionId::SameTileTool.spec().keys,

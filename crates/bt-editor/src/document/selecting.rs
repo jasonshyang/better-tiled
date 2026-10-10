@@ -44,8 +44,13 @@ impl Editor {
         });
     }
 
-    /// The family of tools the current layer of `doc` takes.
+    /// The family of tools `doc` takes: the object tools for a tileset editor's collision
+    /// shapes, none for its other modes, else the current layer's.
     pub(crate) fn current_family(&self, doc: DocumentId) -> Option<ToolFamily> {
+        if let Some(editing) = self.documents.get(doc)?.tileset_editing() {
+            return (editing.mode() == crate::document::TilesetMode::Collision)
+                .then_some(ToolFamily::Object);
+        }
         let id = self.documents.get(doc)?.selection().current_layer?;
         Some(match self.map_of(doc)?.layer(id)?.kind {
             LayerKind::Tile(_) => ToolFamily::Tile,

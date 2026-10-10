@@ -1,6 +1,6 @@
 //! Why an edit, an undo or a redo did not happen.
 
-use bt_core::LayerId;
+use bt_core::{LayerId, TileId};
 
 use crate::document::DocumentId;
 use crate::store::{AssetId, AssetKind};
@@ -25,6 +25,9 @@ pub enum EditError {
     /// The map has no layer with this id.
     #[error("the map has no layer {0}")]
     NoSuchLayer(LayerId),
+    /// The tileset has no tile with this id.
+    #[error("the tileset has no tile {}", .0.0)]
+    NoSuchTile(TileId),
     /// A gesture is under way: another edit waits for it.
     #[error("a stroke is under way")]
     GestureUnderWay,

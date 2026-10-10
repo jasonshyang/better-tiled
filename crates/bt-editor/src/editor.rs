@@ -10,7 +10,9 @@ use bt_tmx::WriteRequest;
 
 use crate::actions::{Keymap, KeymapError, PaletteState};
 use crate::clipboard::Clipboard;
-use crate::document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
+use crate::document::{
+    Document, DocumentId, Documents, Selection, TilesetEditing, ViewState, ViewToggles,
+};
 use crate::effect::Effect;
 use crate::error::EditError;
 use crate::files::Files;
@@ -21,7 +23,7 @@ use crate::objects::ObjectStrokeState;
 use crate::recovery::{RecoveryPlan, Snapshot, SnapshotMeta};
 use crate::session::Session;
 use crate::settings::Settings;
-use crate::store::{AssetId, AssetStore, NewAsset, Root};
+use crate::store::{AssetId, AssetKind, AssetStore, NewAsset, Root, TilesetHome};
 use crate::tools::{StrokeState, ToolState};
 use crate::watch::WatchModel;
 
@@ -164,9 +166,21 @@ impl Editor {
             Intent::Decided { decision, choice } => self.decide(decision, choice),
             Intent::SelectDocument(doc) => {
                 self.documents.set_current(doc);
+                self.follow_document(doc);
                 self.restore_current = None;
                 self.session_changed();
                 Vec::new()
+            }
+            Intent::EditTileset { doc, slot } => self.edit_tileset(doc, slot),
+            Intent::StopEditingTileset { doc } => self.stop_editing_tileset(doc),
+            Intent::SelectTilesetTiles {
+                doc,
+                tiles,
+                current,
+            } => self.select_tileset_tiles(doc, tiles, current),
+            Intent::SetTilesetMode { doc, mode } => self.set_tileset_mode(doc, mode),
+            Intent::SetTileAnimation { doc, tile, frames } => {
+                self.set_tile_animation(doc, tile, frames)
             }
             Intent::CloseDocument(doc) => self.close_document(doc),
             Intent::SelectLayer { doc, layer } => {
@@ -466,6 +480,8 @@ impl Editor {
         let current_layer = self.store.map(asset).and_then(|map| topmost_leaf(map));
         let mut history = History::default();
         history.set_limit(self.settings.general.history_limit);
+        let tileset = (self.store.get(asset).map(|a| a.kind()) == Some(AssetKind::Tileset))
+            .then(|| TilesetEditing::of(TilesetHome::Asset(asset)));
         self.documents.add(Document {
             id,
             asset,
@@ -473,6 +489,7 @@ impl Editor {
             camera: None,
             history,
             view: ViewToggles::default(),
+            tileset,
         });
         id
     }

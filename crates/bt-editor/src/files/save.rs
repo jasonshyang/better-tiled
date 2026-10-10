@@ -29,6 +29,15 @@ impl Editor {
         else {
             return vec![self.save_as_request(doc)];
         };
+        if self.store.tileset(asset).is_some() {
+            return match self.write_tileset(asset) {
+                Ok(()) => vec![Effect::Notify(Notice::info(format!(
+                    "Saved {}",
+                    bt_utils::paths::display_name(&path)
+                )))],
+                Err(notice) => vec![Effect::Notify(notice)],
+            };
+        }
         self.save_map_to(asset, &path)
     }
 

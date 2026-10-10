@@ -8,7 +8,7 @@ use bt_core::{Map, Tileset};
 
 use crate::document::Selection;
 use crate::error::EditError;
-use crate::store::{AssetId, AssetKind, AssetStore, Root};
+use crate::store::{AssetId, AssetKind, AssetStore, Root, TilesetHome};
 
 /// A transaction in the making. Roots asked for mutably are copied on first use (their chunks,
 /// object lists and tilesets stay shared until changed); the store sees them only if the
@@ -65,6 +65,23 @@ impl<'s> Tx<'s> {
                 asset,
                 expected: AssetKind::Map,
             }),
+        }
+    }
+
+    /// The tileset at `home`, to change: an external tileset's root, or the copy of it a map
+    /// embeds.
+    pub fn tileset_at_mut(&mut self, home: TilesetHome) -> Result<&mut Tileset, EditError> {
+        match home {
+            TilesetHome::Asset(asset) => self.tileset_mut(asset),
+            TilesetHome::Embedded { map, slot } => {
+                let reference = self
+                    .map_mut(map)?
+                    .tilesets
+                    .get_mut(slot.index())
+                    .filter(|reference| reference.file.is_none())
+                    .ok_or(bt_edit::EditError::NoSuchTileset(slot))?;
+                Ok(Arc::make_mut(&mut reference.tileset))
+            }
         }
     }
 

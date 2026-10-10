@@ -1,10 +1,12 @@
-//! A document: a tab onto a map, with its selection, camera, history and view switches.
+//! A document: a tab onto a map or a tileset, with its selection, camera, history, view
+//! switches and tileset editor.
 
 use std::fmt;
 
 use glam::DVec2;
 
 use super::selection::Selection;
+use super::tileset_editing::TilesetEditing;
 use crate::history::History;
 use crate::store::AssetId;
 
@@ -45,7 +47,7 @@ impl Default for ViewToggles {
     }
 }
 
-/// A tab onto a map.
+/// A tab onto a map or a tileset.
 #[derive(Clone, Debug)]
 pub struct Document {
     pub(crate) id: DocumentId,
@@ -54,6 +56,9 @@ pub struct Document {
     pub(crate) camera: Option<ViewState>,
     pub(crate) history: History,
     pub(crate) view: ViewToggles,
+    /// The tileset editor: always there in a tileset's tab, in a map's while it edits one of
+    /// the map's tilesets in place of the map.
+    pub(crate) tileset: Option<TilesetEditing>,
 }
 
 impl Document {
@@ -85,5 +90,10 @@ impl Document {
     /// Its View switches.
     pub fn view(&self) -> ViewToggles {
         self.view
+    }
+
+    /// Its tileset editor, when it shows one.
+    pub fn tileset_editing(&self) -> Option<&TilesetEditing> {
+        self.tileset.as_ref()
     }
 }

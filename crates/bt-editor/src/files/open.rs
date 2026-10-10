@@ -1,4 +1,5 @@
-//! Opening maps: the load handed out, then the asset, its tilesets and project, and a document.
+//! Opening files: the load handed out, then the asset (a map with its tilesets and project, or a
+//! tileset file) and a document showing it.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,7 +33,8 @@ impl Editor {
         vec![Effect::Load(self.load_job(path, LoadSource::File))]
     }
 
-    /// A load of `path`, with the open project's types or a search for the nearest project.
+    /// A load of `path`, with the open project's types or a search for the nearest project: a
+    /// tileset for a `.tsx` or `.tsj` file, else a map.
     pub(crate) fn load_job(&self, path: PathBuf, source: LoadSource) -> LoadJob {
         let project = match self.files.project {
             Some(_) => ProjectChoice::Known(Arc::clone(&self.files.custom_types)),
@@ -40,11 +42,19 @@ impl Editor {
                 home: self.files.home.clone(),
             },
         };
+        let tileset = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("tsx") || e.eq_ignore_ascii_case("tsj"));
         LoadJob {
             path,
             source,
             project,
-            kind: LoadKind::Map,
+            kind: if tileset {
+                LoadKind::Tileset
+            } else {
+                LoadKind::Map
+            },
             purpose: LoadPurpose::Open,
         }
     }
@@ -89,11 +99,16 @@ impl Editor {
             }
         };
         let path = loaded.canonical.clone();
-        let LoadedContent::Map(map) = files.content else {
-            return vec![Effect::Notify(Notice::error(format!(
-                "{} is a tileset; tilesets open with the tileset editor",
-                bt_utils::paths::display_name(&path)
-            )))];
+        let map = match files.content {
+            LoadedContent::Map(map) => map,
+            LoadedContent::Tileset(tileset) => {
+                return self.open_tileset_document(
+                    &path,
+                    tileset,
+                    files.content_hash,
+                    files.warnings,
+                );
+            }
         };
         if loaded.recovered_from.is_none()
             && let Some(doc) = self.document_of_path(&path)
@@ -148,6 +163,35 @@ impl Editor {
         }
         self.session_changed();
         effects
+    }
+
+    /// Shows a tileset file in a tab of its own: the store's asset when a map uses it already
+    /// (its unsaved changes kept), else the tileset read.
+    fn open_tileset_document(
+        &mut self,
+        path: &Path,
+        tileset: Arc<bt_core::Tileset>,
+        content_hash: Option<u64>,
+        warnings: Vec<bt_tmx::Warning>,
+    ) -> Vec<Effect> {
+        if let Some(doc) = self.document_of_path(path) {
+            self.documents.set_current(doc);
+            return Vec::new();
+        }
+        let asset = match self.store.by_path(path) {
+            Some(asset) => asset,
+            None => self.store.insert(NewAsset {
+                root: Root::Tileset(tileset),
+                path: Some(path.to_path_buf()),
+                content_hash,
+                warnings,
+            }),
+        };
+        let doc = self.open_document(asset);
+        self.follow_document(doc);
+        self.remember_recent(path);
+        self.session_changed();
+        Vec::new()
     }
 
     /// Puts the external tilesets a load read into the store, unless it has their files.
@@ -238,9 +282,9 @@ impl Editor {
         }
     }
 
-    /// The tileset assets no map uses any more and that hold no unsaved changes.
+    /// The tileset assets no map uses any more, no tab shows and that hold no unsaved changes.
     pub(crate) fn drop_unused_tilesets(&mut self) {
-        let used: std::collections::HashSet<_> = self
+        let mut used: std::collections::HashSet<_> = self
             .store
             .assets()
             .filter_map(|asset| match asset.root() {
@@ -249,6 +293,7 @@ impl Editor {
             })
             .flatten()
             .collect();
+        used.extend(self.documents.in_order().map(|d| d.asset()));
         let unused: Vec<_> = self
             .store
             .assets()

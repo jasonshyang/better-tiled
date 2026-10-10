@@ -4,7 +4,7 @@
 use bt_core::{Layer, LayerKind, Map};
 
 use super::table::{ActionId, ActionKind, ActionSpec, Context};
-use crate::document::Document;
+use crate::document::{Document, TilesetMode};
 use crate::editor::Editor;
 use crate::settings::Snapping;
 
@@ -186,17 +186,27 @@ impl Editor {
 /// family is current, so a key pressed there says why it does nothing.
 fn context_blocker(spec: &ActionSpec, here: &Situation<'_>) -> Option<Option<String>> {
     let kind = here.layer.map(|l| &l.kind);
+    let editing = here.document.and_then(|d| d.tileset_editing());
+    let on_map = here.map.is_some() && editing.is_none();
     let holds = match spec.context {
         Context::Always => true,
         Context::Document => here.document.is_some(),
-        Context::Map => here.map.is_some(),
-        Context::TileLayer => matches!(kind, Some(LayerKind::Tile(_))),
-        Context::ObjectLayer => matches!(kind, Some(LayerKind::Object(_))),
-        // Tilesets open in tabs of their own with the tileset editor.
-        Context::Tileset => false,
+        Context::Map => on_map,
+        Context::TileLayer => on_map && matches!(kind, Some(LayerKind::Tile(_))),
+        Context::ObjectLayer => {
+            on_map && matches!(kind, Some(LayerKind::Object(_)))
+                || editing.is_some_and(|e| e.mode() == TilesetMode::Collision)
+        }
+        Context::Tileset => editing.is_some(),
     };
     if holds {
         return None;
+    }
+    if editing.is_some() && matches!(spec.context, Context::Map | Context::TileLayer) {
+        return Some(Some(format!(
+            "{} works on the map: the tileset editor is open",
+            spec.label.trim_end_matches('…')
+        )));
     }
     let reason = match (spec.context, here.layer) {
         (Context::TileLayer | Context::ObjectLayer, Some(layer)) => {

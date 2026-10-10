@@ -21,6 +21,7 @@ mod recovery;
 mod session;
 mod settings;
 mod store;
+mod tileset_commands;
 mod tools;
 mod watch;
 
@@ -28,7 +29,9 @@ pub use actions::{
     ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
     Modifiers, PaletteEntry, PaletteTarget, tool_action,
 };
-pub use document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
+pub use document::{
+    Document, DocumentId, Documents, Selection, TilesetEditing, TilesetMode, ViewState, ViewToggles,
+};
 pub use editor::{Editor, EditorBuilder};
 pub use effect::{
     Choice, Decision, DecisionId, Dialog, Effect, FileRequest, Purpose, Question, ViewRequest,
@@ -58,7 +61,7 @@ pub use settings::{
     ObjectSelection, SETTINGS_VERSION, SettingColor, Settings, SettingsError, Snapping, Theme,
     data_folder,
 };
-pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
+pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root, TilesetHome};
 pub use tools::{FillPreview, MAX_BRUSH_SIZE, Stroke, StrokeKind, ToolFamily, ToolKind, ToolState};
 pub use watch::{Found, Observation};
 

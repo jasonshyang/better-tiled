@@ -3,13 +3,13 @@
 
 use std::path::PathBuf;
 
-use bt_core::{Cell, LayerId, MapObject, ObjectId, PlacedCell};
+use bt_core::{Cell, Frame, LayerId, MapObject, ObjectId, PlacedCell, TileId, TilesetSlot};
 use bt_edit::{FillShape, SelectionMode, TileRegion};
 use bt_utils::IRect;
 use glam::{DVec2, IVec2};
 
 use crate::actions::{ActionId, PaletteTarget};
-use crate::document::{DocumentId, ViewState};
+use crate::document::{DocumentId, TilesetMode, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
 use crate::objects::ObjectStroke;
@@ -62,6 +62,43 @@ pub enum Intent {
         doc: DocumentId,
         /// The layer.
         layer: LayerId,
+    },
+    /// Edit Tileset: show the tileset in a slot of the map in place of the map.
+    EditTileset {
+        /// The map's document.
+        doc: DocumentId,
+        /// The tileset's slot.
+        slot: TilesetSlot,
+    },
+    /// Back to the map from its tileset editor.
+    StopEditingTileset {
+        /// The map's document.
+        doc: DocumentId,
+    },
+    /// Select tiles in the tileset editor.
+    SelectTilesetTiles {
+        /// The document.
+        doc: DocumentId,
+        /// The tiles.
+        tiles: Vec<TileId>,
+        /// The one the collision and animation editors show.
+        current: Option<TileId>,
+    },
+    /// Show another of the tileset editor's modes.
+    SetTilesetMode {
+        /// The document.
+        doc: DocumentId,
+        /// The mode.
+        mode: TilesetMode,
+    },
+    /// Set a tile's animation, as one step.
+    SetTileAnimation {
+        /// The document.
+        doc: DocumentId,
+        /// The tile.
+        tile: TileId,
+        /// Its frames; none for a still tile.
+        frames: Vec<Frame>,
     },
     /// Select tiles: `region` combined with the selection as `mode` says.
     SelectTiles {
