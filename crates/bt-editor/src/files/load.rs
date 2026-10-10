@@ -27,18 +27,47 @@ pub(crate) enum ProjectChoice {
     FindNearest { home: Option<PathBuf> },
 }
 
+/// What a file holds.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LoadKind {
+    /// A map.
+    Map,
+    /// A tileset in a file of its own.
+    Tileset,
+}
+
+/// Why a file is loaded.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LoadPurpose {
+    /// To open it.
+    Open,
+    /// It changed on disk: its asset takes the new content.
+    Reload(crate::store::AssetId),
+}
+
 /// A load to run on a worker; [`LoadJob::run`] does it.
 #[derive(Clone, Debug)]
 pub struct LoadJob {
     pub(crate) path: PathBuf,
     pub(crate) source: LoadSource,
     pub(crate) project: ProjectChoice,
+    pub(crate) kind: LoadKind,
+    pub(crate) purpose: LoadPurpose,
 }
 
-/// A loaded map and what came with it.
+/// What a load read.
+#[derive(Debug)]
+pub(crate) enum LoadedContent {
+    /// A map.
+    Map(Box<Map>),
+    /// A tileset.
+    Tileset(Arc<Tileset>),
+}
+
+/// A loaded map or tileset and what came with it.
 #[derive(Debug)]
 pub(crate) struct LoadedFiles {
-    pub(crate) map: Map,
+    pub(crate) content: LoadedContent,
     pub(crate) warnings: Vec<Warning>,
     /// The map file's hash; `None` for a recovered map (not what the file holds).
     pub(crate) content_hash: Option<u64>,
@@ -73,6 +102,7 @@ pub struct Loaded {
     pub(crate) canonical: PathBuf,
     pub(crate) outcome: Result<LoadedFiles, String>,
     pub(crate) recovered_from: Option<PathBuf>,
+    pub(crate) purpose: LoadPurpose,
 }
 
 impl Loaded {
@@ -99,6 +129,7 @@ impl LoadJob {
             canonical: std::fs::canonicalize(&self.path).unwrap_or_else(|_| self.path.clone()),
             outcome: self.load(),
             recovered_from,
+            purpose: self.purpose,
         }
     }
 
@@ -122,6 +153,19 @@ impl LoadJob {
             ),
         };
         let mut loader = Loader::builder().custom_types(custom_types).build();
+        if self.kind == LoadKind::Tileset {
+            let loaded = loader
+                .load_tileset(&self.path)
+                .map_err(|error| error.to_string())?;
+            return Ok(LoadedFiles {
+                content: LoadedContent::Tileset(loaded.value),
+                warnings: loaded.warnings,
+                content_hash: Some(hash_file(&self.path)?),
+                tilesets: Vec::new(),
+                project,
+                loader,
+            });
+        }
         let loaded = match &self.source {
             LoadSource::File => loader
                 .load_map(&self.path)
@@ -154,7 +198,7 @@ impl LoadJob {
             });
         }
         Ok(LoadedFiles {
-            map: loaded.value,
+            content: LoadedContent::Map(Box::new(loaded.value)),
             warnings: loaded.warnings,
             content_hash,
             tilesets,

@@ -7,10 +7,11 @@
 //! changes when a frame does.
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use bt_core::{ImageRef, TileId, Tileset, TilesetImage};
-use bt_image::{ImageKey, ImagePoll, ImageRequest};
+use bt_image::{ImageInput, ImageKey, ImagePoll, ImageRequest};
 use bt_utils::IRect;
 use glam::{IVec2, UVec2};
 
@@ -720,6 +721,47 @@ impl Sprites {
             if let ImageState::Packed { blocks, .. } = &slot.state {
                 for block in blocks {
                     pages.touch(block.region.page, frame);
+                }
+            }
+        }
+    }
+
+    /// Forgets the images read from `files` and the tilesets cut from them: they changed on
+    /// disk. The tilesets register again when next drawn, with new serials, so every cache
+    /// built from their sprites is rebuilt.
+    pub(crate) fn forget_files(&mut self, files: &[PathBuf]) {
+        let from_files = |slot: &ImageSlot| match &slot.request.input {
+            ImageInput::File(path) => files.contains(path),
+            ImageInput::Bytes { .. } => false,
+        };
+        let stale: Vec<ImageKey> = self
+            .images
+            .iter()
+            .filter(|(_, slot)| from_files(slot))
+            .map(|(key, _)| key.clone())
+            .collect();
+        let tilesets: Vec<usize> = self
+            .tilesets
+            .iter()
+            .filter(|(_, entry)| entry.images.all().iter().any(|key| stale.contains(key)))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in tilesets {
+            if let Some(entry) = self.tilesets.remove(&id) {
+                for index in entry.base..entry.base + entry.count {
+                    self.set(index, GpuSprite::default());
+                    self.set_remap(index, index);
+                }
+                self.release(entry.base, entry.count);
+            }
+        }
+        for key in stale {
+            if let Some(slot) = self.images.remove(&key)
+                && let ImageState::Packed { blocks, .. } = slot.state
+            {
+                for block in blocks {
+                    self.set(block.sprite, GpuSprite::default());
+                    self.release(block.sprite, 1);
                 }
             }
         }

@@ -70,6 +70,41 @@ fn a_pack_map_opens_and_saves_unchanged() {
 }
 
 #[test]
+fn a_map_changed_on_disk_reloads_or_asks() {
+    let scratch = Scratch::new("window-watch").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    window.poll_files();
+    let rename = |from: &str, to: &str| {
+        let text = std::fs::read_to_string(&path).unwrap();
+        let renamed = text.replace(&format!("name=\"{from}\""), &format!("name=\"{to}\""));
+        assert_ne!(text, renamed);
+        std::fs::write(&path, renamed).unwrap();
+    };
+    let layer_name = |window: &TestWindow| {
+        let doc = window.editor().current().unwrap();
+        window.editor().map_of(doc).unwrap().layers[0].name.clone()
+    };
+    rename("Ground", "Sand");
+    window.poll_files();
+    assert_eq!(layer_name(&window), "Sand", "a clean map takes the change");
+    assert!(!window.has_modal());
+
+    // With an unsaved change, the window asks; keeping it leaves the map as it is here.
+    window.click("👁");
+    rename("Sand", "Dunes");
+    window.poll_files();
+    assert!(window.has_modal(), "a conflict asks");
+    window.click("Keep My Changes");
+    assert!(!window.has_modal());
+    assert_eq!(layer_name(&window), "Sand");
+    assert!(window.editor().has_unsaved());
+}
+
+#[test]
 fn layer_toggles_are_undoable_edits() {
     let scratch = Scratch::new("window-layer-toggles").unwrap();
     let Some(path) = desert(&scratch) else {

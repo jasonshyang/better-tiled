@@ -67,6 +67,13 @@ impl TestWindow {
         self.settle();
     }
 
+    /// Lets the watcher look at the files on disk now, and waits for what that brings.
+    pub(crate) fn poll_files(&mut self) {
+        self.harness.state_mut().poll_files_now();
+        self.harness.run_steps(2);
+        self.settle();
+    }
+
     /// Presses a key with modifiers.
     pub(crate) fn press(&mut self, modifiers: egui::Modifiers, key: egui::Key) {
         self.harness.key_press_modifiers(modifiers, key);

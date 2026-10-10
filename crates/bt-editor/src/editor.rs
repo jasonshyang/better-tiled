@@ -21,6 +21,7 @@ use crate::session::Session;
 use crate::settings::Settings;
 use crate::store::{AssetId, AssetStore, NewAsset, Root};
 use crate::tools::ToolState;
+use crate::watch::WatchModel;
 
 /// Sets up an [`Editor`].
 #[derive(Clone, Debug)]
@@ -81,6 +82,7 @@ impl EditorBuilder {
                 ..Files::default()
             },
             recovery: RecoveryPlan::new(self.recovery_folder, self.pid),
+            watch: WatchModel::default(),
             session: Session::default(),
             session_generation: 0,
             restore_current: None,
@@ -99,6 +101,7 @@ pub struct Editor {
     pub(crate) tools: ToolState,
     pub(crate) files: Files,
     pub(crate) recovery: RecoveryPlan,
+    pub(crate) watch: WatchModel,
     pub(crate) session: Session,
     session_generation: u64,
     /// The file that was current in a session being restored, kept current as the others load.
@@ -178,6 +181,7 @@ impl Editor {
                 Vec::new()
             }
             Intent::Recoverable(orphans) => self.offer_recovery(orphans),
+            Intent::Observed(observations) => self.observe(observations),
             Intent::Tick { now_ms } => self.tick(now_ms),
         }
     }
@@ -432,7 +436,7 @@ pub(crate) fn warn(error: EditError) -> Effect {
 }
 
 /// The topmost layer that is not a group, depth first.
-fn topmost_leaf(map: &Map) -> Option<LayerId> {
+pub(crate) fn topmost_leaf(map: &Map) -> Option<LayerId> {
     let mut found = None;
     map.for_each_layer(|layer, _| {
         if !matches!(layer.kind, LayerKind::Group(_)) {

@@ -170,6 +170,18 @@ fn question_text(question: &Question) -> QuestionText {
                 .chain(names.iter().map(|name| format!("• {name}")))
                 .collect(),
         },
+        Question::Conflict { name, returned } => QuestionText {
+            title: if *returned {
+                format!("“{name}” is back, with other contents")
+            } else {
+                format!("“{name}” changed on disk")
+            },
+            lines: vec![
+                "It has unsaved changes here. Keep them, or take the file as it is on disk?"
+                    .to_owned(),
+                "Reloading can be undone.".to_owned(),
+            ],
+        },
     }
 }
 
@@ -180,6 +192,8 @@ fn choice_label(choice: Choice) -> &'static str {
         Choice::Cancel => "Cancel",
         Choice::Recover => "Recover",
         Choice::Discard => "Discard",
+        Choice::KeepMine => "Keep My Changes",
+        Choice::Reload => "Reload",
     }
 }
 

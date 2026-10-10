@@ -260,6 +260,12 @@ impl MapRenderer {
         self.sprites.release_unused(self.frame);
     }
 
+    /// Forgets what was read from image files that changed on disk; whatever uses them is
+    /// drawn from the files again.
+    pub fn forget_image_files(&mut self, files: &[std::path::PathBuf]) {
+        self.sprites.forget_files(files);
+    }
+
     /// The last prepared frame's account.
     pub fn stats(&self) -> &RenderStats {
         &self.stats

@@ -25,6 +25,8 @@ pub enum Effect {
     WriteSnapshot(Snapshot),
     /// Delete a recovery snapshot and its description.
     DeleteSnapshot(PathBuf),
+    /// Images changed on disk: decode them again.
+    ReloadImages(Vec<PathBuf>),
     /// Show a dialog of the window's; it reports back with intents.
     Show(Dialog),
     /// Close the window: nothing unsaved is left, or the user chose to lose it.
@@ -101,6 +103,14 @@ pub enum Question {
         /// The names of the files.
         names: Vec<String>,
     },
+    /// A file with unsaved changes changed on disk (or came back changed after it was gone):
+    /// keep the changes, or take what is on disk?
+    Conflict {
+        /// The file's name.
+        name: String,
+        /// Whether the file had been gone.
+        returned: bool,
+    },
 }
 
 /// Why unsaved work is asked about.
@@ -125,4 +135,8 @@ pub enum Choice {
     Recover,
     /// Delete the snapshots.
     Discard,
+    /// Keep the unsaved changes over what is on disk.
+    KeepMine,
+    /// Take what is on disk, losing the unsaved changes (the reload can be undone).
+    Reload,
 }

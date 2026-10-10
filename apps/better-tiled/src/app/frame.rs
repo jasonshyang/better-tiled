@@ -19,7 +19,7 @@ use super::tabs::tab_strip;
 use crate::canvas::{Canvas, CanvasFrame, CanvasGpu};
 use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun};
 use crate::dialogs::Modals;
-use crate::files::{BackgroundWriter, dropped_files};
+use crate::files::{BackgroundWriter, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{LayersPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
@@ -45,6 +45,12 @@ pub(crate) struct App {
     pub(super) modals: Modals,
     pub(super) workers: Workers,
     pub(super) writer: BackgroundWriter,
+    /// Looks at the files on disk for changes.
+    watcher: Watcher,
+    /// When the watcher was last told which files to look at.
+    watch_listed: Instant,
+    /// Whether intents were applied since then, so the list may be out of date.
+    watch_list_stale: bool,
     pub(super) gpu: Option<CanvasGpu>,
     images: Arc<Mutex<ImageStore>>,
     pub(super) intents: Vec<Intent>,
@@ -80,8 +86,14 @@ impl App {
         let render_state = cc.wgpu_render_state.as_ref().ok_or_else(|| {
             "better-tiled draws maps with wgpu, and the window has no wgpu device".to_owned()
         })?;
+        let checking = startup.screenshot.is_some() || startup.bench;
         let mut app = App::assemble(&cc.egui_ctx, startup)?;
         app.gpu = Some(CanvasGpu::install(render_state, Arc::clone(&app.images)));
+        if !checking && let Err(problem) = app.watcher.start(cc.egui_ctx.clone(), WATCH_INTERVAL) {
+            app.notify(Notice::warning(format!(
+                "Files changed by other programs will not be noticed: {problem}"
+            )));
+        }
         if let Err(reason) = install_system_quit_guard(Arc::clone(&app.quit_guard)) {
             app.notify(Notice::warning(format!(
                 "Quitting from the app menu or the Dock will not ask about unsaved work: {reason}"
@@ -106,6 +118,13 @@ impl App {
     #[cfg(test)]
     pub(crate) fn is_busy(&self) -> bool {
         self.workers.is_busy() || !self.intents.is_empty()
+    }
+
+    /// Looks at the watched files now, as the watcher's thread would (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn poll_files_now(&mut self) {
+        self.watcher.set_watched(self.editor.watched());
+        self.watcher.poll_now();
     }
 
     /// Whether a modal is open (for the window's tests).
@@ -154,6 +173,9 @@ impl App {
             modals: Modals::default(),
             workers: Workers::new(ctx.clone()),
             writer,
+            watcher: Watcher::new(),
+            watch_listed: Instant::now(),
+            watch_list_stale: true,
             gpu: None,
             images: Arc::new(Mutex::new(images)),
             intents: Vec::new(),
@@ -217,12 +239,29 @@ impl App {
     /// Applies the intents collected, in order, and carries out what they return.
     pub(super) fn apply_intents(&mut self, ctx: &egui::Context) {
         while !self.intents.is_empty() {
+            self.watch_list_stale = true;
             let intents = std::mem::take(&mut self.intents);
             for intent in intents {
                 let effects = self.editor.apply(intent);
                 self.carry_out_all(ctx, effects);
             }
         }
+    }
+
+    /// Tells the watcher which files to look at, at most once per poll: what is open changes
+    /// only through intents, so a frame comes after any change.
+    fn list_watched_files(&mut self, ctx: &egui::Context) {
+        if !self.watch_list_stale {
+            return;
+        }
+        let since = self.watch_listed.elapsed();
+        if since < WATCH_INTERVAL {
+            ctx.request_repaint_after(WATCH_INTERVAL - since);
+            return;
+        }
+        self.watcher.set_watched(self.editor.watched());
+        self.watch_listed = Instant::now();
+        self.watch_list_stale = false;
     }
 
     /// Shows a notice in the status bar, or as a dialog when it has details.
@@ -498,6 +537,9 @@ impl eframe::App for App {
         self.frame_started = Instant::now();
         let finished = self.workers.take_results();
         self.intents.extend(finished);
+        if let Some(observed) = self.watcher.take_observations() {
+            self.intents.push(Intent::Observed(observed));
+        }
         let now_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.intents.push(Intent::Tick { now_ms });
         self.handle_system_quit(ctx);
@@ -508,6 +550,7 @@ impl eframe::App for App {
         if self.editor.has_unsaved() {
             ctx.request_repaint_after(RECOVERY_TICK);
         }
+        self.list_watched_files(ctx);
         self.sync_quit_guard();
     }
 
@@ -534,6 +577,7 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self) {
+        self.watcher.stop();
         if !self.quit_allowed {
             // The run ends without a quit anyone answered (the system's, when the quit guard
             // could not be set up): the last snapshots of unsaved work are written and kept for

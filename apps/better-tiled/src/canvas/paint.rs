@@ -15,11 +15,13 @@ struct CanvasRenderer {
     renderer: MapRenderer,
 }
 
-/// What the canvases share: the image store and the last frame's account.
+/// What the canvases share: the image store, the last frame's account, and the way to the
+/// renderer outside a frame.
 #[derive(Clone)]
 pub(crate) struct CanvasGpu {
     images: Arc<Mutex<ImageStore>>,
     stats: Arc<Mutex<RenderStats>>,
+    render_state: egui_wgpu::RenderState,
 }
 
 impl CanvasGpu {
@@ -42,6 +44,15 @@ impl CanvasGpu {
         CanvasGpu {
             images,
             stats: Arc::default(),
+            render_state: render_state.clone(),
+        }
+    }
+
+    /// Makes the renderer forget images whose files changed on disk.
+    pub(crate) fn forget_image_files(&self, files: &[std::path::PathBuf]) {
+        let mut renderer = self.render_state.renderer.write();
+        if let Some(canvas) = renderer.callback_resources.get_mut::<CanvasRenderer>() {
+            canvas.renderer.forget_image_files(files);
         }
     }
 

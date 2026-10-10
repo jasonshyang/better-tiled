@@ -17,7 +17,9 @@ use crate::effect::DecisionId;
 use crate::store::AssetId;
 
 pub use load::{LoadJob, Loaded};
-pub(crate) use load::{LoadSource, ProjectChoice};
+pub(crate) use load::{
+    LoadKind, LoadPurpose, LoadSource, LoadedContent, LoadedFiles, ProjectChoice,
+};
 
 /// What the editor knows about files beyond the assets: the loaders the maps were read with
 /// (holding their templates, for writing), the open project, questions awaiting answers, and
@@ -44,4 +46,11 @@ pub(crate) enum Pending {
     Quit,
     /// Opening snapshots of an earlier run again.
     Recover(Vec<crate::recovery::Orphan>),
+    /// A file changed on disk under unsaved work: the content hash on disk when asked.
+    Conflict {
+        /// The asset.
+        asset: AssetId,
+        /// What the file held when the question was asked.
+        content_hash: u64,
+    },
 }

@@ -10,6 +10,7 @@ use crate::document::{DocumentId, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::Loaded;
 use crate::recovery::Orphan;
+use crate::watch::Observation;
 
 /// A request to the editor.
 #[derive(Debug)]
@@ -81,6 +82,8 @@ pub enum Intent {
     },
     /// Snapshots of an earlier run that did not end cleanly, found at start.
     Recoverable(Vec<Orphan>),
+    /// What the watched files hold now (`Editor::watched`).
+    Observed(Vec<Observation>),
     /// Time passed: the recovery schedule runs.
     Tick {
         /// Milliseconds since some fixed point (monotonic).

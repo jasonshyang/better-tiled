@@ -212,6 +212,13 @@ impl AssetStore {
         }
     }
 
+    /// Records whether an asset's file is gone (the asset is then the only copy, and dirty).
+    pub(crate) fn set_missing(&mut self, id: AssetId, missing: bool) {
+        if let Some(asset) = self.assets.get_mut(&id) {
+            asset.missing = missing;
+        }
+    }
+
     /// Moves an asset to another file (Save As).
     pub(crate) fn retarget(&mut self, id: AssetId, path: PathBuf) {
         let Some(asset) = self.assets.get_mut(&id) else {

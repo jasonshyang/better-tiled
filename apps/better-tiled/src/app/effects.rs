@@ -42,6 +42,11 @@ impl App {
                 }
             }
             Effect::Show(dialog) => log::warn!("the {dialog:?} dialog is not built yet"),
+            Effect::ReloadImages(paths) => {
+                if let Some(gpu) = &self.gpu {
+                    gpu.forget_image_files(&paths);
+                }
+            }
             Effect::WriteSnapshot(snapshot) => self.writer.write_snapshot(snapshot),
             Effect::DeleteSnapshot(path) => self.writer.delete_snapshot(path),
             Effect::Quit => {

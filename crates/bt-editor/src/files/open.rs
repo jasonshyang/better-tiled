@@ -6,7 +6,9 @@ use std::sync::Arc;
 use crate::document::{DocumentId, Selection, ViewState};
 use crate::editor::Editor;
 use crate::effect::Effect;
-use crate::files::{LoadJob, LoadSource, Loaded, ProjectChoice};
+use crate::files::{
+    LoadJob, LoadKind, LoadPurpose, LoadSource, Loaded, LoadedContent, LoadedFiles, ProjectChoice,
+};
 use crate::notice::Notice;
 use crate::store::{AssetKind, NewAsset, Root};
 
@@ -42,6 +44,8 @@ impl Editor {
             path,
             source,
             project,
+            kind: LoadKind::Map,
+            purpose: LoadPurpose::Open,
         }
     }
 
@@ -58,6 +62,20 @@ impl Editor {
     /// the map, and a document showing it.
     pub(crate) fn finish_load(&mut self, loaded: Loaded) -> Vec<Effect> {
         let mut effects = Vec::new();
+        if let LoadPurpose::Reload(asset) = loaded.purpose {
+            let mut effects = match loaded.outcome {
+                Ok(files) => self.finish_reload(asset, files),
+                Err(message) => vec![Effect::Notify(
+                    Notice::error(format!(
+                        "Cannot reload {}",
+                        bt_utils::paths::display_name(&loaded.path)
+                    ))
+                    .with_detail(message),
+                )],
+            };
+            effects.extend(self.settle_watch(asset));
+            return effects;
+        }
         let files = match loaded.outcome {
             Ok(files) => files,
             Err(message) => {
@@ -71,6 +89,12 @@ impl Editor {
             }
         };
         let path = loaded.canonical.clone();
+        let LoadedContent::Map(map) = files.content else {
+            return vec![Effect::Notify(Notice::error(format!(
+                "{} is a tileset; tilesets open with the tileset editor",
+                bt_utils::paths::display_name(&path)
+            )))];
+        };
         if loaded.recovered_from.is_none()
             && let Some(doc) = self.document_of_path(&path)
         {
@@ -89,17 +113,8 @@ impl Editor {
             });
             self.files.project = Some(id);
         }
-        for tileset in files.tilesets {
-            if self.store.by_path(&tileset.path).is_none() {
-                self.store.insert(NewAsset {
-                    root: Root::Tileset(tileset.tileset),
-                    path: Some(tileset.path),
-                    content_hash: Some(tileset.content_hash),
-                    warnings: Vec::new(),
-                });
-            }
-        }
-        let mut map = files.map;
+        let mut map = *map;
+        self.adopt_tilesets(files.tilesets);
         self.store.refresh_tilesets(&mut map);
         let warning_count = files.warnings.len();
         // A recovered map replaces nothing: if its file is open, it opens beside it, unsaved.
@@ -133,6 +148,72 @@ impl Editor {
         }
         self.session_changed();
         effects
+    }
+
+    /// Puts the external tilesets a load read into the store, unless it has their files.
+    fn adopt_tilesets(&mut self, tilesets: Vec<crate::files::load::LoadedTileset>) {
+        for tileset in tilesets {
+            if self.store.by_path(&tileset.path).is_none() {
+                self.store.insert(NewAsset {
+                    root: Root::Tileset(tileset.tileset),
+                    path: Some(tileset.path),
+                    content_hash: Some(tileset.content_hash),
+                    warnings: Vec::new(),
+                });
+            }
+        }
+    }
+
+    /// Takes in what a file holds now that it changed on disk: a map's new content is a
+    /// transaction of the document showing it (so the reload can be undone), a tileset's
+    /// replaces the store's root everywhere. Either is then what is on disk.
+    fn finish_reload(&mut self, asset: crate::store::AssetId, files: LoadedFiles) -> Vec<Effect> {
+        let Some(content_hash) = files.content_hash else {
+            return Vec::new();
+        };
+        let name = self
+            .store
+            .get(asset)
+            .map(crate::store::Asset::display_name)
+            .unwrap_or_default();
+        match files.content {
+            LoadedContent::Map(map) => {
+                let mut map = *map;
+                self.adopt_tilesets(files.tilesets);
+                self.store.refresh_tilesets(&mut map);
+                let Some(doc) = self
+                    .documents
+                    .in_order()
+                    .find(|d| d.asset() == asset)
+                    .map(|d| d.id())
+                else {
+                    return Vec::new();
+                };
+                let fallback = super::super::editor::topmost_leaf(&map);
+                let result = self.transact(doc, "Reload", |tx| {
+                    let current = tx.selection.current_layer;
+                    if current.is_none_or(|id| map.layer(id).is_none()) {
+                        tx.selection = fallback.map(Selection::of_layer).unwrap_or_default();
+                    }
+                    *tx.map_mut(asset)? = map;
+                    Ok::<_, crate::error::EditError>(())
+                });
+                if let Err(error) = result {
+                    return vec![Effect::Notify(Notice::error(format!(
+                        "Cannot reload {name}: {error}"
+                    )))];
+                }
+                self.files.loaders.insert(asset, files.loader);
+            }
+            LoadedContent::Tileset(tileset) => {
+                let version = self.store.next_version(asset);
+                self.store.set_root(asset, Root::Tileset(tileset), version);
+            }
+        }
+        self.store.mark_saved(asset, content_hash);
+        vec![Effect::Notify(Notice::info(format!(
+            "{name} changed on disk and was reloaded"
+        )))]
     }
 
     /// Puts back a file's remembered camera and current layer.

@@ -17,6 +17,7 @@ mod session;
 mod settings;
 mod store;
 mod tools;
+mod watch;
 
 pub use actions::{
     ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
@@ -45,3 +46,4 @@ pub use settings::{
 };
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
 pub use tools::{MAX_BRUSH_SIZE, ToolFamily, ToolKind, ToolState};
+pub use watch::{Found, Observation};

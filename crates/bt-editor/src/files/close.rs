@@ -143,6 +143,7 @@ impl Editor {
         let choices = match &question {
             Question::Unsaved { .. } => vec![Choice::Save, Choice::DontSave, Choice::Cancel],
             Question::Recover { .. } => vec![Choice::Recover, Choice::Discard],
+            Question::Conflict { .. } => vec![Choice::KeepMine, Choice::Reload],
         };
         self.files.pending.insert(id, pending);
         Effect::Ask(Decision {
@@ -172,7 +173,11 @@ impl Editor {
                     effects
                 }
                 Choice::DontSave => self.close_now(doc),
-                Choice::Cancel | Choice::Recover | Choice::Discard => Vec::new(),
+                Choice::Cancel
+                | Choice::Recover
+                | Choice::Discard
+                | Choice::KeepMine
+                | Choice::Reload => Vec::new(),
             },
             Pending::Quit => match choice {
                 Choice::Save => {
@@ -180,7 +185,11 @@ impl Editor {
                     self.continue_quit()
                 }
                 Choice::DontSave => self.quit_now(),
-                Choice::Cancel | Choice::Recover | Choice::Discard => Vec::new(),
+                Choice::Cancel
+                | Choice::Recover
+                | Choice::Discard
+                | Choice::KeepMine
+                | Choice::Reload => Vec::new(),
             },
             Pending::Recover(orphans) => match choice {
                 Choice::Recover => self.recover(orphans),
@@ -188,8 +197,16 @@ impl Editor {
                     .into_iter()
                     .map(|orphan| Effect::DeleteSnapshot(orphan.snapshot))
                     .collect(),
-                Choice::Save | Choice::DontSave | Choice::Cancel => Vec::new(),
+                Choice::Save
+                | Choice::DontSave
+                | Choice::Cancel
+                | Choice::KeepMine
+                | Choice::Reload => Vec::new(),
             },
+            Pending::Conflict {
+                asset,
+                content_hash,
+            } => self.decide_conflict(asset, content_hash, choice),
         }
     }
 

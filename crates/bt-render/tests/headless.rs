@@ -331,3 +331,47 @@ fn far_out_squares_stack_oversized_tiles_across_their_edges_as_tiled_does() {
     );
     assert_eq!(picture.pixel(6, 130), Some(low), "the tall tile's own cell");
 }
+
+#[test]
+fn an_image_that_changed_on_disk_is_drawn_again_once_forgotten() {
+    let Some(device) = device() else { return };
+    let scratch = bt_test_data::Scratch::new("bt-render-forget").unwrap();
+    let atlas = Atlas::builder().build_in(scratch.path()).unwrap();
+    let map = MapBuilder::new(UVec2::new(16, 16), UVec2::new(1, 1))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", "0")
+        .build()
+        .unwrap();
+    let map = Arc::new(map);
+    let mut renderer = MapRenderer::builder(
+        device.device(),
+        device.queue(),
+        wgpu::TextureFormat::Rgba8Unorm,
+    )
+    .build();
+    let mut store = ImageStore::builder().build().unwrap();
+    let before = Render::of(Arc::clone(&map))
+        .run_with(device.device(), device.queue(), &mut renderer, &mut store)
+        .unwrap();
+    assert_eq!(before.pixel(8, 8), Some(Atlas::tile_color(TileId(0))));
+
+    // The atlas image painted over in one colour, as an image editor would save it.
+    let path = match &atlas.tileset.image {
+        bt_core::TilesetImage::Atlas { image, .. } => match &image.source {
+            bt_core::ImageSource::File(file) => file.path.clone(),
+            bt_core::ImageSource::Embedded(_) => panic!("a file"),
+        },
+        bt_core::TilesetImage::Collection => panic!("an atlas"),
+    };
+    let size = image::image_dimensions(&path).unwrap();
+    let red = image::RgbaImage::from_pixel(size.0, size.1, image::Rgba([255, 0, 0, 255]));
+    // A file's key is its path and modification time; make sure the time moves on.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    red.save(&path).unwrap();
+
+    renderer.forget_image_files(std::slice::from_ref(&path));
+    let after = Render::of(map)
+        .run_with(device.device(), device.queue(), &mut renderer, &mut store)
+        .unwrap();
+    assert_eq!(after.pixel(8, 8), Some([255, 0, 0, 255]));
+}
