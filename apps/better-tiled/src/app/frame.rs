@@ -502,6 +502,8 @@ impl App {
             .resizable(true)
             .default_size(220.0)
             .show(ui, |ui| {
+                ui.heading("Layers");
+                ui.separator();
                 self.layers_panel
                     .show(ui, &self.editor, doc, &mut self.intents);
             });

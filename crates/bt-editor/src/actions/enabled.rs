@@ -70,7 +70,10 @@ impl Editor {
             return Enabled::Disabled(reason);
         }
         if super::execute::pending(id) {
-            return Enabled::Disabled(None);
+            return Enabled::Disabled(Some(format!(
+                "{} is not built yet",
+                id.spec().label.trim_end_matches('…')
+            )));
         }
         let history = here.document.map(Document::history);
         let selection = here.document.map(Document::selection);

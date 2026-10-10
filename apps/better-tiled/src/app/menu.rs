@@ -1,28 +1,16 @@
-//! The menu bar: the action table arranged in menus, each item asking the editor whether it is
-//! enabled and checked and the keymap what its key is.
+//! The menu bar: the action table arranged in menus (`crate::menus` draws their items).
 
-use bt_editor::{ActionId, ActionKind, Editor, Enabled, Intent};
+use bt_editor::{ActionId, Editor, Intent};
 
-/// An entry of a menu.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum Entry {
-    /// A command.
-    Action(ActionId),
-    /// A line between groups.
-    Separator,
-    /// The recently opened files.
-    RecentFiles,
-    /// A menu inside the menu.
-    Submenu(&'static str, &'static [Entry]),
-}
+use crate::menus::{MenuEntry, NEW_LAYER_MENU, menu_entries};
 
 /// A menu of the menu bar.
 struct Menu {
     title: &'static str,
-    entries: &'static [Entry],
+    entries: &'static [MenuEntry],
 }
 
-use Entry::{Action, Separator, Submenu};
+use MenuEntry::{Action, Separator, Submenu};
 
 /// The menus, in order.
 const MENUS: [Menu; 7] = [
@@ -33,7 +21,7 @@ const MENUS: [Menu; 7] = [
             Action(ActionId::NewTileset),
             Separator,
             Action(ActionId::Open),
-            Entry::RecentFiles,
+            MenuEntry::RecentFiles,
             Separator,
             Action(ActionId::Save),
             Action(ActionId::SaveAs),
@@ -108,15 +96,7 @@ const MENUS: [Menu; 7] = [
     Menu {
         title: "Layer",
         entries: &[
-            Submenu(
-                "New",
-                &[
-                    Action(ActionId::NewTileLayer),
-                    Action(ActionId::NewObjectLayer),
-                    Action(ActionId::NewImageLayer),
-                    Action(ActionId::NewGroupLayer),
-                ],
-            ),
+            Submenu("New", NEW_LAYER_MENU),
             Action(ActionId::LayerViaCopy),
             Action(ActionId::LayerViaCut),
             Separator,
@@ -192,55 +172,6 @@ pub(crate) fn menu_bar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>
     });
 }
 
-fn menu_entries(ui: &mut egui::Ui, editor: &Editor, entries: &[Entry], out: &mut Vec<Intent>) {
-    for entry in entries {
-        match entry {
-            Entry::Action(id) => action_item(ui, editor, *id, out),
-            Entry::Separator => {
-                ui.separator();
-            }
-            Entry::RecentFiles => recent_files(ui, editor, out),
-            Entry::Submenu(title, inner) => {
-                ui.menu_button(*title, |ui| menu_entries(ui, editor, inner, out));
-            }
-        }
-    }
-}
-
-fn action_item(ui: &mut egui::Ui, editor: &Editor, id: ActionId, out: &mut Vec<Intent>) {
-    let spec = id.spec();
-    let label = match (spec.kind, editor.checked(id)) {
-        (ActionKind::Toggle | ActionKind::Tool(_), Some(true)) => format!("✔ {}", spec.label),
-        (ActionKind::Toggle | ActionKind::Tool(_), _) => format!("    {}", spec.label),
-        (ActionKind::Command, _) => spec.label.to_owned(),
-    };
-    let mut button = egui::Button::new(label);
-    if let Some(key) = editor.keymap().key_text(id) {
-        button = button.shortcut_text(key);
-    }
-    let enabled = editor.enabled(id) == Enabled::Enabled;
-    if ui.add_enabled(enabled, button).clicked() {
-        out.push(Intent::Run(id));
-        ui.close();
-    }
-}
-
-fn recent_files(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>) {
-    let recent = editor.session().recent_files;
-    ui.add_enabled_ui(!recent.is_empty(), |ui| {
-        ui.menu_button("Open Recent", |ui| {
-            for path in recent {
-                let name = bt_utils::paths::display_name(&path);
-                let response = ui.button(name).on_hover_text(path.display().to_string());
-                if response.clicked() {
-                    out.push(Intent::Open(path));
-                    ui.close();
-                }
-            }
-        });
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use bt_editor::ACTIONS;
@@ -249,12 +180,12 @@ mod tests {
 
     #[test]
     fn every_command_is_in_a_menu_once() {
-        fn collect(entries: &[Entry], listed: &mut Vec<ActionId>) {
+        fn collect(entries: &[MenuEntry], listed: &mut Vec<ActionId>) {
             for entry in entries {
                 match entry {
-                    Entry::Action(id) => listed.push(*id),
-                    Entry::Submenu(_, inner) => collect(inner, listed),
-                    Entry::Separator | Entry::RecentFiles => {}
+                    MenuEntry::Action(id) => listed.push(*id),
+                    MenuEntry::Submenu(_, inner) => collect(inner, listed),
+                    MenuEntry::Separator | MenuEntry::RecentFiles => {}
                 }
             }
         }

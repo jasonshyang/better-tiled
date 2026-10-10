@@ -187,6 +187,11 @@ impl Editor {
                 self.select_layer(doc, layer);
                 Vec::new()
             }
+            Intent::SelectLayers {
+                doc,
+                current,
+                layers,
+            } => self.select_layers(doc, current, &layers),
             Intent::SelectTiles { doc, region, mode } => {
                 self.select_tiles(doc, &region, mode);
                 Vec::new()
@@ -233,6 +238,13 @@ impl Editor {
             Intent::RenameLayer { doc, layer, name } => {
                 self.edit_layer(doc, layer, "Rename Layer", |l| l.name = name)
             }
+            Intent::MoveLayers { doc, layers, to } => self.move_layers_to(doc, &layers, to),
+            Intent::SetLayerOpacity {
+                doc,
+                layers,
+                opacity,
+                done,
+            } => self.set_layers_opacity(doc, &layers, opacity, done),
             Intent::SetCamera { doc, view } => {
                 if let Some(document) = self.documents.get_mut(doc) {
                     document.camera = Some(view);

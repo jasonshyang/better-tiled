@@ -1,19 +1,23 @@
 //! The Layer menu's commands, each one step of the history: new layers, Layer via Copy and
 //! Cut, groups, duplicates, merging down, removing, moving up and down, choosing the next or
-//! previous layer, and showing, hiding, locking and unlocking the selected or the other layers.
-//! The operations are `bt_edit`'s; this decides what becomes selected afterwards.
+//! previous layer, and showing, hiding, locking and unlocking the selected or the other layers;
+//! and the Layers panel's drag and drop and opacity slider. The operations are `bt_edit`'s; this
+//! decides what becomes selected afterwards.
 
 use bt_core::{LayerId, LayerKind, Map};
 use bt_edit::{
-    LayerType, LayerViaSource, LayersReport, can_merge_down, duplicate_layers, group_layers,
-    layer_order, layer_via_copy, layer_via_cut, lower_layers, merge_layers_down, new_layer,
-    other_layers, raise_layers, remove_layers, toggle_locked, toggle_visible, ungroup_layers,
+    LayerLocation, LayerType, LayerViaSource, LayersReport, can_merge_down, duplicate_layers,
+    group_layers, layer_order, layer_via_copy, layer_via_cut, lower_layers, merge_layers_down,
+    move_layers, new_layer, other_layers, raise_layers, remove_layers, toggle_locked,
+    toggle_visible, ungroup_layers,
 };
 
 use crate::document::{DocumentId, Selection};
 use crate::editor::{Editor, warn};
 use crate::effect::Effect;
 use crate::error::EditError;
+use crate::history::MergeKey;
+use crate::notice::Notice;
 
 /// What becomes selected after a layer command.
 enum After {
@@ -161,6 +165,71 @@ impl Editor {
                 toggle_visible(map, &others)?
             })
         })
+    }
+
+    /// Drags layers to `to` as one step (Tiled's `LayerModel::dropMimeData`): a layer inside a
+    /// group dragged with it stays in its group, which carries it. The selection stays.
+    pub(crate) fn move_layers_to(
+        &mut self,
+        doc: DocumentId,
+        layers: &[LayerId],
+        to: LayerLocation,
+    ) -> Vec<Effect> {
+        let Some(map) = self.map_of(doc) else {
+            return Vec::new();
+        };
+        let outermost: Vec<LayerId> = layers
+            .iter()
+            .copied()
+            .filter(|id| {
+                map.layer_path(*id).is_none_or(|path| {
+                    !path
+                        .iter()
+                        .any(|outer| outer != id && layers.contains(outer))
+                })
+            })
+            .collect();
+        let label = if outermost.len() == 1 {
+            "Drag Layer"
+        } else {
+            "Drag Layers"
+        };
+        self.layer_command(doc, label, After::Same, |map, _| {
+            Ok(move_layers(map, &outermost, to.parent, to.index)?)
+        })
+    }
+
+    /// Sets layers' opacity; the changes of one drag of the slider fold into one step, which
+    /// `done` ends. An opacity outside 0 to 1 changes nothing and says so.
+    pub(crate) fn set_layers_opacity(
+        &mut self,
+        doc: DocumentId,
+        layers: &[LayerId],
+        opacity: f64,
+        done: bool,
+    ) -> Vec<Effect> {
+        if !(0.0..=1.0).contains(&opacity) {
+            return vec![Effect::Notify(Notice::warning(format!(
+                "An opacity is from 0 to 1, not {opacity}"
+            )))];
+        }
+        let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
+            return Vec::new();
+        };
+        let key = MergeKey(format!("layer opacity {layers:?}"));
+        let result = self.transact_merging(doc, "Change Layer Opacity", key, |tx| {
+            let map = tx.map_mut(asset)?;
+            for id in layers {
+                map.layer_mut(*id)
+                    .ok_or(EditError::NoSuchLayer(*id))?
+                    .opacity = opacity;
+            }
+            Ok::<_, EditError>(())
+        });
+        if done {
+            self.break_merge(doc);
+        }
+        result.err().map(warn).into_iter().collect()
     }
 
     /// Makes the next layer above (or below) the current one current, in draw order.

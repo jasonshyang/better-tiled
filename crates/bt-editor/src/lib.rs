@@ -67,6 +67,6 @@ pub use watch::{Found, Observation};
 
 // The editing types the intents and queries speak in.
 pub use bt_edit::{
-    Brush, BrushMode, FillShape, ResizeHandle, SelectionMode, TileRegion, rect_select_rect,
+    Brush, BrushMode, FillShape, LayerLocation, ResizeHandle, SelectionMode, TileRegion, rect_select_rect,
     shape_fill_region,
 };

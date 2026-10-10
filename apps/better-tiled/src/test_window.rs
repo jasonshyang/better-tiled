@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use bt_editor::Editor;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use crate::app::{App, Startup};
 use crate::cli::Cli;
@@ -263,6 +263,50 @@ impl TestWindow {
         // middle misses widgets inside a scroll area of a modal.
         node.click_accesskit();
         self.settle();
+    }
+
+    /// Clicks the first widget labelled `label` with the pointer, holding `modifiers` (Shift
+    /// and ⌘ clicks in a panel).
+    pub(crate) fn click_holding(&mut self, label: &str, modifiers: egui::Modifiers) {
+        self.node(label).click_modifiers(modifiers);
+        self.settle();
+    }
+
+    /// Right-clicks the first widget labelled `label`.
+    pub(crate) fn right_click(&mut self, label: &str) {
+        self.node(label).click_secondary();
+        self.settle();
+    }
+
+    /// Drags the first widget labelled `label` from its middle to `along` the height of the
+    /// first widget labelled `onto` (0 its top edge, 1 its bottom), with the primary button.
+    pub(crate) fn drag_onto(&mut self, label: &str, onto: &str, along: f32) {
+        let from = self.node(label).rect().center();
+        let target = self.node(onto).rect();
+        let to = egui::pos2(target.center().x, target.top() + target.height() * along);
+        self.drag_on_screen(from, to, egui::Modifiers::NONE);
+    }
+
+    /// Drags across the first widget labelled `label`, halfway down it, from `from` to `to` of
+    /// its width (a slider).
+    pub(crate) fn drag_across(&mut self, label: &str, from: f32, to: f32) {
+        let rect = self.node(label).rect();
+        let at = |along: f32| egui::pos2(rect.left() + rect.width() * along, rect.center().y);
+        self.drag_on_screen(at(from), at(to), egui::Modifiers::NONE);
+    }
+
+    /// Whether the first widget labelled `label` is greyed out.
+    pub(crate) fn is_disabled(&self, label: &str) -> bool {
+        self.node(label).accesskit_node().is_disabled()
+    }
+
+    /// The first widget labelled `label`.
+    fn node<'a>(&'a self, label: &'a str) -> egui_kittest::Node<'a> {
+        let node = self.harness.get_all_by_label(label).next();
+        let Some(node) = node else {
+            panic!("no widget is labelled “{label}”");
+        };
+        node
     }
 
     /// Double-clicks the first widget labelled `label`.

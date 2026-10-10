@@ -930,3 +930,190 @@ fn select_objects_resizes_by_its_handles_and_a_second_click_rotates() {
         turned.rotation
     );
 }
+
+/// A map of empty layers written in `scratch`: `1:ground 2:walls[3:floor 4:things] 5:sky`,
+/// tile layers but for the object layer “things”, which holds one rectangle.
+fn layered_map(scratch: &Scratch) -> PathBuf {
+    use bt_core::{Layer, LayerKind, MapObject};
+    use bt_test_data::fixtures::MapBuilder;
+    use glam::{DVec2, UVec2};
+
+    let (tile, size) = (UVec2::splat(16), UVec2::new(8, 6));
+    let mut inner = MapBuilder::new(tile, size)
+        .tile_layer("floor", "")
+        .object_layer(
+            "things",
+            vec![MapObject {
+                pos: DVec2::new(16.0, 16.0),
+                size: DVec2::new(32.0, 16.0),
+                ..MapObject::default()
+            }],
+        )
+        .build()
+        .unwrap()
+        .layers;
+    for layer in &mut inner {
+        layer.id = LayerId(0);
+    }
+    let map = MapBuilder::new(tile, size)
+        .tile_layer("ground", "")
+        .layer(Layer::new(LayerId(0), "walls", LayerKind::Group(inner)))
+        .tile_layer("sky", "")
+        .build()
+        .unwrap();
+    let path = scratch.join("layers.tmx");
+    bt_tmx::WriteRequest::for_map(&map, &path).write().unwrap();
+    path
+}
+
+/// The current map's layers as `id:name`, bottom first, a group's layers in brackets after it.
+fn layer_tree(window: &TestWindow) -> String {
+    fn walk(layers: &[bt_core::Layer]) -> String {
+        layers
+            .iter()
+            .map(|layer| match &layer.kind {
+                bt_core::LayerKind::Group(children) => {
+                    format!("{}:{}[{}]", layer.id.0, layer.name, walk(children))
+                }
+                _ => format!("{}:{}", layer.id.0, layer.name),
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    let doc = window.editor().current().unwrap();
+    walk(&window.editor().map_of(doc).unwrap().layers)
+}
+
+/// The current document's selection.
+fn selection(window: &TestWindow) -> bt_editor::Selection {
+    let doc = window.editor().current().unwrap();
+    window.editor().document(doc).unwrap().selection().clone()
+}
+
+/// What kind the current map's layer is, in words.
+fn kind_of(window: &TestWindow, layer: LayerId) -> Option<&'static str> {
+    let doc = window.editor().current().unwrap();
+    let map = window.editor().map_of(doc).unwrap();
+    map.layer(layer).map(|layer| layer.kind_name())
+}
+
+#[test]
+fn the_layers_panel_selects_drags_and_runs_the_layer_commands() {
+    use egui::{Key, Modifiers};
+
+    let scratch = Scratch::new("window-layers-panel").unwrap();
+    let path = layered_map(&scratch);
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    assert_eq!(selection(&window).current_layer, Some(LayerId(5)));
+
+    // A click takes a layer alone, a Shift-click the rows from it, a ⌘-click takes one away;
+    // when that is the current one, the nearest selected layer below becomes current.
+    window.click_holding("ground", Modifiers::NONE);
+    window.click_holding("things", Modifiers::SHIFT);
+    let selected = selection(&window);
+    assert_eq!(selected.current_layer, Some(LayerId(4)));
+    assert_eq!(selected.layers, [4, 3, 1].map(LayerId));
+    window.click_holding("floor", Modifiers::COMMAND);
+    assert_eq!(selection(&window).layers, [4, 1].map(LayerId));
+    window.click_holding("things", Modifiers::COMMAND);
+    let selected = selection(&window);
+    assert_eq!(selected.current_layer, Some(LayerId(1)));
+    assert_eq!(selected.layers, [LayerId(1)]);
+
+    // Dropped on the middle of a group, a layer goes on top of its layers; one undo puts it back.
+    window.drag_onto("ground", "walls", 0.5);
+    assert_eq!(
+        layer_tree(&window),
+        "2:walls[3:floor 4:things 1:ground] 5:sky"
+    );
+    window.press(command(), Key::Z);
+    assert_eq!(
+        layer_tree(&window),
+        "1:ground 2:walls[3:floor 4:things] 5:sky"
+    );
+    // Dragged without being selected, a layer goes alone; below the bottom row is the bottom.
+    window.drag_onto("sky", "ground", 0.9);
+    assert_eq!(
+        layer_tree(&window),
+        "5:sky 1:ground 2:walls[3:floor 4:things]"
+    );
+    assert_eq!(selection(&window).layers, [LayerId(5)]);
+
+    // A right-click takes the layer and opens the layer commands; those that cannot run now
+    // are greyed out.
+    window.right_click("floor");
+    assert_eq!(selection(&window).layers, [LayerId(3)]);
+    assert!(window.is_disabled("Layer Properties…"), "not built yet");
+    assert!(window.is_disabled("Ungroup Layers"), "no group is selected");
+    // A menu item's label ends with its key.
+    let keys = window.editor().keymap();
+    let duplicate = format!(
+        "Duplicate Layers {}",
+        keys.key_text(ActionId::DuplicateLayers).unwrap()
+    );
+    assert!(!window.is_disabled(&duplicate));
+    window.click(&duplicate);
+    let copy = selection(&window).current_layer.unwrap();
+    assert_ne!(copy, LayerId(3));
+    assert_eq!(kind_of(&window, copy), Some("tile layer"));
+}
+
+#[test]
+fn the_layers_panel_buttons_and_opacity_slider_act_on_the_selected_layers() {
+    use egui::{Key, Modifiers};
+
+    let scratch = Scratch::new("window-layers-buttons").unwrap();
+    let path = layered_map(&scratch);
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let count = |window: &TestWindow| {
+        let mut count = 0;
+        window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .for_each_layer(|_, _| count += 1);
+        count
+    };
+
+    // The sky steps down into the walls and back up; a copy comes and goes.
+    window.click("⬇");
+    assert_eq!(
+        layer_tree(&window),
+        "1:ground 2:walls[3:floor 4:things 5:sky]"
+    );
+    window.click("⬆");
+    assert_eq!(
+        layer_tree(&window),
+        "1:ground 2:walls[3:floor 4:things] 5:sky"
+    );
+    window.click("🗐");
+    assert_eq!(count(&window), 6);
+    window.click("🗑");
+    assert_eq!(count(&window), 5);
+    window.click("✚");
+    window.click("New Object Layer");
+    assert_eq!(count(&window), 6);
+    let current = selection(&window).current_layer.unwrap();
+    assert_eq!(kind_of(&window, current), Some("object layer"));
+
+    // A drag of the slider sets the selected layers' opacity as one step.
+    window.click_holding("ground", Modifiers::NONE);
+    window.click_holding("sky", Modifiers::COMMAND);
+    window.drag_across("Opacity", 0.02, 0.5);
+    let opacity = |window: &TestWindow, id: u32| {
+        window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .layer(LayerId(id))
+            .unwrap()
+            .opacity
+    };
+    assert_eq!((opacity(&window, 1), opacity(&window, 5)), (0.5, 0.5));
+    assert_eq!(opacity(&window, 3), 1.0);
+    window.press(command(), Key::Z);
+    assert_eq!((opacity(&window, 1), opacity(&window, 5)), (1.0, 1.0));
+}

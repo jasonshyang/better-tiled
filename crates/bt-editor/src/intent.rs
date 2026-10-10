@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use bt_core::{Cell, Frame, LayerId, MapObject, ObjectId, PlacedCell, TileId, TilesetSlot};
-use bt_edit::{FillShape, SelectionMode, TileRegion};
+use bt_edit::{FillShape, LayerLocation, SelectionMode, TileRegion};
 use bt_utils::IRect;
 use glam::{DVec2, IVec2};
 
@@ -99,6 +99,16 @@ pub enum Intent {
         tile: TileId,
         /// Its frames; none for a still tile.
         frames: Vec<Frame>,
+    },
+    /// Select layers, one of them the layer tools act on (the Layers panel's Shift and ⌘
+    /// clicks): `current` is selected whether `layers` names it or not.
+    SelectLayers {
+        /// The document.
+        doc: DocumentId,
+        /// The layer tools act on.
+        current: LayerId,
+        /// The selected layers, in the order given.
+        layers: Vec<LayerId>,
     },
     /// Select tiles: `region` combined with the selection as `mode` says.
     SelectTiles {
@@ -216,6 +226,29 @@ pub enum Intent {
         layer: LayerId,
         /// The new name.
         name: String,
+    },
+    /// Drag layers to a place in the tree (the Layers panel's drag and drop), as one step; a
+    /// layer inside a group dragged with it stays in its group.
+    MoveLayers {
+        /// The document.
+        doc: DocumentId,
+        /// The layers.
+        layers: Vec<LayerId>,
+        /// Where they go: a group (`None` for the map's top level) and a place among its layers
+        /// before the move, counted from the bottom.
+        to: LayerLocation,
+    },
+    /// Set layers' opacity (the Layers panel's slider). The changes of one drag of the slider
+    /// fold into one step, which `done` ends.
+    SetLayerOpacity {
+        /// The document.
+        doc: DocumentId,
+        /// The layers.
+        layers: Vec<LayerId>,
+        /// From 0 (transparent) to 1 (opaque).
+        opacity: f64,
+        /// The drag is over: the next change is a step of its own.
+        done: bool,
     },
     /// The window moved a document's camera.
     SetCamera {

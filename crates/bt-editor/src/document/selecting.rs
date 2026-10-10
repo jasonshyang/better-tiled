@@ -1,5 +1,7 @@
-//! Selecting: the current layer, everything the selected layers hold, nothing, or the rest. A
-//! change of selection alone is not a step of the history.
+//! Selecting: the current layer and the selected layers (Tiled's `MapDocument::switchCurrentLayer`
+//! and `switchSelectedLayers`, `reference/tiled/src/tiled/mapdocument.cpp`), everything the
+//! selected layers hold, nothing, or the rest. A change of selection alone is not a step of the
+//! history.
 
 use bt_core::{LayerKind, Map};
 use bt_edit::{TileRegion, invert};
@@ -7,8 +9,9 @@ use bt_utils::IRect;
 
 use super::document::{DocumentId, ViewToggles};
 use super::selection::Selection;
-use crate::editor::Editor;
+use crate::editor::{Editor, warn};
 use crate::effect::Effect;
+use crate::error::EditError;
 use crate::tools::ToolFamily;
 
 impl Editor {
@@ -21,6 +24,33 @@ impl Editor {
         let family = self.tool_family(doc);
         self.tools.follow_layer(family);
         self.session_changed();
+    }
+
+    /// Selects `layers` with `current` among them, the layer tools act on (the Layers panel's
+    /// Shift and ⌘ clicks); the selected tiles and objects stay. A layer the map does not have
+    /// changes nothing and is named. The tool follows the current layer's family.
+    pub(crate) fn select_layers(
+        &mut self,
+        doc: DocumentId,
+        current: bt_core::LayerId,
+        layers: &[bt_core::LayerId],
+    ) -> Vec<Effect> {
+        let Some(map) = self.map_of(doc) else {
+            return Vec::new();
+        };
+        let missing = std::iter::once(&current)
+            .chain(layers)
+            .find(|id| map.layer(**id).is_none());
+        if let Some(&missing) = missing {
+            return vec![warn(EditError::NoSuchLayer(missing))];
+        }
+        if let Some(document) = self.documents.get_mut(doc) {
+            document.selection = document.selection.with_layers(current, layers);
+        }
+        let family = self.tool_family(doc);
+        self.tools.follow_layer(family);
+        self.session_changed();
+        Vec::new()
     }
 
     /// Selects tiles: `region` combined with the selection as `mode` says, kept to the map's

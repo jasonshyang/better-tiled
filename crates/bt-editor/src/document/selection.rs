@@ -35,9 +35,22 @@ impl Selection {
     /// The same tiles and objects with `layer` current and the only layer selected; carried
     /// tiles are let go unless their layers stay the selected ones.
     pub fn with_current_layer(&self, layer: LayerId) -> Selection {
+        self.with_layers(layer, &[layer])
+    }
+
+    /// The same tiles and objects with `current` current and `layers` selected, each once in
+    /// the order given, `current` among them (last, when they do not name it); carried tiles
+    /// are let go unless their layers stay the selected ones.
+    pub fn with_layers(&self, current: LayerId, layers: &[LayerId]) -> Selection {
+        let mut selected: Vec<LayerId> = Vec::with_capacity(layers.len() + 1);
+        for &id in layers.iter().chain([&current]) {
+            if !selected.contains(&id) {
+                selected.push(id);
+            }
+        }
         let mut selection = Selection {
-            current_layer: Some(layer),
-            layers: vec![layer],
+            current_layer: Some(current),
+            layers: selected,
             ..self.clone()
         };
         selection.drop_stale_carry();
