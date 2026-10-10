@@ -728,3 +728,24 @@ rule map; an enum value read as empty text, so an ordinary tile; a division by z
 set where the rule map's author set them, and a run does not depend on which copy a map has;
 each fixed case is a crash or a rule doing something other than what its author wrote, and
 each kept case is something existing packs rely on.
+
+## 2026-10-10 — Autotile layouts, auto-labelling and RPG Maker as built
+
+**Decided:** two layouts beyond the design's nine, the 5×5 cross islands with and without
+their diagonal tiles, which every terrain of the Epic RPG World packs follows. Detection lets one
+lane in fifteen disagree, refuses a block where two lanes of one side of a tile disagree, counts
+a side as see-through below half its alpha, and lets a large layout stand on two looks (nothing,
+and a wall or water). Label All lives in `bt-terrain`, and a block's ground is never its own
+terrain. Auto-labelling proposes, and the tiles it leaves out keep their labels. Patterns count
+the turned and flipped variants a tileset allows, as Tiled marks them used. An RPG Maker
+expansion writes a new image beside the sheet, never over a file, and names its terrains
+"Autotile N" in the mean colour of their full tile.
+**Instead of:** the nine layouts alone; one lane in thirty; Label All in the editor; clearing
+the lanes a proposal leaves out; Tiled's colour list for the new terrains.
+**Why:** with the nine alone, detection found almost nothing in the packs, whose own labels
+follow the cross islands; scattered paving stones spill over a few lanes, ragged edges reach
+into a see-through side, and a raised island stands over its own wall; the layouts need no
+editor state; a person's own labels outlive a proposal; a pattern Tiled counts as present must
+count here; writing over a file loses someone's work. Detection still misses 31 blocks of the
+packs (see-through tops, two-coloured tops, checkerboard previews, rocky ground on rocky
+ground), each listed with its reason in `tests/layouts.rs`.
