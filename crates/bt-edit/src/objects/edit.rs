@@ -147,7 +147,11 @@ pub(crate) fn renumbered(
     let mut out = Vec::with_capacity(copies.len());
     for mut object in copies {
         let id = counter.take()?;
-        remap.record(object.id, id);
+        // A reference to object 0 is no reference; a template's object, which has that id,
+        // leaves those alone.
+        if object.id != ObjectId(0) {
+            remap.record(object.id, id);
+        }
         let original = object.id;
         object.id = id;
         object.pos += offset;
@@ -614,6 +618,27 @@ mod tests {
         assert_eq!(
             remove_objects_in(&mut shapes, &[ObjectId(7)]),
             Err(EditError::NoSuchObject(ObjectId(7)))
+        );
+    }
+
+    #[test]
+    fn copies_of_a_templates_object_leave_null_references_alone() {
+        // A template's object has id 0, which a reference uses for none.
+        let mut object = rect_object(0.0, 0.0, 4.0, 4.0);
+        object
+            .properties
+            .insert("target".into(), Property::new(Value::Object(ObjectId(0))));
+        let mut list = ObjectLayer {
+            objects: Arc::new(vec![object]),
+            ..ObjectLayer::default()
+        };
+        let mut ids = NewIds::after_highest(&list);
+        let report =
+            duplicate_objects_in(&mut list, &[ObjectId(0)], DVec2::ZERO, false, &mut ids).unwrap();
+        assert_eq!(report.changed, [ObjectId(1)]);
+        assert_eq!(
+            list.objects[1].properties["target"].value,
+            Value::Object(ObjectId(0))
         );
     }
 

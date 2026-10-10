@@ -311,6 +311,7 @@ struct Run {
 }
 
 impl Run {
+    /// How many places the run holds.
     fn len(self) -> usize {
         self.last - self.first + 1
     }

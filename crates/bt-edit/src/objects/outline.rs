@@ -157,6 +157,8 @@ struct Placement {
 }
 
 impl Placement {
+    /// Where `object`'s coordinates are drawn, as a shape's or, when `upright`, as a tile or text
+    /// object's.
     fn of(geometry: MapGeometry, object: &MapObject, upright: bool) -> Placement {
         Placement {
             geometry,
@@ -199,11 +201,13 @@ struct Local {
 }
 
 impl Local {
+    /// The outline where it is drawn.
     fn in_screen(self) -> Outline {
         let placement = self.placement;
         self.outline.mapped(|p| placement.screen_of(p))
     }
 
+    /// The outline in pixel space: the pixels drawn where it is drawn.
     fn in_pixels(self) -> Outline {
         let placement = self.placement;
         self.outline.mapped(|p| placement.pixel_of(p))

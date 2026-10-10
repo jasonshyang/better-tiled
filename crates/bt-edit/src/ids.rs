@@ -78,9 +78,9 @@ impl IdRemap {
 }
 
 /// Where new objects get their ids, chosen by how it is made: from a map's counter
-/// ([`NewIds::from_map`]), which keeps ids unique across the map, or for a tile's collision
-/// shapes from the shapes themselves ([`NewIds::after_highest`]), one above the highest id they
-/// hold, as Tiled's collision editor numbers them.
+/// ([`NewIds::from_map`]), which keeps ids unique across the map, or for a list outside a map,
+/// such as a tile's collision shapes, from the list itself ([`NewIds::after_highest`]), one
+/// above the highest id it holds, as Tiled's collision editor numbers them.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct NewIds {
     next: u32,
