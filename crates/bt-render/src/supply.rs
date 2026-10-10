@@ -4,7 +4,28 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use bt_image::{ImageKey, ImagePoll, ImageRequest, ImageStore, NestedImages};
+use bt_core::{ImageRef, ImageSource};
+use bt_image::{ColorKey, ImageInput, ImageKey, ImagePoll, ImageRequest, ImageStore, NestedImages};
+
+/// The request that decodes an image of the model (a file, or bytes embedded in a Tiled file),
+/// with its colour key.
+pub fn image_request(image: &ImageRef) -> ImageRequest {
+    let input = match &image.source {
+        ImageSource::File(file) => ImageInput::File(file.path.clone()),
+        ImageSource::Embedded(embedded) => ImageInput::Bytes {
+            bytes: Arc::clone(&embedded.bytes),
+            format: embedded.format.clone(),
+        },
+    };
+    ImageRequest {
+        input,
+        transparent: image.transparent.map(|c| ColorKey {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+        }),
+    }
+}
 
 /// A source of decoded images.
 pub trait ImageSupply {

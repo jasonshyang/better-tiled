@@ -65,14 +65,7 @@ impl RecoveryPlan {
     /// The snapshots due at `now_ms`.
     pub(crate) fn due(&mut self, store: &AssetStore, now_ms: u64) -> Due {
         let mut due = Due::default();
-        let unsaved: Vec<UnsavedMap> = store
-            .assets()
-            .filter(|asset| asset.kind() == AssetKind::Map && asset.is_dirty())
-            .map(|asset| UnsavedMap {
-                id: asset.id(),
-                version: asset.version(),
-            })
-            .collect();
+        let unsaved = unsaved_maps(store);
         let gone: Vec<AssetId> = self
             .tracked
             .keys()
@@ -110,6 +103,27 @@ impl RecoveryPlan {
         due
     }
 
+    /// Every unsaved map whose latest version has no snapshot, now counted as snapshotted (the
+    /// run is ending and writes them at once).
+    pub(crate) fn take_unsnapshotted(&mut self, store: &AssetStore) -> Vec<AssetId> {
+        let mut ids = Vec::new();
+        for UnsavedMap { id, version } in unsaved_maps(store) {
+            let entry = self.tracked.entry(id).or_insert(Tracked {
+                seen_version: version,
+                changed_at_ms: 0,
+                snapshot_version: None,
+                snapshot_at_ms: None,
+                since_ms: 0,
+            });
+            entry.seen_version = version;
+            if entry.snapshot_version != Some(version) {
+                entry.snapshot_version = Some(version);
+                ids.push(id);
+            }
+        }
+        ids
+    }
+
     /// Stops tracking an asset (saved or closed).
     pub(crate) fn forget(&mut self, asset: AssetId) {
         self.tracked.remove(&asset);
@@ -134,6 +148,18 @@ impl RecoveryPlan {
     pub(crate) fn pid(&self) -> u32 {
         self.pid
     }
+}
+
+/// The unsaved maps of the store and their versions.
+fn unsaved_maps(store: &AssetStore) -> Vec<UnsavedMap> {
+    store
+        .assets()
+        .filter(|asset| asset.kind() == AssetKind::Map && asset.is_dirty())
+        .map(|asset| UnsavedMap {
+            id: asset.id(),
+            version: asset.version(),
+        })
+        .collect()
 }
 
 /// A run's heartbeat file.

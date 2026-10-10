@@ -420,3 +420,80 @@ fn the_session_lists_open_files_and_restores_them() {
     assert_eq!(restored.path_of(current), Some(canonical(&a)));
     assert_eq!(restored.camera_of(current).map(|c| c.zoom), Some(3.0));
 }
+
+/// Which load of a restart finishes first.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum FirstLoad {
+    Recovered,
+    Session,
+}
+
+/// A run that ends with unsaved work nobody was asked about, then the next start restoring the
+/// session and recovering the work, its loads finishing in the order given.
+fn restart_after_unanswered_exit(name: &str, first: FirstLoad) -> Editor {
+    let scratch = Scratch::new(name).unwrap();
+    let path = write_map(scratch.path(), "a.tmx");
+    let mut ended = editor_in(&scratch);
+    apply(&mut ended, Intent::Open(path));
+    let doc = ended.current().unwrap();
+    apply(
+        &mut ended,
+        Intent::RenameLayer {
+            doc,
+            layer: LayerId(1),
+            name: "unsaved".into(),
+        },
+    );
+    // No snapshot was due yet: the exit writes one of the latest change.
+    let snapshots = ended.snapshots_for_unanswered_exit();
+    let [snapshot] = snapshots.as_slice() else {
+        panic!("one snapshot: {snapshots:?}");
+    };
+    snapshot.write().unwrap();
+    assert!(
+        ended.snapshots_for_unanswered_exit().is_empty(),
+        "written once"
+    );
+    let session = ended.session();
+    drop(ended);
+
+    let mut editor = Editor::builder()
+        .recovery_folder(scratch.join("recovery"))
+        .pid(2000)
+        .build()
+        .unwrap();
+    let session_loads = editor.restore_session(session);
+    let found = orphans(&scratch.join("recovery"), 2000, SystemTime::now());
+    let effects = editor.apply(Intent::Recoverable(found));
+    let question = ask(&effects).clone();
+    let recover_loads = editor.apply(Intent::Decided {
+        decision: question.id,
+        choice: Choice::Recover,
+    });
+    let loads: Vec<Effect> = match first {
+        FirstLoad::Recovered => recover_loads.into_iter().chain(session_loads).collect(),
+        FirstLoad::Session => session_loads.into_iter().chain(recover_loads).collect(),
+    };
+    for effect in loads {
+        if let Effect::Load(job) = effect {
+            editor.apply(Intent::Loaded(Box::new(job.run())));
+        }
+    }
+    editor
+}
+
+#[test]
+fn an_unanswered_exit_keeps_the_latest_work_and_recovery_wins_over_the_session() {
+    // Recovered first, the work becomes the file's document and the session's load finds it.
+    let editor =
+        restart_after_unanswered_exit("bt-editor-exit-recovered-first", FirstLoad::Recovered);
+    assert_eq!(editor.documents().len(), 1);
+    let current = editor.current().unwrap();
+    assert_eq!(editor.map_of(current).unwrap().layers[0].name, "unsaved");
+    assert!(editor.has_unsaved());
+    // The session's file first, the work opens beside it, and is the one shown.
+    let editor = restart_after_unanswered_exit("bt-editor-exit-session-first", FirstLoad::Session);
+    assert_eq!(editor.documents().len(), 2);
+    let current = editor.current().unwrap();
+    assert_eq!(editor.map_of(current).unwrap().layers[0].name, "unsaved");
+}

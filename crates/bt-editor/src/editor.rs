@@ -138,8 +138,14 @@ impl Editor {
             Intent::Run(id) => self.run(id),
             Intent::Open(path) => self.open(&path),
             Intent::Loaded(loaded) => {
+                let recovered = loaded.recovered_from.is_some();
                 let effects = self.finish_load(*loaded);
-                self.keep_restored_current();
+                if recovered {
+                    // Work the user chose to recover is what they want to see.
+                    self.restore_current = None;
+                } else {
+                    self.keep_restored_current();
+                }
                 effects
             }
             Intent::FilePicked { request, path } => self.file_picked(request, path),
@@ -330,36 +336,55 @@ impl Editor {
             .iter()
             .map(|id| Effect::DeleteSnapshot(self.recovery.snapshot_path(*id)))
             .collect();
-        for id in due.snapshot {
-            let Some(asset) = self.store.get(id) else {
-                continue;
-            };
-            let Some(map) = self.store.map(id) else {
-                continue;
-            };
-            let original = asset.path().map(Path::to_path_buf);
-            let path_for_references = original
-                .clone()
-                .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
-            let mut request = WriteRequest::for_map(map, &path_for_references);
-            if let Some(loader) = self.files.loaders.get(&id) {
-                request = request.loader(loader);
-            }
-            match request.render() {
-                Ok(rendered) => effects.push(Effect::WriteSnapshot(Snapshot {
-                    path: self.recovery.snapshot_path(id),
-                    text: rendered.text,
-                    meta: SnapshotMeta {
-                        original,
-                        pid: self.recovery.pid(),
-                    },
-                })),
-                Err(error) => {
-                    log::warn!("no recovery snapshot of {}: {error}", asset.display_name())
-                }
+        effects.extend(
+            due.snapshot
+                .into_iter()
+                .filter_map(|id| self.snapshot_of(id))
+                .map(Effect::WriteSnapshot),
+        );
+        effects
+    }
+
+    /// The run is ending without a quit anyone answered (the system ended it: the app menu, the
+    /// Dock, a logout): a snapshot of every unsaved map whose latest change has none yet, for the
+    /// window to write before it goes. They are kept, so the next start offers them back.
+    pub fn snapshots_for_unanswered_exit(&mut self) -> Vec<Snapshot> {
+        if !self.settings.general.recovery {
+            return Vec::new();
+        }
+        self.recovery
+            .take_unsnapshotted(&self.store)
+            .into_iter()
+            .filter_map(|id| self.snapshot_of(id))
+            .collect()
+    }
+
+    /// A snapshot of what Save would write for a map.
+    fn snapshot_of(&self, id: AssetId) -> Option<Snapshot> {
+        let asset = self.store.get(id)?;
+        let map = self.store.map(id)?;
+        let original = asset.path().map(Path::to_path_buf);
+        let path_for_references = original
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
+        let mut request = WriteRequest::for_map(map, &path_for_references);
+        if let Some(loader) = self.files.loaders.get(&id) {
+            request = request.loader(loader);
+        }
+        match request.render() {
+            Ok(rendered) => Some(Snapshot {
+                path: self.recovery.snapshot_path(id),
+                text: rendered.text,
+                meta: SnapshotMeta {
+                    original,
+                    pid: self.recovery.pid(),
+                },
+            }),
+            Err(error) => {
+                log::warn!("no recovery snapshot of {}: {error}", asset.display_name());
+                None
             }
         }
-        effects
     }
 
     /// The file this run's heartbeat goes in.

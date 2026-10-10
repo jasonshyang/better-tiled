@@ -1,0 +1,39 @@
+[package]
+name = "better-tiled"
+description = "The better-tiled window: tabs, the map canvas, panels and dialogs over bt-editor and bt-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+bt-editor.workspace = true
+bt-image.workspace = true
+bt-render.workspace = true
+bt-utils.workspace = true
+eframe = { workspace = true, features = ["accesskit", "default_fonts", "wayland", "wgpu", "x11"] }
+egui.workspace = true
+env_logger.workspace = true
+glam.workspace = true
+image = { workspace = true, features = ["png"] }
+log.workspace = true
+pollster.workspace = true
+rfd.workspace = true
+serde_json.workspace = true
+
+# The quit guard: the app menu's Quit item gives up ⌘Q, which then reaches the window.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSMenu", "NSMenuItem", "NSResponder"] }
+objc2-foundation = { workspace = true, features = ["NSString"] }
+
+[dev-dependencies]
+bt-test-data = { workspace = true, features = ["fixtures"] }
+bt-tmx.workspace = true
+egui_kittest = { workspace = true, features = ["eframe"] }
+
+[lints]
+workspace = true

@@ -23,7 +23,7 @@ impl fmt::Display for DocumentId {
 pub struct ViewState {
     /// The world point at the centre of the view.
     pub center: DVec2,
-    /// Device pixels per world pixel.
+    /// Screen points per world pixel (1 is 100 %), the same on every display.
     pub zoom: f64,
 }
 

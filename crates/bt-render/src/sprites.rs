@@ -9,13 +9,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use bt_core::{ImageRef, ImageSource, TileId, Tileset, TilesetImage};
-use bt_image::{ColorKey, ImageInput, ImageKey, ImagePoll, ImageRequest};
+use bt_core::{ImageRef, TileId, Tileset, TilesetImage};
+use bt_image::{ImageKey, ImagePoll, ImageRequest};
 use bt_utils::IRect;
 use glam::{IVec2, UVec2};
 
 use crate::pages::{GUTTER, Pages, Region};
-use crate::supply::ImageSupply;
+use crate::supply::{ImageSupply, image_request};
 use crate::text::{GlyphKey, rasterize};
 
 /// The texels are in the pages (0, the default, is pending: nothing is drawn yet).
@@ -817,25 +817,6 @@ fn next_change(tileset: &Tileset, tile: TileId, time_ms: u64) -> Option<u64> {
         }
     }
     Some(time_ms + (total - into))
-}
-
-/// The request for an image of the model.
-pub(crate) fn image_request(image: &ImageRef) -> ImageRequest {
-    let input = match &image.source {
-        ImageSource::File(file) => ImageInput::File(file.path.clone()),
-        ImageSource::Embedded(embedded) => ImageInput::Bytes {
-            bytes: Arc::clone(&embedded.bytes),
-            format: embedded.format.clone(),
-        },
-    };
-    ImageRequest {
-        input,
-        transparent: image.transparent.map(|c| ColorKey {
-            r: c.r,
-            g: c.g,
-            b: c.b,
-        }),
-    }
 }
 
 /// The parts an image is packed in: the whole image when it fits a page, else blocks no larger
