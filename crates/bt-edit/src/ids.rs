@@ -8,13 +8,6 @@ use bt_core::{LayerId, Map, ObjectId, Properties, Property, Value};
 use crate::error::EditError;
 
 /// Takes the map's next layer id.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the paste, layer and object commands take ids; they come next"
-    )
-)]
 pub(crate) fn take_layer_id(map: &mut Map) -> Result<LayerId, EditError> {
     let id = map.next_layer_id.max(1);
     map.next_layer_id = id.checked_add(1).ok_or(EditError::OutOfIds)?;

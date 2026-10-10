@@ -38,6 +38,14 @@ pub enum EditError {
     /// The map has given out every layer or object id.
     #[error("the map has used up its ids")]
     OutOfIds,
+    /// A paste was given a different number of targets than its clip has layers.
+    #[error("the clip has {layers} layers but {targets} targets were given")]
+    TargetCount {
+        /// The clip's layers.
+        layers: usize,
+        /// The targets given.
+        targets: usize,
+    },
     /// The model refused a change (a cell outside a finite layer).
     #[error(transparent)]
     Model(#[from] bt_core::Error),

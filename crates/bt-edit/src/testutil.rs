@@ -74,3 +74,74 @@ pub(crate) fn trimmed(grid: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+/// A grid of every shape: orthogonal, isometric, oblique, and staggered and hexagonal along both
+/// axes with both indexes.
+pub(crate) fn every_grid() -> Vec<bt_core::MapGeometry> {
+    use bt_core::{MapGeometry, Orientation, StaggerAxis, StaggerIndex};
+    let size = IVec2::new(12, 10);
+    let mut grids = vec![
+        MapGeometry::new(Orientation::Orthogonal, IVec2::splat(16), size),
+        MapGeometry::new(Orientation::Isometric, IVec2::new(32, 16), size),
+        MapGeometry {
+            skew: IVec2::new(8, 0),
+            ..MapGeometry::new(Orientation::Oblique, IVec2::splat(16), size)
+        },
+    ];
+    for orientation in [Orientation::Staggered, Orientation::Hexagonal] {
+        for axis in [StaggerAxis::X, StaggerAxis::Y] {
+            for index in [StaggerIndex::Odd, StaggerIndex::Even] {
+                grids.push(MapGeometry {
+                    stagger_axis: axis,
+                    stagger_index: index,
+                    hex_side_length: if orientation == Orientation::Hexagonal {
+                        16
+                    } else {
+                        0
+                    },
+                    ..MapGeometry::new(orientation, IVec2::new(32, 32), size)
+                });
+            }
+        }
+    }
+    grids
+}
+
+/// A drawn atlas tileset called `name` (16×16 tiles, 4 by 4).
+pub(crate) fn atlas(name: &str) -> std::sync::Arc<bt_core::Tileset> {
+    bt_test_data::fixtures::Atlas::builder()
+        .name(name)
+        .build_embedded()
+        .unwrap()
+        .tileset
+}
+
+/// The cells of the tile layer with `id`.
+pub(crate) fn tiles(map: &bt_core::Map, id: bt_core::LayerId) -> &bt_core::TileLayer {
+    map.layer(id)
+        .and_then(bt_core::Layer::as_tile_layer)
+        .unwrap()
+}
+
+/// The cells of the tile layer with `id` over the map's area, as a grid.
+pub(crate) fn map_grid(map: &bt_core::Map, id: bt_core::LayerId) -> String {
+    let size = IVec2::new(map.width as i32, map.height as i32);
+    grid_of(
+        tiles(map, id),
+        bt_utils::IRect::from_min_size(IVec2::ZERO, size),
+    )
+}
+
+/// The cells of a clip's layer over the clip's rectangle, as a grid.
+pub(crate) fn clip_grid(clip: &crate::clip::TileClip, layer: usize) -> String {
+    grid_of(
+        &clip.layers[layer].cells,
+        bt_utils::IRect::from_min_size(IVec2::ZERO, clip.size),
+    )
+}
+
+/// Asserts that a map breaks no invariant.
+pub(crate) fn assert_valid(map: &bt_core::Map) {
+    let violations = map.validate();
+    assert!(violations.is_empty(), "{violations:?}");
+}
