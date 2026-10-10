@@ -50,7 +50,8 @@ pub(crate) struct WatchModel {
 
 impl Editor {
     /// The files the window polls: the documents' files, the external tilesets, the images of
-    /// every tileset and image layer, and the project file.
+    /// every tileset and image layer, the project file, and the files the maps' rules come from
+    /// or may come from.
     pub fn watched(&self) -> Vec<PathBuf> {
         let mut paths = BTreeSet::new();
         for doc in self.documents.in_order() {
@@ -74,16 +75,18 @@ impl Editor {
                 image_paths_of_tileset(tileset, &mut paths);
             }
         }
+        self.watched_rule_files(&mut paths);
         paths.into_iter().collect()
     }
 
     /// Takes in what the window found and decides what each change means.
     pub(crate) fn observe(&mut self, observations: Vec<Observation>) -> Vec<Effect> {
-        let mut effects = Vec::new();
+        let mut effects = self.observe_rule_files(&observations);
         let mut changed_images = Vec::new();
         for observation in observations {
             match self.store.by_path(&observation.path) {
                 Some(asset) => effects.extend(self.observe_asset(asset, observation.found)),
+                None if self.is_rule_file(&observation.path) => {}
                 None => {
                     let before = self
                         .watch

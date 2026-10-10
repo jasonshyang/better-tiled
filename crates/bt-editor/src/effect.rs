@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use crate::automap::RulesJob;
 use crate::document::DocumentId;
 use crate::files::LoadJob;
 use crate::inspect::Inspected;
@@ -15,6 +16,8 @@ use crate::recovery::Snapshot;
 pub enum Effect {
     /// Run a load on a worker and hand the result back as [`crate::Intent::Loaded`].
     Load(LoadJob),
+    /// Read a map's rules on a worker and hand them back as [`crate::Intent::RulesLoaded`].
+    LoadRules(RulesJob),
     /// Ask for a file; the answer comes back as [`crate::Intent::FilePicked`].
     PickFile(FileRequest),
     /// Ask a question; the answer comes back as [`crate::Intent::Decided`].

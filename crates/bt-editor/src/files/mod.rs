@@ -18,7 +18,7 @@ use crate::store::AssetId;
 
 pub use load::{LoadJob, Loaded};
 pub(crate) use load::{
-    LoadKind, LoadPurpose, LoadSource, LoadedContent, LoadedFiles, ProjectChoice,
+    LoadKind, LoadPurpose, LoadSource, LoadedContent, LoadedFiles, ProjectChoice, hash_file,
 };
 pub use new::{NewMap, NewTileset, NewTilesetSource};
 

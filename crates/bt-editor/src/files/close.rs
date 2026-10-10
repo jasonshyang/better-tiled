@@ -60,6 +60,7 @@ impl Editor {
         if !self.documents.in_order().any(|d| d.asset() == asset) && !self.map_uses(asset) {
             self.store.remove(asset);
             self.files.loaders.remove(&asset);
+            self.forget_rules(asset);
             self.recovery.forget(asset);
             effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)));
             self.drop_unused_tilesets();

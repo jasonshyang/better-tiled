@@ -4,6 +4,7 @@
 //! here; the window draws this state, feeds it intents and carries out the effects it returns.
 
 mod actions;
+mod automap;
 mod clipboard;
 mod document;
 mod editor;
@@ -33,6 +34,7 @@ pub use actions::{
     ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
     Modifiers, PaletteEntry, PaletteTarget, tool_action,
 };
+pub use automap::{AutoMapRules, LastRun, RulesJob, RulesLoaded};
 pub use document::{
     Document, DocumentId, Documents, Selection, TilesetEditing, TilesetMode, ViewState, ViewToggles,
 };

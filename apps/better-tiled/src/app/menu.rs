@@ -92,6 +92,8 @@ const MENUS: [Menu; 7] = [
             Separator,
             Action(ActionId::AddExternalTileset),
             Separator,
+            Action(ActionId::AutoMap),
+            Separator,
             Action(ActionId::MapProperties),
         ],
     },

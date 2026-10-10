@@ -9,6 +9,7 @@ use bt_core::{LayerId, LayerKind, Map};
 use bt_tmx::WriteRequest;
 
 use crate::actions::{Keymap, KeymapError, PaletteState};
+use crate::automap::AutoMapState;
 use crate::clipboard::Clipboard;
 use crate::document::{
     Document, DocumentId, Documents, Inspecting, Selection, TilesetEditing, ViewState, ViewToggles,
@@ -93,6 +94,7 @@ impl EditorBuilder {
             },
             recovery: RecoveryPlan::new(self.recovery_folder, self.pid),
             watch: WatchModel::default(),
+            automap: AutoMapState::default(),
             session: Session::default(),
             session_generation: 0,
             restore_current: None,
@@ -122,6 +124,8 @@ pub struct Editor {
     pub(crate) files: Files,
     pub(crate) recovery: RecoveryPlan,
     pub(crate) watch: WatchModel,
+    /// Each map's rules and the next AutoMap run's seed.
+    pub(crate) automap: AutoMapState,
     pub(crate) session: Session,
     session_generation: u64,
     /// The file that was current in a session being restored, kept current as the others load.
@@ -324,6 +328,7 @@ impl Editor {
             }
             Intent::Recoverable(orphans) => self.offer_recovery(orphans),
             Intent::Observed(observations) => self.observe(observations),
+            Intent::RulesLoaded(loaded) => self.finish_reading_rules(*loaded),
             Intent::ChangeSettings(settings) => self.change_settings(*settings),
             Intent::Tick { now_ms } => self.tick(now_ms),
         };
@@ -357,17 +362,19 @@ impl Editor {
         result.err().map(warn).into_iter().collect()
     }
 
-    /// The recovery schedule: snapshots due and snapshots to delete.
+    /// What is due: the current map's rules looked for the first time it is current, and the
+    /// recovery schedule's snapshots to write and delete.
     fn tick(&mut self, now_ms: u64) -> Vec<Effect> {
+        let mut effects = self.look_for_current_rules();
         if !self.settings.general.recovery {
-            return Vec::new();
+            return effects;
         }
         let due = self.recovery.due(&self.store, now_ms);
-        let mut effects: Vec<Effect> = due
-            .delete
-            .iter()
-            .map(|id| Effect::DeleteSnapshot(self.recovery.snapshot_path(*id)))
-            .collect();
+        effects.extend(
+            due.delete
+                .iter()
+                .map(|id| Effect::DeleteSnapshot(self.recovery.snapshot_path(*id))),
+        );
         effects.extend(
             due.snapshot
                 .into_iter()

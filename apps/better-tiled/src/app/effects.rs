@@ -29,6 +29,14 @@ impl App {
                     self.notify(Notice::error(problem));
                 }
             }
+            Effect::LoadRules(job) => {
+                let spawned = self.workers.spawn("rules", move || {
+                    vec![Intent::RulesLoaded(Box::new(job.run()))]
+                });
+                if let Err(problem) = spawned {
+                    self.notify(Notice::error(problem));
+                }
+            }
             Effect::PickFile(request) => {
                 if let Err(problem) = self.file_dialogs.ask(&mut self.workers, request) {
                     self.notify(Notice::error(problem));

@@ -382,6 +382,10 @@ action_table! {
     /// Cut the map down to what its tiles use.
     Autocrop => ActionSpec::new(ActionId::Autocrop, "autocrop", "Autocrop", "resize size trim")
         .on(Map),
+    /// Run the map's rules over the selection, or the whole map.
+    AutoMap => ActionSpec::new(ActionId::AutoMap, "automap", "AutoMap", "rules automapping run")
+        .on(Map)
+        .keys(&[cmd('m')]),
     /// Add a tileset file to the map.
     AddExternalTileset => ActionSpec::new(ActionId::AddExternalTileset, "add_external_tileset", "Add External Tileset…", "tsx file")
         .on(Map),

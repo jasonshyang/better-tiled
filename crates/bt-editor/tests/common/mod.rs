@@ -35,7 +35,8 @@ pub fn write_map(folder: &Path, name: &str) -> PathBuf {
     path
 }
 
-/// Applies an intent and carries out loads as a worker would, returning the other effects.
+/// Applies an intent and carries out loads and reads of rules as a worker would, returning the
+/// other effects.
 pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
     let mut pending = vec![intent];
     let mut out = Vec::new();
@@ -43,6 +44,7 @@ pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
         for effect in editor.apply(intent) {
             match effect {
                 Effect::Load(job) => pending.push(Intent::Loaded(Box::new(job.run()))),
+                Effect::LoadRules(job) => pending.push(Intent::RulesLoaded(Box::new(job.run()))),
                 other => out.push(other),
             }
         }

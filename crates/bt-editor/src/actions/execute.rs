@@ -249,6 +249,7 @@ impl Editor {
                 .unwrap_or_default(),
             ActionId::CropToSelection => on_document(self, &Editor::crop_to_selection),
             ActionId::Autocrop => on_document(self, &Editor::autocrop_map),
+            ActionId::AutoMap => on_document(self, &Editor::automap),
             ActionId::NewTileLayer => {
                 on_document(self, &|editor, doc| editor.add_layer(doc, LayerType::Tile))
             }
