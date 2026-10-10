@@ -18,6 +18,7 @@ mod brush;
 mod color;
 mod diagnose;
 mod error;
+mod feedback;
 mod filler;
 #[cfg(test)]
 mod oracle_tests;
@@ -31,6 +32,10 @@ pub use brush::{Stroke, hit_test, line_targets};
 pub use color::TerrainColor;
 pub use diagnose::{Cause, Needed};
 pub use error::TerrainError;
+pub use feedback::{
+    Pattern, PushedBack, ReplacedSet, TerrainName, fill_note, missing_text, pushed_back,
+    pushed_back_text, replaced_sets, replaced_text,
+};
 pub use paint::{fill, paint, preview_fill, preview_paint};
 pub use request::{BrushTarget, FillRequest, PaintRequest, Preview, Report};
 pub use terrain::Terrain;

@@ -369,3 +369,74 @@ fn requests_name_what_they_cannot_find() {
         Err(TerrainError::NoSuchColor { color: 3, count: 2 })
     );
 }
+
+/// Sand–grass and sand–water tiles, but none where grass meets water.
+fn three_terrains() -> bt_core::Tileset {
+    let mut labels: Vec<[u8; 8]> = every_combination(2).into_iter().map(corners).collect();
+    for c in every_combination(2) {
+        let water = c.map(|x| if x == 2 { 3 } else { 1 });
+        if water != [1, 1, 1, 1] {
+            labels.push(corners(water));
+        }
+    }
+    tileset(WangSetType::Corner, &["Sand", "Grass", "Water"], &labels)
+}
+
+#[test]
+fn a_stroke_says_what_it_pushed_back_and_the_tile_that_would_have_kept_it() {
+    let tileset = three_terrains();
+    let water = TileId(every_combination(2).len() as u32 + 14);
+    let map = map_with(tileset, UVec2::splat(8), Some(water));
+    let terrain = Terrain::new(&map, slot(), 0).unwrap();
+    assert_eq!(lanes_at(&map, &terrain, IVec2::ZERO), corners([3, 3, 3, 3]));
+    let request = PaintRequest::new(GROUND, &terrain, GRASS)
+        .targets(vec![BrushTarget::Corner(IVec2::splat(4))]);
+    let preview = preview_paint(&map, &request).unwrap();
+    assert!(preview.invalid.is_empty(), "{preview:?}");
+    let layer = map.layers[0].as_tile_layer().unwrap();
+    let pushed = bt_terrain::pushed_back(&terrain, layer, &preview, GRASS);
+    assert_eq!(pushed.len(), 1);
+    assert_eq!(pushed[0].terrain, TerrainColor(3));
+    let name = |c: TerrainColor| ["nothing", "Sand", "Grass", "Water"][usize::from(c.0)].to_owned();
+    let text = bt_terrain::pushed_back_text(&terrain, &name, GRASS, &pushed).unwrap();
+    assert!(
+        text.starts_with("painting Grass pushed back Water at "),
+        "{text}"
+    );
+    assert!(
+        // Each of the four painted tiles lacks its own; ties go by the pattern's order.
+        text.ends_with(": “Ground” has no tile with Grass at the top-right corner and Water at the other three corners"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_stroke_over_another_sets_tiles_says_so() {
+    // Two sets on one tileset: "Ground" (sand and grass) and "Paths" on tiles of their own.
+    let mut tileset = sand_and_grass();
+    let mut paths = tileset.wang_sets[0].clone();
+    paths.name = "Paths".to_owned();
+    paths.tiles = [(TileId(200), plain(1))].into_iter().collect();
+    tileset.wang_sets.push(paths);
+    let mut map = map_with(
+        tileset,
+        UVec2::splat(4),
+        Some(combination_tile(2, [1, 1, 1, 1])),
+    );
+    map.layers[0]
+        .as_tile_layer_mut()
+        .unwrap()
+        .set_cell(IVec2::ONE, Cell::new(slot(), TileId(200)))
+        .unwrap();
+    let terrain = Terrain::new(&map, slot(), 0).unwrap();
+    let preview = preview_paint(
+        &map,
+        &PaintRequest::new(GROUND, &terrain, SAND).targets(vec![BrushTarget::Tile(IVec2::ONE)]),
+    )
+    .unwrap();
+    let layer = map.layers[0].as_tile_layer().unwrap();
+    let replaced = bt_terrain::replaced_sets(&map, &terrain, layer, &preview);
+    assert_eq!(replaced.len(), 1);
+    assert_eq!(replaced[0].set_name, "Paths");
+    assert_eq!(replaced[0].cells, [IVec2::ONE]);
+}
