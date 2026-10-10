@@ -9,13 +9,18 @@ use bt_automap::{
     RuleSet, Writer,
 };
 use bt_core::{Cell, Flip, Map};
-use bt_editor::{CellExplanation, DocumentId, Editor, ExplainedRun};
+use bt_editor::{CellExplanation, DocumentId, Editor, ExplainedRun, Intent};
 use bt_utils::text::{and_list, plural};
 
 use super::problem_line::problem_line;
 
-/// Draws the explanations of `doc`'s chosen cell.
-pub(crate) fn show_explanations(ui: &mut egui::Ui, editor: &Editor, doc: DocumentId) {
+/// Draws the explanations of `doc`'s chosen cell; a rule map to open goes to `out`.
+pub(crate) fn show_explanations(
+    ui: &mut egui::Ui,
+    editor: &Editor,
+    doc: DocumentId,
+    out: &mut Vec<Intent>,
+) {
     let explanations = editor.cell_explanations(doc);
     if explanations.is_empty() {
         ui.weak("Nothing to explain until the map's rules are read.");
@@ -30,11 +35,11 @@ pub(crate) fn show_explanations(ui: &mut egui::Ui, editor: &Editor, doc: Documen
         egui::CollapsingHeader::new(title)
             .id_salt(("automap explanation", index))
             .default_open(true)
-            .show(ui, |ui| show_explanation(ui, explained));
+            .show(ui, |ui| show_explanation(ui, explained, out));
     }
 }
 
-fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation) {
+fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation, out: &mut Vec<Intent>) {
     let words = Words {
         map: &explained.map,
         rules: &explained.rules,
@@ -104,12 +109,15 @@ fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation) {
         })
         .collect();
     for attempt in &applied {
-        ui.label(format!(
-            "✔ {} applied at {}, {}",
-            words.rule(attempt.rule),
-            attempt.position.x,
-            attempt.position.y
-        ));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(format!(
+                "✔ {} applied at {}, {}",
+                words.rule(attempt.rule),
+                attempt.position.x,
+                attempt.position.y
+            ));
+            open_button(ui, &words, attempt.rule, out);
+        });
     }
     for attempt in &held_back {
         let why = match attempt.outcome {
@@ -132,12 +140,15 @@ fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation) {
         .default_open(applied.is_empty())
         .show(ui, |ui| {
             for attempt in &close {
-                ui.label(format!(
-                    "{} at {}, {}",
-                    words.rule(attempt.rule),
-                    attempt.position.x,
-                    attempt.position.y
-                ));
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(format!(
+                        "{} at {}, {}",
+                        words.rule(attempt.rule),
+                        attempt.position.x,
+                        attempt.position.y
+                    ));
+                    open_button(ui, &words, attempt.rule, out);
+                });
                 let closest = attempt.closest_set();
                 ui.indent(("close", attempt.rule.rule_map, attempt.rule.rule), |ui| {
                     for check in attempt
@@ -192,6 +203,21 @@ fn show_explanation(ui: &mut egui::Ui, explained: &CellExplanation) {
             unnamed.layer,
             words.cell(unnamed.tile)
         ));
+    }
+}
+
+/// A button opening the rule map of `rule` in a tab of its own.
+fn open_button(ui: &mut egui::Ui, words: &Words<'_>, rule: RuleRef, out: &mut Vec<Intent>) {
+    let Some(rule_map) = words.rules.rule_maps().get(rule.rule_map) else {
+        return;
+    };
+    let path = rule_map.path();
+    if ui
+        .small_button("Open")
+        .on_hover_text(format!("Open {}", path.display()))
+        .clicked()
+    {
+        out.push(Intent::Open(path.to_path_buf()));
     }
 }
 

@@ -198,7 +198,8 @@ M3 brought the rules into the window. What it added:
   after, the writes in order, the rules applied and those held back by Probability or overlap,
   those that came close (a condition naming the tiles here holds) with the conditions that
   failed, and how many others could write the cell, naming the layers they needed tiles on when
-  every failed condition found the cell empty; the tiles no rule names.
+  every failed condition found the cell empty; the tiles no rule names. Open, beside each rule
+  applied or that came close, opens its rule map in a tab of its own.
 - The Terrains panel numbers the terrains a set leaves unnamed ("Terrain 1"), as every set of the
   packs does. `Startup::lock_folder`: the runtime folder project files are locked in, passed to
   the editor; tests use a scratch folder. Tests: `app/automap_tests.rs` (⌘M and the panel, Live

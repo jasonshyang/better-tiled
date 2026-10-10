@@ -170,4 +170,14 @@ fn the_explain_tool_opens_the_automap_panel_on_the_cell_clicked() {
     );
     assert!(window.shows("If AutoMap ran now"));
     assert!(window.shows("✔ rule 1 of flowers.tmx applied at 2, 1"));
+
+    window.click("Open");
+    let opened = window.editor().current().unwrap();
+    assert_ne!(opened, doc, "the rule map opens in a tab of its own");
+    assert!(
+        window
+            .editor()
+            .path_of(opened)
+            .is_some_and(|path| path.ends_with("flowers.tmx"))
+    );
 }
