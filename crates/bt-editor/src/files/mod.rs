@@ -1,5 +1,6 @@
 //! Files: opening, saving, closing and quitting, and what the editor knows about them.
 
+mod add_tileset;
 mod close;
 mod load;
 mod new;

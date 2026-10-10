@@ -64,6 +64,8 @@ pub enum FileRequest {
     Open,
     /// An image for a new tileset (the window's own: the editor never sees the answer).
     TilesetImage,
+    /// A tileset file to add to the map of a document (Add External Tileset).
+    ExternalTileset(DocumentId),
     /// Where to save a document.
     SaveAs {
         /// The document.

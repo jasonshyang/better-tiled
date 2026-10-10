@@ -43,6 +43,8 @@ pub(crate) enum LoadPurpose {
     Open,
     /// It changed on disk: its asset takes the new content.
     Reload(crate::store::AssetId),
+    /// Add External Tileset: the map of a document refers to it.
+    AddToMap(crate::document::DocumentId),
 }
 
 /// A load to run on a worker; [`LoadJob::run`] does it.

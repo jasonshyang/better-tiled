@@ -86,6 +86,9 @@ impl Editor {
             effects.extend(self.settle_watch(asset));
             return effects;
         }
+        if let LoadPurpose::AddToMap(doc) = loaded.purpose {
+            return self.finish_adding_tileset(doc, loaded);
+        }
         let files = match loaded.outcome {
             Ok(files) => files,
             Err(message) => {

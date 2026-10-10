@@ -1417,3 +1417,44 @@ fn offset_map_shifts_the_shown_layers_and_wraps() {
     window.press(command(), Key::Z);
     assert_eq!(first_row(&window, 1), ground, "one step");
 }
+
+#[test]
+fn an_external_tileset_is_chosen_and_added_to_the_map() {
+    use bt_test_data::fixtures::Atlas;
+    use bt_tmx::WriteRequest;
+    use egui::Key;
+
+    let scratch = Scratch::new("window-add-tileset").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let atlas = Atlas::builder()
+        .name("more")
+        .build_in(scratch.path())
+        .unwrap();
+    let more = scratch.join("more.tsx");
+    WriteRequest::for_tileset(&atlas.tileset, &more)
+        .write()
+        .unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let count = |window: &TestWindow| window.editor().map_of(doc).unwrap().tilesets.len();
+    let before = count(&window);
+
+    run_command(&mut window, "add external tileset");
+    window.answer_file_dialog(bt_editor::FileRequest::ExternalTileset(doc), &more);
+    assert_eq!(count(&window), before + 1);
+    let map = window.editor().map_of(doc).unwrap();
+    let added = map.tilesets.last().unwrap();
+    assert_eq!(added.tileset.name, "more");
+    assert!(added.file.is_some(), "an external tileset");
+
+    // Chosen again, it is not added twice.
+    run_command(&mut window, "add external tileset");
+    window.answer_file_dialog(bt_editor::FileRequest::ExternalTileset(doc), &more);
+    assert_eq!(count(&window), before + 1);
+
+    window.press(command(), Key::Z);
+    assert_eq!(count(&window), before, "one step");
+}

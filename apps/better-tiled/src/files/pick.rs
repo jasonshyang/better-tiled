@@ -8,6 +8,9 @@ use crate::workers::Workers;
 /// The map formats the dialogs offer.
 const MAP_EXTENSIONS: [&str; 3] = ["tmx", "tmj", "json"];
 
+/// The tileset formats the dialogs offer.
+const TILESET_EXTENSIONS: [&str; 2] = ["tsx", "tsj"];
+
 /// The image formats the dialogs offer (what `bt-image` decodes).
 const IMAGE_EXTENSIONS: [&str; 10] = [
     "png", "jpg", "jpeg", "gif", "bmp", "webp", "tga", "tif", "tiff", "ico",
@@ -69,6 +72,17 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
             let dialog = rfd::AsyncFileDialog::new()
                 .set_title("Tileset Image")
                 .add_filter("Images", &IMAGE_EXTENSIONS)
+                .add_filter("All files", &["*"]);
+            let picked = pollster::block_on(dialog.pick_file());
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
+        FileRequest::ExternalTileset(_) => {
+            let dialog = rfd::AsyncFileDialog::new()
+                .set_title("Add External Tileset")
+                .add_filter("Tiled tilesets", &TILESET_EXTENSIONS)
                 .add_filter("All files", &["*"]);
             let picked = pollster::block_on(dialog.pick_file());
             vec![Intent::FilePicked {

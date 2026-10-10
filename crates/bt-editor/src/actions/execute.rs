@@ -16,10 +16,7 @@ use crate::settings::Snapping;
 /// The commands whose operations are still being built in this milestone: disabled, and
 /// running them does nothing. The list empties as they arrive.
 pub(crate) fn pending(id: ActionId) -> bool {
-    matches!(
-        id,
-        ActionId::AddExternalTileset | ActionId::MapProperties | ActionId::LayerProperties
-    )
+    matches!(id, ActionId::MapProperties | ActionId::LayerProperties)
 }
 
 impl Editor {
@@ -313,9 +310,10 @@ impl Editor {
             ActionId::OffsetMap => {
                 on_document(self, &|_, doc| vec![Effect::Show(Dialog::OffsetMap(doc))])
             }
-            ActionId::AddExternalTileset | ActionId::MapProperties | ActionId::LayerProperties => {
-                Vec::new()
-            }
+            ActionId::AddExternalTileset => on_document(self, &|_, doc| {
+                vec![Effect::PickFile(FileRequest::ExternalTileset(doc))]
+            }),
+            ActionId::MapProperties | ActionId::LayerProperties => Vec::new(),
         }
     }
 }

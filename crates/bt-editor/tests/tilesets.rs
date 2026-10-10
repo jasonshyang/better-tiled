@@ -1,13 +1,17 @@
 //! The tileset editor through the editor: Edit Tileset shows a map's embedded tileset in place
 //! of the map, its tiles are selected and animated as undoable steps, the map's commands wait
-//! until the map is back, and a tileset file opens in a tab of its own and saves to its file.
+//! until the map is back, a tileset file opens in a tab of its own and saves to its file, and Add
+//! External Tileset makes a map refer to a tileset file once, as one step.
 
 #![cfg(test)]
 
 mod common;
 
 use bt_core::{Frame, TileId, TilesetSlot};
-use bt_editor::{ActionId, Editor, Enabled, Intent, TilesetHome, TilesetMode, ToolKind};
+use bt_editor::{
+    ActionId, Editor, Effect, Enabled, FileRequest, Intent, Severity, TilesetHome, TilesetMode,
+    ToolKind,
+};
 use bt_test_data::Scratch;
 use bt_test_data::fixtures::{Atlas, MapBuilder};
 use bt_tmx::WriteRequest;
@@ -253,5 +257,69 @@ fn collision_shapes_are_edited_with_the_object_tools_and_commands() {
     assert_eq!(
         editor.enabled(ActionId::MoveObjectsToLayer),
         Enabled::Disabled(Some("Collision shapes stay with their tile".to_owned()))
+    );
+}
+
+#[test]
+fn an_external_tileset_is_added_once_as_one_step() {
+    let scratch = Scratch::new("bt-editor-add-tileset").unwrap();
+    let map_path = common::write_map(scratch.path(), "map.tmx");
+    let atlas = Atlas::builder()
+        .name("more")
+        .build_in(scratch.path())
+        .unwrap();
+    let more = scratch.join("more.tsx");
+    WriteRequest::for_tileset(&atlas.tileset, &more)
+        .write()
+        .unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(map_path.clone()));
+    let doc = editor.current().unwrap();
+    let effects = apply(&mut editor, Intent::Run(ActionId::AddExternalTileset));
+    assert!(
+        matches!(&effects[..], [Effect::PickFile(FileRequest::ExternalTileset(d))] if *d == doc),
+        "{effects:?}"
+    );
+    let picked = |path: std::path::PathBuf| Intent::FilePicked {
+        request: FileRequest::ExternalTileset(doc),
+        path: Some(path),
+    };
+    let effects = apply(&mut editor, picked(more.clone()));
+    assert!(effects.is_empty(), "{effects:?}");
+    let map = editor.map_of(doc).unwrap();
+    assert_eq!(map.tilesets.len(), 2);
+    let added = &map.tilesets[1];
+    assert_eq!(added.tileset.name, "more");
+    assert!(added.file.as_ref().unwrap().path.ends_with("more.tsx"));
+    assert_eq!(
+        editor.store().tilesets_of(map).len(),
+        2,
+        "the store holds the file as it holds the map's other tileset"
+    );
+
+    // The same file again, or the map's own tileset, is reported and not added.
+    for path in [more.clone(), scratch.join("tiles.tsx")] {
+        let effects = apply(&mut editor, picked(path));
+        assert!(
+            matches!(&effects[..], [Effect::Notify(notice)] if notice.text.contains("already")),
+            "{effects:?}"
+        );
+    }
+    assert_eq!(editor.map_of(doc).unwrap().tilesets.len(), 2);
+    // A file that cannot be read is an error, and nothing is added.
+    let effects = apply(&mut editor, picked(scratch.join("missing.tsx")));
+    assert!(
+        matches!(&effects[..], [Effect::Notify(notice)] if notice.severity == Severity::Error),
+        "{effects:?}"
+    );
+
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert_eq!(editor.map_of(doc).unwrap().tilesets.len(), 1, "one step");
+    apply(&mut editor, Intent::Run(ActionId::Redo));
+    apply(&mut editor, Intent::Run(ActionId::Save));
+    let text = std::fs::read_to_string(&map_path).unwrap();
+    assert!(
+        text.contains("source=\"more.tsx\""),
+        "written relative to the map:\n{text}"
     );
 }
