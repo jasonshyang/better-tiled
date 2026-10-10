@@ -141,6 +141,7 @@ pub(crate) fn clip_grid(clip: &crate::clip::TileClip, layer: usize) -> String {
 }
 
 /// Asserts that a map breaks no invariant.
+#[track_caller]
 pub(crate) fn assert_valid(map: &bt_core::Map) {
     let violations = map.validate();
     assert!(violations.is_empty(), "{violations:?}");
@@ -176,6 +177,8 @@ pub(crate) fn group(name: &str, layers: Vec<bt_core::Layer>) -> bt_core::Layer {
 }
 
 /// A rectangle object at `(x, y)` of `w × h` pixels; the map builder gives its id.
+
+/// A rectangle object at (`x`, `y`) of `w` × `h` pixels, with id 0 for a map builder to number.
 pub(crate) fn rect_object(x: f64, y: f64, w: f64, h: f64) -> bt_core::MapObject {
     bt_core::MapObject {
         pos: glam::DVec2::new(x, y),
@@ -213,4 +216,73 @@ pub(crate) fn nested() -> bt_core::Map {
         .image_layer("sky", bt_core::ImageLayer::default())
         .build()
         .unwrap()
+}
+
+/// The ids of a list's objects, bottom first.
+pub(crate) fn ids_of(objects: &bt_core::ObjectLayer) -> Vec<u32> {
+    objects.objects.iter().map(|o| o.id.0).collect()
+}
+
+/// Asserts two points are the same within rounding.
+#[track_caller]
+pub(crate) fn assert_near(actual: glam::DVec2, expected: glam::DVec2) {
+    assert!(
+        (actual - expected).length() < 1e-9,
+        "{actual} is not {expected}"
+    );
+}
+
+/// An object of a random kind: a rectangle, ellipse, capsule, point, polygon, polyline, text or
+/// tile object (one of the first tileset's first 16 tiles, maybe mirrored); maybe without a
+/// size, maybe turned, maybe a template instance. Its id is 0.
+pub(crate) fn random_object(rng: &mut bt_utils::rng::Rng) -> bt_core::MapObject {
+    use bt_core::{FileRef, Flip, MapObject, Shape, TextData};
+    use glam::DVec2;
+
+    let pos = DVec2::new(rng.next_f64() * 200.0, rng.next_f64() * 200.0);
+    let size = if rng.below(5) == Some(0) {
+        DVec2::ZERO
+    } else {
+        DVec2::new(1.0 + rng.next_f64() * 60.0, 1.0 + rng.next_f64() * 60.0)
+    };
+    let rotation = match rng.below(4) {
+        Some(0) => 0.0,
+        Some(1) => 90.0 * rng.below(4).unwrap() as f64,
+        _ => rng.next_f64() * 720.0 - 360.0,
+    };
+    let points = |rng: &mut bt_utils::rng::Rng, least: u64| {
+        let count = least + rng.below(4).unwrap();
+        (0..count)
+            .map(|_| DVec2::new(rng.next_f64() * 80.0 - 40.0, rng.next_f64() * 80.0 - 40.0))
+            .collect::<Vec<_>>()
+    };
+    let mut object = MapObject {
+        pos,
+        size,
+        rotation,
+        ..MapObject::default()
+    };
+    match rng.below(8).unwrap() {
+        0 => object.shape = Shape::Ellipse,
+        1 => object.shape = Shape::Capsule,
+        2 => {
+            object.shape = Shape::Point;
+            object.size = DVec2::ZERO;
+            object.rotation = 0.0;
+        }
+        3 => object.shape = Shape::Polygon(points(rng, 3)),
+        4 => object.shape = Shape::Polyline(points(rng, 2)),
+        5 => object.shape = Shape::Text(TextData::default()),
+        6 => {
+            let mut flip = Flip::empty();
+            flip.set(Flip::H, rng.below(2) == Some(0));
+            flip.set(Flip::V, rng.below(2) == Some(0));
+            object.tile = Some(tile(rng.below(16).unwrap() as u32).with_flip(flip));
+        }
+        _ => {}
+    }
+    if rng.below(4) == Some(0) {
+        object.template = Some(FileRef::new("thing.tx", "/maps/thing.tx"));
+    }
+    object
 }

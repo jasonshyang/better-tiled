@@ -1,9 +1,11 @@
-//! Ids for new layers and objects, and the object references among copies (Tiled's
-//! `ObjectReferencesHelper`, `reference/tiled/src/tiled/objectreferenceshelper.cpp`).
+//! Ids for new layers and objects (a map's counters, or for a tile's collision shapes one above
+//! the highest, as `reference/tiled/src/tiled/tilecollisiondock.cpp` numbers them), and the
+//! object references among copies (Tiled's `ObjectReferencesHelper`,
+//! `reference/tiled/src/tiled/objectreferenceshelper.cpp`).
 
 use std::collections::BTreeMap;
 
-use bt_core::{LayerId, Map, ObjectId, Properties, Property, Value};
+use bt_core::{LayerId, Map, ObjectId, ObjectLayer, Properties, Property, Value};
 
 use crate::error::EditError;
 
@@ -75,6 +77,52 @@ impl IdRemap {
     }
 }
 
+/// Where new objects get their ids, chosen by how it is made: from a map's counter
+/// ([`NewIds::from_map`]), which keeps ids unique across the map, or for a tile's collision
+/// shapes from the shapes themselves ([`NewIds::after_highest`]), one above the highest id they
+/// hold, as Tiled's collision editor numbers them.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct NewIds {
+    next: u32,
+}
+
+impl NewIds {
+    /// The ids `map` gives out next (its `next_object_id`).
+    pub fn from_map(map: &Map) -> NewIds {
+        NewIds {
+            next: map.next_object_id.max(1),
+        }
+    }
+
+    /// The ids above the highest one `objects` holds; from 1 when it holds none.
+    pub fn after_highest(objects: &ObjectLayer) -> NewIds {
+        let highest = objects.objects.iter().map(|o| o.id.0).max().unwrap_or(0);
+        NewIds {
+            next: highest.saturating_add(1),
+        }
+    }
+
+    /// Takes the next id. The last id a `u32` holds is never given, so a map can always store
+    /// the id after it.
+    pub fn take(&mut self) -> Result<ObjectId, EditError> {
+        let id = self.next;
+        self.next = id.checked_add(1).ok_or(EditError::OutOfIds)?;
+        Ok(ObjectId(id))
+    }
+
+    /// Makes sure no id given later is `id` or below it, for an object that keeps its own.
+    pub(crate) fn skip_past(&mut self, id: ObjectId) -> Result<(), EditError> {
+        let after = id.0.checked_add(1).ok_or(EditError::OutOfIds)?;
+        self.next = self.next.max(after);
+        Ok(())
+    }
+
+    /// Records in `map` that the ids taken are used, so it gives out the ones after them.
+    pub(crate) fn store_in(self, map: &mut Map) {
+        map.next_object_id = map.next_object_id.max(self.next);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,6 +139,44 @@ mod tests {
         assert_eq!(take_object_id(&mut map), Ok(ObjectId(1)), "ids start at 1");
         map.next_object_id = u32::MAX;
         assert_eq!(take_object_id(&mut map), Err(EditError::OutOfIds));
+    }
+
+    #[test]
+    fn new_ids_come_from_the_map_or_after_the_highest_shape() {
+        let mut map = Map {
+            next_object_id: 7,
+            ..Map::default()
+        };
+        let mut ids = NewIds::from_map(&map);
+        assert_eq!(ids.take(), Ok(ObjectId(7)));
+        ids.store_in(&mut map);
+        assert_eq!(map.next_object_id, 8);
+        let shape = |id| bt_core::MapObject {
+            id: ObjectId(id),
+            ..bt_core::MapObject::default()
+        };
+        let shapes = ObjectLayer {
+            objects: std::sync::Arc::new(vec![shape(3), shape(9), shape(2)]),
+            ..ObjectLayer::default()
+        };
+        let mut ids = NewIds::after_highest(&shapes);
+        assert_eq!(ids.take(), Ok(ObjectId(10)));
+        ids.skip_past(ObjectId(20)).unwrap();
+        assert_eq!(ids.take(), Ok(ObjectId(21)));
+        ids.skip_past(ObjectId(4)).unwrap();
+        assert_eq!(ids.take(), Ok(ObjectId(22)), "never goes back");
+        assert_eq!(
+            NewIds::after_highest(&ObjectLayer::default()).take(),
+            Ok(ObjectId(1))
+        );
+        let full = ObjectLayer {
+            objects: std::sync::Arc::new(vec![shape(u32::MAX)]),
+            ..ObjectLayer::default()
+        };
+        assert_eq!(
+            NewIds::after_highest(&full).take(),
+            Err(EditError::OutOfIds)
+        );
     }
 
     #[test]

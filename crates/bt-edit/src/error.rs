@@ -32,6 +32,21 @@ pub enum EditError {
     /// No object layer holds an object with this id.
     #[error("the map has no object {0}")]
     NoSuchObject(ObjectId),
+    /// An object brought in with an id of its own collides with one already there.
+    #[error("there is already an object {0}")]
+    ObjectIdInUse(ObjectId),
+    /// The layer draws its objects by where they are on screen, so their order in its list
+    /// cannot raise or lower them.
+    #[error("layer {0} draws its objects top-down, not in their list order")]
+    NotIndexOrdered(LayerId),
+    /// A place in a list past its end.
+    #[error("there is no place {index} in a list of {len}")]
+    IndexOutOfRange {
+        /// The place asked for.
+        index: usize,
+        /// How long the list is.
+        len: usize,
+    },
     /// The map has no tileset in this slot.
     #[error("the map has no tileset {0}")]
     NoSuchTileset(TilesetSlot),

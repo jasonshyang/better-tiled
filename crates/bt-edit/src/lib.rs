@@ -13,13 +13,16 @@
 //! module names its sources and `docs/design/04-editing-operations.md` lists the differences.
 
 mod adjust_tiles;
+mod axis;
 mod brush;
 mod clip;
+mod duplicate_name;
 mod error;
 mod ids;
 mod lattice;
 mod layer_ops;
 mod map_ops;
+mod objects;
 mod region;
 mod report;
 mod select;
@@ -30,13 +33,14 @@ mod tile_layers;
 mod tileset_ops;
 
 pub use adjust_tiles::{adjust_tile_indexes, adjust_tile_metadata, columns_changed};
+pub use axis::Axis;
 pub use brush::{Brush, BrushMode, Variation};
 pub use clip::{
     ClipLayer, PasteTarget, TileClip, TileCut, copy, cut, erase, erase_targets, find_target_layers,
     paste,
 };
 pub use error::EditError;
-pub use ids::IdRemap;
+pub use ids::{IdRemap, NewIds};
 pub use lattice::{FlipDirection, RotateDirection};
 pub use layer_ops::{
     LayerLocation, LayerType, LayerViaSource, can_merge_down, children, duplicate_layers,
@@ -46,6 +50,31 @@ pub use layer_ops::{
 };
 pub use map_ops::{
     autocrop, autocrop_to_layer, crop_to, make_finite, make_infinite, offset_map, resize_map,
+};
+pub use objects::align::{
+    Align, align_deltas, align_objects, align_objects_in, distribute_deltas, distribute_objects,
+    distribute_objects_in,
+};
+pub use objects::bounds::{object_bounds, objects_bounds, objects_bounds_in};
+pub use objects::convert::{
+    rect_to_polygon, rect_to_polygon_in, reset_tile_object_size, reset_tile_object_size_in,
+};
+pub use objects::edit::{
+    add_object, add_object_in, duplicate_objects, duplicate_objects_in, move_objects,
+    move_objects_in, move_objects_to_layer, remove_objects, remove_objects_in,
+};
+pub use objects::find::{Found, find_object, object_index_in, object_mut, object_mut_in};
+pub use objects::hit::{RectMode, object_contains, objects_at, objects_in_quad};
+pub use objects::order::{
+    lower_objects, lower_objects_in, lower_objects_to_bottom, lower_objects_to_bottom_in,
+    move_objects_down, move_objects_down_in, move_objects_up, move_objects_up_in, raise_objects,
+    raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, render_order,
+};
+pub use objects::snap::{SnapMode, move_anchor, move_anchor_in, snap, snap_delta};
+pub use objects::space::ObjectSpace;
+pub use objects::transform::{
+    Pivot, flip_objects, flip_objects_in, flip_origin, flip_origin_in, rotate_objects,
+    rotate_objects_in,
 };
 pub use region::{SelectionMode, TileRegion};
 pub use report::{
