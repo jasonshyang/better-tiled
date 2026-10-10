@@ -7,6 +7,8 @@ mod automap_tests;
 mod custom_types_tests;
 mod effects;
 mod frame;
+#[cfg(test)]
+mod m3_tests;
 mod menu;
 #[cfg(test)]
 mod properties_tests;

@@ -81,7 +81,13 @@ impl TerrainsPanel {
                                 if let Some(tile) = terrain.tile {
                                     paint_tile(ui, tileset, tile, square(thumb), source);
                                 }
-                                ui.selectable_label(is_chosen(color), &terrain.name)
+                                // Packs leave terrains unnamed; a number tells them apart.
+                                let name = if terrain.name.is_empty() {
+                                    egui::RichText::new(format!("Terrain {}", i + 1)).italics()
+                                } else {
+                                    egui::RichText::new(&terrain.name)
+                                };
+                                ui.selectable_label(is_chosen(color), name)
                             });
                             if row.inner.clicked() {
                                 out.push(choose(doc, slot, index, color));
