@@ -76,9 +76,9 @@ The grammar is Tiled's, exactly, because every pack's rules were written for it
   `NoOverlappingRules`, and the rule defaults `Probability`, `ModX`, `ModY`, `OffsetX`,
   `OffsetY`, `NoOverlappingOutput`, `Disabled`, `IgnoreLock`. A value that cannot be read is a
   warning naming the property, never a silent zero.
-- **Special tiles** by `MatchType`, read from the tile's properties, which the loader has already
-  resolved from the tile's class with the project's custom types (one source of truth: there is
-  no table of ids). Their meaning per layer kind follows Tiled's table: on an input layer a
+- **Special tiles** by `MatchType`, read from the tile's property or else from its class with
+  the project's custom types, when the rule map is compiled (one source of truth: there is no
+  table of ids). Their meaning per layer kind follows Tiled's table: on an input layer a
   regular tile is "any of", `Empty` requires an empty cell, `NonEmpty` forbids one, `Other`
   forbids every tile the same condition uses anywhere (and the empty cell unless `Empty` is used
   there), `Negate` swaps "any" and "none" at the position, `Ignore` is no condition but joins

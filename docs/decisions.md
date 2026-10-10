@@ -699,3 +699,32 @@ in memory, which change when a map is saved and read back.
 **Why:** tests are isolated by passing their folders; a checksum must match the layer as saved;
 a failed move must leave the entry somewhere, never nowhere.
 
+
+## 2026-10-10 — AutoMap's core as built
+
+**Decided:** a rule map reports what is wrong with it as its own problems (errors, warnings and
+notes), with no separate information type beside it. `MatchType` is read once, when a rule map
+is compiled, from the tile's property or else from its class, in the rule map's own tileset;
+`classes_changed` tells the editor when the project's types would change one, so it reloads.
+This changes the 2026-10-09 entry, which had the loader resolve classes: it does not. Similar
+tilesets are unified when a run binds the table, the map's first, as Tiled orders them. Beyond
+`08-automap.md`, §12, these Tiled behaviours are fixed: `NoOverlappingOutput` keys an object
+output's footprint by its object layer; object references inside list values are rewired; a
+custom-enum `MatchType` counts by its name, and an unknown name is a warning; text read as a
+boolean follows Qt, with a warning; a modulus of 0 reads as 1, with a warning; an output
+layer's `Probability` that cannot be read is not copied to the target layer as a property;
+rules whose boxes start at the same cell are ordered by their first cell; `WrapBorder` on a
+missing layer reads empty. These are kept: every rule map a rules file lists must exist, even
+one its filter leaves out; a rule map that exists but cannot be read is left out with a problem;
+Tiled's cell rectangles for objects; layer offsets ignored on `rule_options`; the region grows
+where locks blocked an output; `DeleteTiles` erases where the input layers have tiles.
+Write-back drops the chunks it empties, so an infinite layer's bounds can shrink where Tiled's
+keep their size.
+**Instead of:** a `RuleMapInfo` beside each rule map; reading `MatchType` after unification
+from the map's similar copy, as Tiled does; Tiled's behaviour in each fixed case (a footprint
+looked up under a tile layer of the same name, usually none; references left pointing into the
+rule map; an enum value read as empty text, so an ordinary tile; a division by zero).
+**Why:** one place answers what a rule map does and what is wrong with it; the match types are
+set where the rule map's author set them, and a run does not depend on which copy a map has;
+each fixed case is a crash or a rule doing something other than what its author wrote, and
+each kept case is something existing packs rely on.
