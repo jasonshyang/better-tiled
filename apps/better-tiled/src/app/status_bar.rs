@@ -12,6 +12,9 @@ pub(crate) struct StatusInput<'a> {
     pub(crate) flash: Option<&'a Notice>,
     /// What is under the pointer.
     pub(crate) hover: Option<Hover>,
+    /// While AutoMap layers are on: whether the hovered tile of the current layer is one the
+    /// rules made, not what was painted.
+    pub(crate) made_by_rules: Option<bool>,
     /// The current canvas's zoom.
     pub(crate) zoom: Option<f64>,
     /// The current map.
@@ -47,6 +50,11 @@ pub(crate) fn status_bar(ui: &mut egui::Ui, input: &StatusInput<'_>) {
                             "{}, {}  ·  {:.1}, {:.1} px",
                             hover.cell.x, hover.cell.y, hover.pixel.x, hover.pixel.y
                         ));
+                        match input.made_by_rules {
+                            Some(true) => ui.weak("made by the rules"),
+                            Some(false) => ui.weak("painted"),
+                            None => ui.weak(""),
+                        };
                     }
                     if let Some(hint) = input.hint {
                         ui.add(egui::Label::new(egui::RichText::new(hint).weak()).truncate());

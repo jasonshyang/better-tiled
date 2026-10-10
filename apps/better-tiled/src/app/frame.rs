@@ -592,9 +592,15 @@ impl App {
     fn show_status_bar(&mut self, ui: &mut egui::Ui) {
         let current = self.editor.current();
         let canvas = self.shown_canvas();
+        let hover = canvas.and_then(Canvas::hover);
+        let made_by_rules = current.zip(hover).and_then(|(doc, hover)| {
+            let layer = self.editor.document(doc)?.selection().current_layer?;
+            self.editor.made_by_rules(doc, layer, hover.cell)
+        });
         let input = StatusInput {
             flash: self.flash.as_ref().map(|flash| &flash.notice),
-            hover: canvas.and_then(Canvas::hover),
+            hover,
+            made_by_rules,
             zoom: canvas.map(Canvas::zoom),
             map: current
                 .and_then(|doc| self.editor.map_of(doc))

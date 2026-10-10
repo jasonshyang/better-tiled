@@ -10,6 +10,7 @@ use bt_automap::layers::{AutoLayers, Setup};
 use bt_core::{LayerId, Map};
 use bt_edit::{LayerType, new_layer};
 use bt_utils::rng::Rng;
+use glam::IVec2;
 
 use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
@@ -100,6 +101,18 @@ impl Editor {
             Some(live) if document.automap.is_some() => Some(live.layers.result()),
             _ => self.store.map(document.asset()),
         }
+    }
+
+    /// Whether the tile at `cell` of the tile layer `layer` is one the AutoMap rules made, not
+    /// what was painted there; `None` while AutoMap layers are off.
+    pub fn made_by_rules(&self, doc: DocumentId, layer: LayerId, cell: IVec2) -> Option<bool> {
+        let live = self.live_layers(doc)?;
+        let at = |map: &Map| {
+            map.layer(layer)
+                .and_then(|l| l.as_tile_layer())
+                .map(|tiles| tiles.cell(cell))
+        };
+        Some(at(live.result()) != at(live.painted()))
     }
 
     /// AutoMap layers of a document, while they are on and their rules have run.

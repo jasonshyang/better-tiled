@@ -496,6 +496,14 @@ fn live_automap_shows_the_rules_result_and_keeps_what_was_painted() {
         "the result is shown"
     );
     assert_eq!(top(&editor, doc), ". . .\n. . .", "what was painted stays");
+    assert_eq!(
+        editor.made_by_rules(doc, LayerId(2), IVec2::ZERO),
+        Some(true)
+    );
+    assert_eq!(
+        editor.made_by_rules(doc, LayerId(1), IVec2::ZERO),
+        Some(false)
+    );
     assert!(
         is_dirty(&editor, doc),
         "the map's file will hold the result"
@@ -521,6 +529,7 @@ fn live_automap_shows_the_rules_result_and_keeps_what_was_painted() {
 
     apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
     assert!(editor.document(doc).unwrap().automap().is_none());
+    assert_eq!(editor.made_by_rules(doc, LayerId(2), IVec2::ZERO), None);
     assert_eq!(
         top(&editor, doc),
         "6 6 6\n6 6 6",
