@@ -10,6 +10,7 @@ use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
 use super::choose_layer::ChooseLayerDialog;
 use super::new_map::NewMapDialog;
 use super::new_tileset::{DialogRequest, NewTilesetDialog};
+use super::offset_map::OffsetMapDialog;
 use super::palette::PaletteDialog;
 use super::preferences::PreferencesDialog;
 use super::resize_map::ResizeMapDialog;
@@ -33,6 +34,8 @@ pub(crate) enum Modal {
     ChooseLayer(ChooseLayerDialog),
     /// Resize Map.
     ResizeMap(ResizeMapDialog),
+    /// Offset Map.
+    OffsetMap(OffsetMapDialog),
 }
 
 /// The open modals; the last is shown.
@@ -99,6 +102,7 @@ impl Modals {
             Modal::Preferences(dialog) => dialog.show(ctx, out),
             Modal::ChooseLayer(dialog) => dialog.show(ctx, editor, out),
             Modal::ResizeMap(dialog) => dialog.show(ctx, out),
+            Modal::OffsetMap(dialog) => dialog.show(ctx, out),
         };
         if closed {
             self.stack.pop();

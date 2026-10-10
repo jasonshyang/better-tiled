@@ -16,6 +16,7 @@ mod layer_commands;
 mod map_commands;
 mod notice;
 mod objects;
+mod offset_map;
 mod properties;
 mod recovery;
 mod session;
@@ -47,6 +48,7 @@ pub use notice::{Notice, Severity};
 pub use objects::{
     HandleFrame, NodeHandle, ObjectFrame, ObjectRow, ObjectStroke, ObjectStrokeKind, SnapToggle,
 };
+pub use offset_map::{LayerChoice, MapOffset};
 pub use properties::{
     Attribute, AttributeRow, AttributeValue, Change, ListEdit, Op, Origin, PropertyError,
     PropertySet, Shown, Step, Target, TargetId, ValueType, conversions, convert, layer_attributes,

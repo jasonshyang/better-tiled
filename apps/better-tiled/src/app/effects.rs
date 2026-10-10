@@ -6,8 +6,8 @@ use bt_editor::{Dialog, Effect, Intent, Notice};
 
 use super::frame::App;
 use crate::dialogs::{
-    ChooseLayerDialog, Modal, NewMapDialog, NewTilesetDialog, PaletteDialog, PreferencesDialog,
-    ResizeMapDialog,
+    ChooseLayerDialog, Modal, NewMapDialog, NewTilesetDialog, OffsetMapDialog, PaletteDialog,
+    PreferencesDialog, ResizeMapDialog,
 };
 use crate::style::apply_theme;
 
@@ -68,6 +68,9 @@ impl App {
                         .push(Modal::ResizeMap(ResizeMapDialog::new(doc, size)));
                 }
             }
+            Effect::Show(Dialog::OffsetMap(doc)) => self
+                .modals
+                .push(Modal::OffsetMap(OffsetMapDialog::new(doc, &self.editor))),
             Effect::PasteAtPointer(doc) => {
                 let in_tileset = self
                     .editor

@@ -357,3 +357,28 @@ fn selected_tile_layers(map: &Map, selection: &Selection) -> Vec<LayerId> {
         selected
     }
 }
+
+/// Says that the layers of `locked` were left as they were because they are locked: `one` ends
+/// the sentence for one layer ("its contents stayed where they were"), `many` for several.
+/// Nothing when no layer is locked.
+pub(crate) fn locked_layers_notice(
+    map: &Map,
+    locked: &[LayerId],
+    one: &str,
+    many: &str,
+) -> Option<Effect> {
+    let names: Vec<String> = locked
+        .iter()
+        .filter_map(|id| map.layer(*id).map(|l| l.name.clone()))
+        .collect();
+    let quoted = bt_utils::text::quoted_list(&names);
+    match names.len() {
+        0 => None,
+        1 => Some(Effect::Notify(Notice::info(format!(
+            "{quoted} is locked: {one}"
+        )))),
+        _ => Some(Effect::Notify(Notice::info(format!(
+            "{quoted} are locked: {many}"
+        )))),
+    }
+}

@@ -155,6 +155,7 @@ impl Editor {
                 offset,
                 remove_objects_outside,
             } => self.resize_map_to(doc, size, offset, remove_objects_outside),
+            Intent::OffsetMap { doc, offset } => self.offset_map_contents(doc, offset),
             Intent::CreateTileset { doc, tileset } => self.create_tileset(doc, &tileset),
             Intent::Open(path) => self.open(&path),
             Intent::Loaded(loaded) => {

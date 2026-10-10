@@ -18,10 +18,7 @@ use crate::settings::Snapping;
 pub(crate) fn pending(id: ActionId) -> bool {
     matches!(
         id,
-        ActionId::OffsetMap
-            | ActionId::AddExternalTileset
-            | ActionId::MapProperties
-            | ActionId::LayerProperties
+        ActionId::AddExternalTileset | ActionId::MapProperties | ActionId::LayerProperties
     )
 }
 
@@ -313,10 +310,12 @@ impl Editor {
             ActionId::ResizeMap => {
                 on_document(self, &|_, doc| vec![Effect::Show(Dialog::ResizeMap(doc))])
             }
-            ActionId::OffsetMap
-            | ActionId::AddExternalTileset
-            | ActionId::MapProperties
-            | ActionId::LayerProperties => Vec::new(),
+            ActionId::OffsetMap => {
+                on_document(self, &|_, doc| vec![Effect::Show(Dialog::OffsetMap(doc))])
+            }
+            ActionId::AddExternalTileset | ActionId::MapProperties | ActionId::LayerProperties => {
+                Vec::new()
+            }
         }
     }
 }

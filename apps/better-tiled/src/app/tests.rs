@@ -1360,3 +1360,60 @@ fn resize_map_moves_the_map_where_its_preview_is_dragged() {
     let map = window.editor().map_of(doc).unwrap();
     assert_eq!((map.width, map.height), (8, 6), "one step");
 }
+
+#[test]
+fn offset_map_shifts_the_shown_layers_and_wraps() {
+    use bt_core::{Layer, LayerKind};
+    use bt_test_data::fixtures::{Atlas, MapBuilder, grid_layer};
+    use bt_tmx::WriteRequest;
+    use egui::Key;
+    use glam::UVec2;
+
+    let scratch = Scratch::new("window-offset-map").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let mut hidden = Layer::new(
+        LayerId(0),
+        "hidden",
+        LayerKind::Tile(grid_layer("0 . . .\n. . . .").unwrap()),
+    );
+    hidden.visible = false;
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(4, 2))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", "0 1 2 3\n. . . .")
+        .layer(hidden)
+        .build()
+        .unwrap();
+    let path = scratch.join("offset-map.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let first_row = |window: &TestWindow, layer: u32| {
+        let map = window.editor().map_of(doc).unwrap();
+        let tiles = map.layer(LayerId(layer)).unwrap().as_tile_layer().unwrap();
+        (0..4)
+            .map(|x| tiles.cell(IVec2::new(x, 0)))
+            .collect::<Vec<_>>()
+    };
+    let ground = first_row(&window, 1);
+    let hidden = first_row(&window, 2);
+
+    run_command(&mut window, "offset map");
+    assert!(window.has_modal(), "Offset Map asks");
+    window.enter_value("X", "1");
+    window.click("Wrap");
+    window.click("OK");
+    assert!(!window.has_modal());
+    assert_eq!(
+        first_row(&window, 1),
+        [ground[3], ground[0], ground[1], ground[2]],
+        "wrapped around"
+    );
+    assert_eq!(first_row(&window, 2), hidden, "only the shown layers move");
+
+    window.press(command(), Key::Z);
+    assert_eq!(first_row(&window, 1), ground, "one step");
+}

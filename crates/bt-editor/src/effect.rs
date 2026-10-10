@@ -53,6 +53,8 @@ pub enum Dialog {
     MoveObjectsToLayer(DocumentId),
     /// Resize Map, for the map of a document.
     ResizeMap(DocumentId),
+    /// Offset Map, for the map of a document.
+    OffsetMap(DocumentId),
 }
 
 /// A file to ask for.

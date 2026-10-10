@@ -13,6 +13,7 @@ use crate::document::{DocumentId, TilesetMode, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
 use crate::objects::ObjectStroke;
+use crate::offset_map::MapOffset;
 use crate::recovery::Orphan;
 use crate::settings::Settings;
 use crate::tools::Stroke;
@@ -38,6 +39,13 @@ pub enum Intent {
         offset: IVec2,
         /// Whether objects that end up outside the map are removed.
         remove_objects_outside: bool,
+    },
+    /// Offset Map (the dialog's OK): the contents of layers shift by whole cells, as one step.
+    OffsetMap {
+        /// The map's document.
+        doc: DocumentId,
+        /// How far, within what, and which layers.
+        offset: MapOffset,
     },
     /// Add a new tileset to a map.
     CreateTileset {
