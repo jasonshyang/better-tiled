@@ -14,13 +14,14 @@ use crate::files::hash_file;
 use crate::store::AssetId;
 use crate::watch::Found;
 
-/// A tileset the editor has, standing in for its file.
+/// A tileset the editor has, standing in for its file: whoever reads a file that uses it gets
+/// the editor's copy, with its unsaved changes.
 #[derive(Clone, Debug)]
-pub(crate) struct KnownTileset {
+pub struct KnownTileset {
     /// The file.
-    pub(crate) path: PathBuf,
+    pub path: PathBuf,
     /// The tileset, as the editor has it.
-    pub(crate) tileset: Arc<Tileset>,
+    pub tileset: Arc<Tileset>,
 }
 
 /// A read of a map's rules, to run on a worker: [`RulesJob::run`] does it, and the result goes

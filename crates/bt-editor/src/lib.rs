@@ -10,6 +10,7 @@ mod document;
 mod editor;
 mod effect;
 mod error;
+mod external;
 mod files;
 mod history;
 mod inspect;
@@ -36,7 +37,8 @@ pub use actions::{
     Modifiers, PaletteEntry, PaletteTarget, tool_action,
 };
 pub use automap::{
-    AutoMapRules, CellExplanation, ExplainedRun, LastRun, LiveEdit, RulesJob, RulesLoaded,
+    AutoMapRules, CellExplanation, ExplainedRun, KnownTileset, LastRun, LiveEdit, RulesJob,
+    RulesLoaded,
 };
 pub use document::{
     Document, DocumentId, Documents, Selection, TilesetEditing, TilesetMode, ViewState, ViewToggles,
@@ -46,6 +48,10 @@ pub use effect::{
     Choice, Decision, DecisionId, Dialog, Effect, FileRequest, Purpose, Question, ViewRequest,
 };
 pub use error::EditError;
+pub use external::{
+    BaseRules, ExternalBase, ExternalEdit, ExternalEditError, ExternalUndo, ExternalUndoError,
+    MARK_COLORS, Mark, MarkCells,
+};
 pub use files::{AutotilesJob, ExpandedAutotiles};
 pub use files::{LoadJob, Loaded, NewMap, NewTileset, NewTilesetSource};
 pub use history::{

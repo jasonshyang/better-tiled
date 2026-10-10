@@ -106,6 +106,7 @@ impl EditorBuilder {
             recovery: RecoveryPlan::new(self.recovery_folder, self.pid),
             watch: WatchModel::default(),
             automap: AutoMapState::default(),
+            external: Default::default(),
             session: Session::default(),
             session_generation: 0,
             restore_current: None,
@@ -139,6 +140,8 @@ pub struct Editor {
     pub(crate) watch: WatchModel,
     /// Each map's rules and the next AutoMap run's seed.
     pub(crate) automap: AutoMapState,
+    /// Each document's external edits and marks.
+    pub(crate) external: crate::external::ExternalStates,
     pub(crate) session: Session,
     session_generation: u64,
     /// The file that was current in a session being restored, kept current as the others load.
@@ -360,7 +363,14 @@ impl Editor {
         {
             self.follow_document(doc);
         }
-        effects.extend(self.sync_live());
+        effects.extend(self.after_changes());
+        effects
+    }
+
+    /// What follows any change: AutoMap layers' results and the Explain tool's explanations made
+    /// again where what they come from changed.
+    pub(crate) fn after_changes(&mut self) -> Vec<Effect> {
+        let effects = self.sync_live();
         self.sync_explanations();
         effects
     }

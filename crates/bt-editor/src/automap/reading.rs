@@ -8,13 +8,13 @@ use std::sync::Arc;
 
 use bt_automap::files;
 
-use super::job::{KnownTileset, RulesJob, RulesLoaded};
+use super::job::{RulesJob, RulesLoaded};
 use super::rules::AutoMapRules;
 use crate::document::DocumentId;
 use crate::editor::Editor;
 use crate::effect::Effect;
 use crate::notice::Notice;
-use crate::store::{AssetId, AssetKind};
+use crate::store::AssetId;
 use crate::watch::{Found, Observation};
 
 /// The rules file Tiled looks for beside a map.
@@ -111,17 +111,7 @@ impl Editor {
     fn read_rules(&mut self, asset: AssetId) -> Option<Effect> {
         let map_path = self.map_path(asset);
         let custom_types = Arc::new(self.custom_types().clone());
-        let tilesets = self
-            .store
-            .assets()
-            .filter(|a| a.kind() == AssetKind::Tileset)
-            .filter_map(|a| {
-                Some(KnownTileset {
-                    path: a.path()?.to_path_buf(),
-                    tileset: Arc::clone(self.store.tileset(a.id())?),
-                })
-            })
-            .collect();
+        let tilesets = self.known_tilesets();
         let read = self.automap.next_read;
         self.automap.next_read += 1;
         let rules = self.automap.maps.get_mut(&asset)?;

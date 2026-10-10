@@ -44,6 +44,7 @@ impl Editor {
         let Some(document) = self.documents.remove(doc) else {
             return Vec::new();
         };
+        self.forget_external(doc);
         let asset = document.asset();
         let mut effects = Vec::new();
         if let Some(path) = self
