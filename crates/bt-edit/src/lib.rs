@@ -12,6 +12,7 @@
 //! Most of the crate follows the behaviour of Tiled's editor (`reference/tiled/src/tiled`); each
 //! module names its sources and `docs/design/04-editing-operations.md` lists the differences.
 
+mod adjust_tiles;
 mod brush;
 mod clip;
 mod error;
@@ -28,6 +29,7 @@ mod testutil;
 mod tile_layers;
 mod tileset_ops;
 
+pub use adjust_tiles::{adjust_tile_indexes, adjust_tile_metadata, columns_changed};
 pub use brush::{Brush, BrushMode, Variation};
 pub use clip::{
     ClipLayer, PasteTarget, TileClip, TileCut, copy, cut, erase, erase_targets, find_target_layers,
@@ -47,8 +49,8 @@ pub use map_ops::{
 };
 pub use region::{SelectionMode, TileRegion};
 pub use report::{
-    EraseReport, LayerChange, LayersReport, ObjectsReport, PasteReport, RemovedTileset,
-    ResizeReport,
+    AdjustReport, EraseReport, LayerChange, LayersReport, ObjectsReport, PasteReport,
+    RemovedTileset, ResizeReport,
 };
 pub use select::{fill_area, flood_fill, invert, magic_wand, select_same_tile};
 pub use shapes::{FillShape, rect_select_rect, shape_fill_region};

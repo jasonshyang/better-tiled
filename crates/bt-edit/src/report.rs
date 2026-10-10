@@ -82,3 +82,17 @@ pub struct ObjectsReport {
     /// Their ids, in the order they were changed.
     pub changed: Vec<ObjectId>,
 }
+
+/// What adjusting a map's tile indexes to an atlas's new column count changed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdjustReport {
+    /// The cells that now name the tile at their old row and column.
+    pub moved_cells: usize,
+    /// The cells erased because their column is gone.
+    pub erased_cells: usize,
+    /// The tile objects that now name the tile at their old row and column.
+    pub moved_objects: Vec<ObjectId>,
+    /// The tile objects left without a tile because their column is gone (they stay, as
+    /// rectangles, as in Tiled).
+    pub untiled_objects: Vec<ObjectId>,
+}
