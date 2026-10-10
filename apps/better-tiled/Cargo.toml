@@ -33,6 +33,7 @@ objc2-app-kit = { workspace = true, features = ["NSApplication", "NSResponder"] 
 bt-test-data = { workspace = true, features = ["fixtures"] }
 bt-tmx.workspace = true
 egui_kittest = { workspace = true, features = ["eframe"] }
+fontdue.workspace = true
 toml.workspace = true
 
 # The workspace's lints, but `unsafe_code` is denied where the workspace forbids it: the macOS

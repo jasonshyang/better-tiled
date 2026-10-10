@@ -640,3 +640,12 @@ and writes the project on every change.
 thing; one field for every kind of text keeps one way to edit it; types edits that undo with
 the rest of the work, and a file written when the user saves, are how every other change
 behaves here.
+
+## 2026-10-10 — Key symbols come from macOS's own font
+
+**Decided:** on macOS the interface draws key names (`⇧⌘S`) with egui's fonts and the
+system's Apple Symbols after them; other platforms spell key names out and need nothing more.
+**Instead of:** bundling a symbols font, or spelling out modifiers on macOS too.
+**Why:** egui's fonts draw ⌘ but not ⇧, ⌥, ⌃ or the arrows, so shortcuts showed boxes in the
+menus and the palette; the system's font is the one native menus use and is on every Mac, and
+nothing has to be fetched or carried in the binary.

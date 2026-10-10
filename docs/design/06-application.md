@@ -413,7 +413,9 @@ buttons first and clips the tools to the room left; labels drop before buttons d
 - **Theme**: the egui style is derived from the theme settings (base colour decides light or
   dark, selection colour, font size, an optional custom font); icons are vector-drawn.
 - **Fonts**: the interface font and the macOS symbol glyphs for key names; the renderer's
-  text font is `bt-render`'s.
+  text font is `bt-render`'s. As built (`style/fonts.rs`): egui's fonts, and on macOS the
+  system's Apple Symbols after them, for the ⇧ ⌥ ⌃ and key symbols egui's fonts lack (they
+  have ⌘); a symbols font that cannot be read is logged and those symbols show as boxes.
 
 ## 13. Development modes
 

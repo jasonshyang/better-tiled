@@ -24,7 +24,7 @@ use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropp
 use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{LayersPanel, ObjectsPanel, PropertiesPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
-use crate::style::apply_theme;
+use crate::style::{apply_theme, interface_fonts};
 use crate::tileset_editor::{TilesetEditorView, TilesetFrame};
 use crate::tools::ToolBox;
 use crate::workers::Workers;
@@ -243,6 +243,7 @@ impl App {
     }
 
     fn assemble(ctx: &egui::Context, startup: Startup) -> Result<App, String> {
+        ctx.set_fonts(interface_fonts());
         apply_theme(ctx, &startup.settings.theme);
         // ⌘= and ⌘- zoom the map, not the interface.
         ctx.options_mut(|options| options.zoom_with_keyboard = false);
