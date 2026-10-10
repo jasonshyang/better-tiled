@@ -175,7 +175,7 @@ layer 0     bt-utils
 | `bt-project` | `bt-utils`, `bt-core` |
 | `bt-live` | `bt-utils` |
 | `bt-godot` | `bt-core`, `bt-image`, `bt-project` |
-| `bt-editor` | `bt-core`, `bt-tmx`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
+| `bt-editor` | `bt-core`, `bt-tmx`, `bt-image`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
 | `bt-script` | `bt-core`, `bt-tmx`, `bt-image`, `bt-render`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
 | `apps/bt` | `bt-script`, `bt-godot`, `bt-live`, `bt-tmx`, `bt-render` |
 | `apps/better-tiled` | everything but `bt-test-data` |

@@ -19,7 +19,8 @@ worker; the results come back as intents. The crate therefore has no threads, no
 channels of its own, and every behaviour is a function of what it was told.
 
 Dependencies: `bt-core`, `bt-tmx`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project`,
-`bt-utils`, `serde` and `toml` for what is remembered. Not `bt-render`, `bt-script` (the window
+`bt-image` (the terrain helpers' jobs decode a tileset's image on a worker), `bt-utils`, `serde`
+and `toml` for what is remembered. Not `bt-render`, `bt-script` (the window
 runs scripts and hands the result in) or `bt-godot` (the export is an effect the window carries
 out).
 

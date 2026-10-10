@@ -812,3 +812,22 @@ unify; Tiled's skip of rule maps that do not use the layer drawn on.
 **Why:** each fallback is a case where the region a full run tries depends on more than the
 edit's neighbourhood, and a region run must equal a full run there (a fuzz test holds it); a
 wrong "empty" would send a person to the wrong layer.
+
+## 2026-10-10 — The tileset editor's terrain helpers as built
+
+**Decided:** Layout… makes a set of the layout's own kind (a blob layout labels corners and
+edges, so its set is mixed) and Label All labels the blocks found for the target set's kind.
+Applying a layout gives a terrain, and a new set, that has no tile of its own the block's tile
+that is all of it, and clears in that set the tiles the layout leaves unlabelled. Auto-label is
+armed by a button and the next tile clicked is the one it starts from; each tile labelled with
+a pattern is one step. The tileset's image is decoded on a worker for Layout… and Auto-label as
+for RPG Maker sheets, so `bt-editor` depends on `bt-image`. New Tileset from an RPG Maker sheet
+writes the expanded image beside the sheet, which stays when the step is undone. A layout
+search is kept while the tileset and its image's cut stay the same; Look again reads the image
+afresh.
+**Instead of:** a corner set for every blob layout; labelling every fit whatever its kind; a
+context-menu command, which the right button's erasing leaves no room for; reading pixels on
+the window's thread; deleting the image on undo.
+**Why:** a set has one kind and a blob's tiles need both; a click is how a tile is chosen in
+this editor; no frame waits on an image; a file written for the user is theirs once written, and
+undoing the step that used it must not destroy it.
