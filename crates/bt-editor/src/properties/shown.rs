@@ -18,9 +18,11 @@ pub struct Shown {
     /// Where it is: the property's name, then members and items.
     pub path: Vec<Step>,
     /// The value of the first target that has it (its own, inherited, or for a member its value
-    /// leaves unset, the class's default), with every member of a class value filled in.
+    /// leaves unset, the class's default), as it is kept: a class value holds the members it
+    /// sets, and its member rows show the rest at their defaults. What Copy takes.
     pub value: Property,
-    /// Whether the targets' values differ, or some lack it.
+    /// Whether the targets' values differ, with unset members counted at their defaults, or
+    /// some lack it.
     pub mixed: bool,
     /// The targets, by their index, that set it themselves: as one of their own properties, or
     /// as a member set in or an item of one of their own values.
@@ -96,11 +98,12 @@ fn row(
     resettable: bool,
 ) -> Option<Shown> {
     let first = slots.iter().flatten().next()?;
-    let value = types.resolve_value(first.value);
+    let completed = types.resolve_value(first.value);
     let mixed = slots.iter().any(|slot| match slot {
         None => true,
-        Some(slot) => slot.value != first.value && types.resolve_value(slot.value) != value,
+        Some(slot) => slot.value != first.value && types.resolve_value(slot.value) != completed,
     });
+    let value = first.value.clone();
     let holders = slots
         .iter()
         .enumerate()

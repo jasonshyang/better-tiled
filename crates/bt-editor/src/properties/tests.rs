@@ -288,18 +288,10 @@ fn class_values_expand_to_members_with_unset_ones_at_the_class_default() {
     let loot = row(&rows, &["loot"]);
     assert_eq!(
         loot.value,
-        class_value(
-            "Loot",
-            &[
-                ("gold", int(0)),
-                (
-                    "stats",
-                    class_value("Stats", &[("hp", int(5)), ("speed", float(1.5))])
-                )
-            ]
-        ),
-        "every member filled in"
+        class_value("Loot", &[]),
+        "as kept, to copy as it is"
     );
+    assert_eq!(loot.children.len(), 2);
     let gold = row(&rows, &["loot", "gold"]);
     assert!(gold.is_default);
     assert_eq!(gold.value, int(0));
@@ -309,6 +301,29 @@ fn class_values_expand_to_members_with_unset_ones_at_the_class_default() {
     assert!(stats_hp.is_default);
     let speed = row(&rows, &["loot", "stats", "speed"]);
     assert_eq!(speed.value, float(1.5), "Stats's own default");
+}
+
+#[test]
+fn a_member_set_to_its_default_is_the_same_value_as_one_left_unset() {
+    let world = world();
+    let mut map = world.map.clone();
+    map.properties
+        .insert("stats".into(), class_value("Stats", &[("hp", int(10))]));
+    map.layer_mut(LayerId(2))
+        .unwrap()
+        .properties
+        .insert("stats".into(), class_value("Stats", &[]));
+    let rows = map_and_layers(&map, &[2], &world.types).rows();
+    let stats = row(&rows, &["stats"]);
+    assert!(!stats.mixed, "both have 10 hp and a speed of 1.5");
+    assert_eq!(stats.holders, [0, 1]);
+    let hp = row(&rows, &["stats", "hp"]);
+    assert!(!hp.mixed);
+    assert_eq!(hp.holders, [0], "only the map sets it");
+    assert!(!hp.is_default && hp.resettable);
+    let speed = row(&rows, &["stats", "speed"]);
+    assert!(speed.is_default && !speed.resettable);
+    assert!(speed.holders.is_empty());
 }
 
 #[test]
