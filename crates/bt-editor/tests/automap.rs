@@ -318,3 +318,119 @@ fn a_rules_txt_appearing_beside_the_map_is_read() {
     assert_eq!(rules.file(), Some(scratch.join("rules.txt").as_path()));
     assert_eq!(rules.rules().unwrap().rule_count(), 1);
 }
+
+#[test]
+fn rules_are_read_again_when_a_class_gives_a_rule_tile_another_match_type() {
+    use std::sync::Arc;
+
+    use bt_core::{
+        ClassType, ClassUsage, CustomType, CustomTypes, Project, Properties, Property, TileData,
+        TileId, Tileset, Value,
+    };
+    use bt_editor::TypeEdit;
+
+    let scratch = Scratch::new("bt-editor-automap-classes").unwrap();
+    // Projects are looked for below the home folder, which is the scratch folder here.
+    let folder = scratch.join("game");
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut members = Properties::new();
+    members.insert(
+        "MatchType".into(),
+        Property::new(Value::String("Empty".into())),
+    );
+    let mut types = CustomTypes::new();
+    types.add(CustomType::class(
+        "Hole",
+        ClassType {
+            members,
+            use_as: ClassUsage::TILE,
+            ..ClassType::default()
+        },
+    ));
+    let project = Project {
+        custom_types: types,
+        ..Project::default()
+    };
+    WriteRequest::for_project(&project, &folder.join("game.tiled-project"))
+        .write()
+        .unwrap();
+    let map = write_tiles_map(
+        &folder,
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("ground", "0 . 0\n0 0 0"), ("top", ". . .\n. . .")],
+    );
+    // A tileset of the rules' own whose tile 9 is a hole: Empty, by its class.
+    let atlas = Atlas::builder().name("tiles").build_in(&folder).unwrap();
+    let mut marks = Tileset::clone(&atlas.tileset);
+    marks.name = "marks".into();
+    marks.tiles.insert(
+        TileId(9),
+        TileData {
+            class: "Hole".into(),
+            ..TileData::default()
+        },
+    );
+    WriteRequest::for_tileset(&marks, &folder.join("marks.tsx"))
+        .write()
+        .unwrap();
+    let marks = Arc::new(marks);
+    let mut rule = MapBuilder::new(UVec2::new(16, 16), UVec2::new(1, 1))
+        .tileset(atlas.tileset.clone())
+        .tileset(Arc::clone(&marks))
+        .tile_layer("input_ground", "9@1")
+        .tile_layer("output_top", "6")
+        .build()
+        .unwrap();
+    rule.tilesets[0] = TilesetRef {
+        file: Some(FileRef::new("tiles.tsx", folder.join("tiles.tsx"))),
+        first_gid: Some(1),
+        tileset: atlas.tileset.clone(),
+    };
+    rule.tilesets[1] = TilesetRef {
+        file: Some(FileRef::new("marks.tsx", folder.join("marks.tsx"))),
+        first_gid: Some(17),
+        tileset: marks,
+    };
+    WriteRequest::for_map(&rule, &folder.join("rule.tmx"))
+        .write()
+        .unwrap();
+    std::fs::write(folder.join("rules.txt"), "rule.tmx\n").unwrap();
+
+    let (mut editor, doc) = open(&scratch, &map);
+    assert!(editor.project_path().is_some(), "the project above the map");
+    apply(&mut editor, Intent::Run(ActionId::AutoMap));
+    assert_eq!(
+        top(&editor, doc),
+        ". 6 .\n. . .",
+        "the hole matched the empty cell"
+    );
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+
+    let hole = editor.custom_types().types[0].id;
+    apply(
+        &mut editor,
+        Intent::EditCustomTypes {
+            doc,
+            edit: TypeEdit::Rename {
+                id: hole,
+                name: "Gap".to_owned(),
+            },
+            merge: None,
+        },
+    );
+    let effects = editor.apply(Intent::Tick { now_ms: 1 });
+    let [Effect::LoadRules(job)] = effects.as_slice() else {
+        panic!("the rules are read again: {effects:?}");
+    };
+    editor.apply(Intent::RulesLoaded(Box::new(job.run())));
+    let effects = apply(&mut editor, Intent::Run(ActionId::AutoMap));
+    assert_eq!(
+        notices(&effects),
+        [(
+            Severity::Warning,
+            "AutoMap did nothing: no rule matched".to_owned()
+        )],
+        "tile 9 is an ordinary tile now"
+    );
+}

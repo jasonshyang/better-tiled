@@ -27,9 +27,43 @@ impl Editor {
         self.automap.maps.get(&asset)
     }
 
+    /// What is due for the rules: the current map's looked for the first time it is current,
+    /// and rules read again when the project's custom types now give one of their tiles another
+    /// `MatchType` through its class.
+    pub(crate) fn tick_rules(&mut self) -> Vec<Effect> {
+        let mut effects = self.look_for_current_rules();
+        let project = self.project_root();
+        let seen = match (&self.automap.types_seen, &project) {
+            (Some(seen), Some(now)) => Arc::ptr_eq(seen, now),
+            (None, None) => true,
+            _ => false,
+        };
+        if seen {
+            return effects;
+        }
+        self.automap.types_seen = project;
+        let types = self.custom_types();
+        let stale: Vec<AssetId> = self
+            .automap
+            .maps
+            .iter()
+            .filter(|(_, rules)| {
+                rules
+                    .rules
+                    .as_ref()
+                    .is_some_and(|set| set.classes_changed(types))
+            })
+            .map(|(asset, _)| *asset)
+            .collect();
+        for asset in stale {
+            effects.extend(self.find_rules(asset, true));
+        }
+        effects
+    }
+
     /// Looks for the current map's rules the first time it is current, so the AutoMap panel
     /// can say what they are before they run.
-    pub(crate) fn look_for_current_rules(&mut self) -> Vec<Effect> {
+    fn look_for_current_rules(&mut self) -> Vec<Effect> {
         let Some(asset) = self
             .documents
             .current()

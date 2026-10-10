@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bt_automap::{Area, Report, RuleSet};
-use bt_core::Map;
+use bt_core::{Map, Project};
 
 use crate::store::AssetId;
 use crate::watch::Found;
@@ -24,6 +24,8 @@ pub(crate) struct AutoMapState {
     pub(crate) seed: u64,
     /// The number of the next read, so that only the latest read of a map's rules counts.
     pub(crate) next_read: u64,
+    /// The project whose custom types the rules were last checked against.
+    pub(crate) types_seen: Option<Arc<Project>>,
 }
 
 impl Default for AutoMapState {
@@ -32,6 +34,7 @@ impl Default for AutoMapState {
             maps: HashMap::new(),
             seed: FIRST_SEED,
             next_read: 1,
+            types_seen: None,
         }
     }
 }

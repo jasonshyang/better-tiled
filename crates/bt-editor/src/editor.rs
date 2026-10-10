@@ -365,7 +365,7 @@ impl Editor {
     /// What is due: the current map's rules looked for the first time it is current, and the
     /// recovery schedule's snapshots to write and delete.
     fn tick(&mut self, now_ms: u64) -> Vec<Effect> {
-        let mut effects = self.look_for_current_rules();
+        let mut effects = self.tick_rules();
         if !self.settings.general.recovery {
             return effects;
         }
