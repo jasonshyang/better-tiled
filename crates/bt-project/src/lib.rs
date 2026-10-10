@@ -17,6 +17,8 @@ mod checksum;
 mod error;
 mod file;
 mod godot;
-mod paths;
+pub mod paths;
 mod rows;
 mod schema;
+
+pub use error::Error;
