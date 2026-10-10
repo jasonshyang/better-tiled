@@ -71,6 +71,8 @@ pub enum ViewRequest {
     ZoomNormal,
     /// Fit the map in the view.
     Fit,
+    /// Centre the view on a cell.
+    CenterOnCell(glam::IVec2),
 }
 
 /// A question's identity.

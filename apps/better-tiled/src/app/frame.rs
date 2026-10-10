@@ -570,7 +570,7 @@ impl eframe::App for App {
         self.show_status_bar(ui);
         self.show_panels(ui);
         self.show_center(ui);
-        self.modals.show(&ctx, &mut self.intents);
+        self.modals.show(&ctx, &self.editor, &mut self.intents);
         self.apply_intents(&ctx);
         self.end_frame(&ctx);
         self.sync_quit_guard();

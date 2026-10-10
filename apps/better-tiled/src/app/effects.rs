@@ -2,10 +2,10 @@
 //! questions as modals, notices in the status bar, camera moves, recovery snapshots on the
 //! writer thread, and the window closing.
 
-use bt_editor::{Effect, Intent, Notice};
+use bt_editor::{Dialog, Effect, Intent, Notice};
 
 use super::frame::App;
-use crate::dialogs::Modal;
+use crate::dialogs::{Modal, PaletteDialog};
 use crate::files::pick_file;
 
 impl App {
@@ -40,6 +40,9 @@ impl App {
                 {
                     canvas.apply_view_request(request, map);
                 }
+            }
+            Effect::Show(Dialog::SearchActions) => {
+                self.modals.push(Modal::Palette(PaletteDialog::default()));
             }
             Effect::Show(dialog) => log::warn!("the {dialog:?} dialog is not built yet"),
             Effect::ReloadImages(paths) => {

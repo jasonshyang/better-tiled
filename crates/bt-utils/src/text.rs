@@ -1,6 +1,6 @@
 //! Text helpers shared by every message and name lookup: counts with their nouns, lists in prose,
 //! the lowercase hyphenated names people and agents type, the one fuzzy match all name lookups
-//! use, and natural ordering.
+//! use, the search the palette and other finders rank with, and natural ordering.
 
 use std::cmp::Ordering;
 
@@ -118,6 +118,95 @@ fn edit_distance(a: &str, b: &str) -> usize {
     previous.last().copied().unwrap_or(0)
 }
 
+/// How well a search matched a text: a score (higher is better) and the characters it matched,
+/// for highlighting.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchMatch {
+    /// Higher is better; every match scores at least 1.
+    pub score: u32,
+    /// The indexes of the matched characters (in `char`s), ascending.
+    pub matched: Vec<usize>,
+}
+
+/// Tiled's search of actions and files (`Utils::matchingScore`): each word must appear in the
+/// text as a subsequence, case-insensitively, preferring runs of consecutive characters; a match
+/// scores for each character, more at the start of the text, after the previous match, and for
+/// an uppercase letter matched exactly. A word found in the part after the last `/` counts
+/// double. `None` when a word does not match; no words match everything with a score of 1.
+pub fn search_score(words: &[&str], text: &str) -> Option<SearchMatch> {
+    let chars: Vec<char> = text.chars().collect();
+    let tail_start = chars.iter().rposition(|&c| c == '/').map_or(0, |i| i + 1);
+    let tail = chars.get(tail_start..).unwrap_or_default();
+    let mut score = 1;
+    let mut matched = Vec::new();
+    for word in words {
+        let word: Vec<char> = word.chars().collect();
+        if let Some(found) = word_matches(&word, tail) {
+            score += found.score * 2;
+            matched.extend(found.indexes.iter().map(|i| i + tail_start));
+        } else if let Some(found) = word_matches(&word, &chars) {
+            score += found.score;
+            matched.extend(found.indexes);
+        } else {
+            return None;
+        }
+    }
+    matched.sort_unstable();
+    matched.dedup();
+    Some(SearchMatch { score, matched })
+}
+
+/// One word's match: its score and the indexes it matched.
+struct WordMatch {
+    score: u32,
+    indexes: Vec<usize>,
+}
+
+/// Matches `word` as a subsequence of `text`, moving earlier matches forward where that makes
+/// them consecutive (Tiled's `matchingIndexes`), and scores it.
+fn word_matches(word: &[char], text: &[char]) -> Option<WordMatch> {
+    let same = |a: char, b: char| a.to_lowercase().eq(b.to_lowercase());
+    let mut indexes: Vec<usize> = Vec::with_capacity(word.len());
+    let mut from = 0;
+    for &c in word {
+        let found = from + text.get(from..)?.iter().position(|&t| same(t, c))?;
+        if found != from {
+            // Pull the matches before it forward while they can sit right before it.
+            for offset in 1..=indexes.len() {
+                let wanted = found - offset;
+                let Some(slot) = indexes.len().checked_sub(offset) else {
+                    break;
+                };
+                let Some(&earlier) = indexes.get(slot) else {
+                    break;
+                };
+                let Some(&letter) = text.get(earlier) else {
+                    break;
+                };
+                if text.get(wanted).is_some_and(|&t| same(t, letter)) {
+                    if let Some(index) = indexes.get_mut(slot) {
+                        *index = wanted;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        indexes.push(found);
+        from = found + 1;
+    }
+    let mut score = 1;
+    let mut previous: Option<usize> = None;
+    for (&c, &index) in word.iter().zip(&indexes) {
+        let start = u32::from(index == 0);
+        let sequential = u32::from(previous.is_some_and(|p| p + 1 == index));
+        let case = u32::from(c.is_uppercase() && text.get(index) == Some(&c));
+        score += 1 + start + sequential + case;
+        previous = Some(index);
+    }
+    Some(WordMatch { score, indexes })
+}
+
 /// Orders names as people count: runs of digits by their value (`d3` before `d20`), letters
 /// without regard to case, and, between equal values, fewer leading zeros first.
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
@@ -205,6 +294,25 @@ mod tests {
         );
         assert_eq!(edit_distance("kitten", "sitting"), 3);
         assert_eq!(edit_distance("", "abc"), 3);
+    }
+
+    #[test]
+    fn searches_match_subsequences_and_prefer_runs_and_starts() {
+        let save = search_score(&["sav"], "Save As…").unwrap();
+        assert_eq!(save.matched, [0, 1, 2]);
+        assert!(search_score(&["xyz"], "Save As…").is_none());
+        assert_eq!(search_score(&[], "anything").map(|m| m.score), Some(1));
+        // A run at the start beats letters scattered through the text.
+        let run = search_score(&["sa"], "Save").unwrap().score;
+        let scattered = search_score(&["sa"], "Select All").unwrap().score;
+        assert!(run > scattered, "{run} vs {scattered}");
+        // Every word must match; a file's name counts double.
+        assert!(search_score(&["new", "layer"], "New Tile Layer").is_some());
+        assert!(search_score(&["new", "map"], "New Tile Layer").is_none());
+        let in_name = search_score(&["des"], "maps/desert.tmx").unwrap();
+        assert_eq!(in_name.matched, [5, 6, 7]);
+        // Earlier matches move forward to join the run: "ab" in "a_ab" matches the second a.
+        assert_eq!(search_score(&["ab"], "a_ab").unwrap().matched, [2, 3]);
     }
 
     #[test]

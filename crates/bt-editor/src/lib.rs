@@ -21,7 +21,7 @@ mod watch;
 
 pub use actions::{
     ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
-    Modifiers, tool_action,
+    Modifiers, PaletteEntry, PaletteTarget, tool_action,
 };
 pub use document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
 pub use editor::{Editor, EditorBuilder};

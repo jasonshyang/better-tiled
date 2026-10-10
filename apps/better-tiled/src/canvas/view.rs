@@ -160,6 +160,14 @@ impl Canvas {
             ViewRequest::ZoomOut => self.step_zoom(-1, anchor, &view),
             ViewRequest::ZoomNormal => self.camera.begin_zoom_to(1.0, anchor, &view),
             ViewRequest::Fit => self.camera = fitted(map, view.rect.size()),
+            ViewRequest::CenterOnCell(cell) => {
+                // The middle of the cell's image box, where Tiled's Go to Tile looks.
+                let box_ = map
+                    .geometry()
+                    .cell_image_rect(cell, map.tile_size().as_dvec2());
+                self.camera.center = (box_.min + box_.max) / 2.0;
+                self.framed = true;
+            }
         }
     }
 

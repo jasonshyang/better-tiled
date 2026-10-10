@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use bt_core::LayerId;
 
-use crate::actions::ActionId;
+use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::Loaded;
@@ -17,6 +17,8 @@ use crate::watch::Observation;
 pub enum Intent {
     /// Run a command.
     Run(ActionId),
+    /// Run an entry of the command palette.
+    RunPalette(PaletteTarget),
     /// Open a file (or focus its tab).
     Open(PathBuf),
     /// A load the editor asked for finished.

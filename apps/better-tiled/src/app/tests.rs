@@ -173,6 +173,30 @@ fn shortcuts_run_commands() {
 }
 
 #[test]
+fn the_palette_finds_and_runs_a_command() {
+    let scratch = Scratch::new("window-palette").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let grid = window.editor().checked(ActionId::ShowGrid);
+    window.press(command() | egui::Modifiers::SHIFT, egui::Key::P);
+    assert!(window.has_modal(), "the palette is open");
+    window.type_text("show grid");
+    window.press(egui::Modifiers::NONE, egui::Key::Enter);
+    assert!(!window.has_modal());
+    assert_eq!(
+        window.editor().checked(ActionId::ShowGrid),
+        grid.map(|on| !on)
+    );
+    // Escape closes it without running anything.
+    window.press(command() | egui::Modifiers::SHIFT, egui::Key::P);
+    window.press(egui::Modifiers::NONE, egui::Key::Escape);
+    assert!(!window.has_modal());
+}
+
+#[test]
 fn closing_with_unsaved_work_asks_first() {
     let scratch = Scratch::new("window-close-unsaved").unwrap();
     let Some(path) = desert(&scratch) else {

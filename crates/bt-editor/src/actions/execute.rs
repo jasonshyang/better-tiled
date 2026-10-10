@@ -16,7 +16,6 @@ pub(crate) fn pending(id: ActionId) -> bool {
         ActionId::NewMap
             | ActionId::NewTileset
             | ActionId::Preferences
-            | ActionId::SearchActions
             | ActionId::Cut
             | ActionId::Copy
             | ActionId::Paste

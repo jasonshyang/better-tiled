@@ -8,7 +8,7 @@ use std::sync::Arc;
 use bt_core::{LayerId, LayerKind, Map};
 use bt_tmx::WriteRequest;
 
-use crate::actions::{Keymap, KeymapError};
+use crate::actions::{Keymap, KeymapError, PaletteState};
 use crate::document::{Document, DocumentId, Documents, Selection, ViewState, ViewToggles};
 use crate::effect::Effect;
 use crate::error::EditError;
@@ -77,6 +77,7 @@ impl EditorBuilder {
             gesture: None,
             keymap,
             tools: ToolState::default(),
+            palette: PaletteState::default(),
             files: Files {
                 home: self.home,
                 ..Files::default()
@@ -99,6 +100,7 @@ pub struct Editor {
     pub(crate) gesture: Option<Gesture>,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
+    pub(crate) palette: PaletteState,
     pub(crate) files: Files,
     pub(crate) recovery: RecoveryPlan,
     pub(crate) watch: WatchModel,
@@ -133,6 +135,7 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         match intent {
             Intent::Run(id) => self.run(id),
+            Intent::RunPalette(target) => self.run_palette(target),
             Intent::Open(path) => self.open(&path),
             Intent::Loaded(loaded) => {
                 let recovered = loaded.recovered_from.is_some();

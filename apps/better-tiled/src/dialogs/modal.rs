@@ -1,8 +1,11 @@
 //! The modal stack, the one place that knows whether something modal is open: a question from
-//! the editor waiting for an answer (unsaved work, recovery), or an error with its details.
+//! the editor waiting for an answer (unsaved work, recovery, a file changed on disk), an error
+//! with its details, or a dialog.
 //! Enter gives the default answer; Escape cancels, when Cancel is an answer.
 
-use bt_editor::{Choice, Decision, Intent, Notice, Purpose, Question};
+use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
+
+use super::palette::PaletteDialog;
 
 /// Something modal.
 #[derive(Clone, Debug, PartialEq)]
@@ -11,6 +14,8 @@ pub(crate) enum Modal {
     Decision(Decision),
     /// An error with its details.
     Error(Notice),
+    /// The command palette.
+    Palette(PaletteDialog),
 }
 
 /// The open modals; the last is shown.
@@ -47,13 +52,14 @@ impl Modals {
     }
 
     /// Shows the top modal; an answer goes to `out` and closes it.
-    pub(crate) fn show(&mut self, ctx: &egui::Context, out: &mut Vec<Intent>) {
-        let Some(modal) = self.stack.last() else {
+    pub(crate) fn show(&mut self, ctx: &egui::Context, editor: &Editor, out: &mut Vec<Intent>) {
+        let Some(modal) = self.stack.last_mut() else {
             return;
         };
         let closed = match modal {
             Modal::Decision(decision) => show_decision(ctx, decision, out),
             Modal::Error(notice) => show_error(ctx, notice),
+            Modal::Palette(palette) => palette.show(ctx, editor, out),
         };
         if closed {
             self.stack.pop();
