@@ -12,6 +12,7 @@
 mod context;
 mod error;
 mod export;
+pub mod grid;
 mod history;
 mod names;
 mod report;
