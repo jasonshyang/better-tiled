@@ -16,5 +16,11 @@ mod words;
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
 };
-pub use script::{Area, IdRange, LayerRef, Named, Nearness, ObjectRef, Shape, TileIds};
+pub use script::{
+    Amount, Area, Assignment, Binding, CopySource, Drawing, Flip, Geometry, IdRange, LayerOp,
+    LayerPlace, LayerRef, Layers, LayersOp, Legend, LegendEntry, Located, Named, Nearness,
+    ObjectOptions, ObjectRef, ObjectsWhere, Op, ParseError, Placement, Script, Shape, SpritePart,
+    TerrainPart, TileIds, parse_area, parse_cell, parse_definitions, parse_extent, parse_point,
+    parse_region, parse_script, parse_size, split_do,
+};
 pub use words::{capped_list, cell_text, cells_text, number_text, point_text, region_text};
