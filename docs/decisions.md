@@ -649,3 +649,53 @@ system's Apple Symbols after them; other platforms spell key names out and need 
 **Why:** egui's fonts draw ⌘ but not ⇧, ⌥, ⌃ or the arrows, so shortcuts showed boxes in the
 menus and the palette; the system's font is the one native menus use and is on every Mac, and
 nothing has to be fetched or carried in the binary.
+
+## 2026-10-10 — The editor core runs the terrain solver
+
+**Decided:** `bt-editor` depends on `bt-terrain`: the Terrain tool's strokes, terrain fills and
+their previews are the editor's transactions and queries, as every other tool's are. The terrain
+chosen is a set of a tileset named by where the tileset lives (`TilesetHome`) and one of its
+terrains; each document finds its slot for it.
+**Instead of:** the editor keeping three ids and the window calling `bt-terrain` (the first
+version of `05-editor-core.md`, §1), or naming the tileset by its slot.
+**Why:** the high-level design has the editor core make every tool's transaction, and a preview
+must come from the code and seed of the paint; a slot means another tileset in another map and
+moves when tilesets are removed, while a tileset's home stays put through edits to it.
+
+## 2026-10-10 — What terrain feedback says
+
+**Decided:** a cell the brush left unfilled and filled later in the same run is not reported;
+lacks are grouped by the sentence said of them, so cells with one plain reason count once; a
+stroke pushed a terrain back where a lane of it went to a third terrain, and the tile that would
+have kept it has the painted terrain where the stroke put it and the old terrain elsewhere.
+**Instead of:** Tiled's invalid region, which keeps a cell red once it was; grouping by the
+exact lanes needed; looking only at cells outside the painted targets.
+**Why:** a report lists what is left wrong, not what was wrong on the way; four cells around
+one vertex that lack one transition are one lack; the painted tiles are where a missing
+transition shows first.
+
+## 2026-10-10 — New terrain sets and terrains
+
+**Decided:** a new terrain set is Tiled's ("Unnamed Set", one terrain); new terrains take
+Tiled's fifteen colours in turn, then start them again, and are named "Terrain 1", "Terrain 2"
+and so on. In the tileset editor's Terrain mode the right button clears labels, and the sets'
+and terrains' commands sit beside the tiles.
+**Instead of:** Tiled's random colours after the fifteenth (its list is read one past its end)
+and its unnamed terrains.
+**Why:** the same steps make the same file; a terrain needs a name to be chosen in a list.
+
+## 2026-10-10 — The project file as built
+
+**Decided:** `bt-project` takes the folders it searches below and locks in (`home`, the runtime
+folder) as values, so no test touches the user's; `location` returns the file that exists when
+one does; the lock file is named from the canonical path, so two links to one file share it.
+Replacing a record keeps the replaced record's unknown keys; every key is sorted. Layer
+checksums hash reals at six significant digits, the precision Tiled's XML keeps, and the
+objects' checksum covers opacity, the template and its overrides too. A move across files adds
+the entry to the new file before removing it from the old one. On Windows the runtime folder is
+`%TEMP%\better-tiled`.
+**Instead of:** reading the home and runtime folders inside the crate; checksums of the values
+in memory, which change when a map is saved and read back.
+**Why:** tests are isolated by passing their folders; a checksum must match the layer as saved;
+a failed move must leave the entry somewhere, never nowhere.
+
