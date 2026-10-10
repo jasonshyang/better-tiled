@@ -1,16 +1,19 @@
-//! Dragging objects: a move or a turn of the selected objects, applied live from where they
-//! were when the drag started (so snapping and the pointer's path never pile up) and recorded
-//! as one step. Objects on locked layers stay, and are named when the drag ends.
+//! Dragging objects: a move, a turn or a resize of the selected objects (Select Objects' body
+//! and handles), applied live from where they were when the drag started (so snapping and the
+//! pointer's path never pile up) and recorded as one step. Objects on locked layers stay, and
+//! are named when the drag ends.
 
 use std::sync::Arc;
 
 use bt_core::{LayerId, Map, ObjectId};
 use bt_edit::{
-    Pivot, SnapMode, move_anchor, move_anchor_in, move_objects, move_objects_in, rotate_objects,
-    rotate_objects_in, snap_delta,
+    Pivot, Resize, ResizeHandle, SnapMode, drag_angle, move_anchor, move_anchor_in, move_objects,
+    move_objects_in, resize_objects, resize_objects_in, rotate_objects, rotate_objects_in, snap,
+    snap_delta,
 };
 use glam::DVec2;
 
+use super::handles::SelectionSpace;
 use super::host::{ObjectHost, TileShapes, change_tile_shapes};
 use super::snapping::SnapToggle;
 use crate::document::DocumentId;
@@ -37,13 +40,29 @@ pub enum ObjectStroke {
         /// How the modifiers held change snapping.
         snap: SnapToggle,
     },
-    /// The objects are turned by `degrees` (clockwise) around `center` (pixel space) from how
-    /// they started.
+    /// A rotate handle dragged from `from` to `to` (the map's screen space) turns the objects
+    /// around the middle of their handles by the angle between the two, seen from there, in
+    /// steps of 15° with `snap` (Tiled's `updateRotatingItems`).
     Rotate {
-        /// How far.
-        degrees: f64,
-        /// Around what.
-        center: DVec2,
+        /// Where the drag started.
+        from: DVec2,
+        /// Where it is now.
+        to: DVec2,
+        /// Whether the angle snaps.
+        snap: bool,
+    },
+    /// A resize handle dragged to `to` (the map's screen space), snapped as the preference says:
+    /// the side or corner follows it while the opposite one stays, or with `from_centre` the
+    /// middle stays; `keep_proportions` keeps the selection's shape.
+    Resize {
+        /// The handle.
+        handle: ResizeHandle,
+        /// Where it is now.
+        to: DVec2,
+        /// The middle stays rather than the opposite side.
+        from_centre: bool,
+        /// The proportions stay.
+        keep_proportions: bool,
     },
     /// The drag is done: one step of the history.
     End,
@@ -58,6 +77,8 @@ pub enum ObjectStrokeKind {
     Move,
     /// Turns them.
     Rotate,
+    /// Resizes them.
+    Resize,
 }
 
 /// A drag of objects under way.
@@ -70,6 +91,10 @@ pub(crate) struct ObjectStrokeState {
     ids: Vec<ObjectId>,
     /// The locked layers holding selected objects that stay.
     locked: Vec<LayerId>,
+    /// The space the drag is measured in.
+    space: SelectionSpace,
+    /// The middle of the handles when the drag began, in the objects' pixels.
+    centre: DVec2,
 }
 
 /// What a drag of objects starts from.
@@ -93,6 +118,8 @@ enum StrokeChange {
     Move { delta: DVec2, snapping: SnapMode },
     /// Turned around a pixel point.
     Rotate { degrees: f64, center: DVec2 },
+    /// Resized by a handle.
+    Resize(Resize),
 }
 
 impl Editor {
@@ -128,7 +155,14 @@ impl Editor {
                 let label = match kind {
                     ObjectStrokeKind::Move => "Move Objects",
                     ObjectStrokeKind::Rotate => "Rotate Objects",
+                    ObjectStrokeKind::Resize => "Resize Objects",
                 };
+                let Some(space) = self.selection_space(doc) else {
+                    return Vec::new();
+                };
+                let centre = self
+                    .selection_handles(doc)
+                    .map_or(DVec2::ZERO, |frame| space.to_pixel(frame.centre()));
                 if let Err(error) = self.begin_gesture(doc, label) {
                     return vec![warn(error)];
                 }
@@ -137,6 +171,8 @@ impl Editor {
                     start,
                     ids: split.unlocked,
                     locked: split.locked_layers,
+                    space,
+                    centre,
                 });
                 Vec::new()
             }
@@ -144,8 +180,44 @@ impl Editor {
                 let snapping = self.snap_mode(snap);
                 self.reapply(StrokeChange::Move { delta, snapping })
             }
-            ObjectStroke::Rotate { degrees, center } => {
+            ObjectStroke::Rotate { from, to, snap } => {
+                let Some(stroke) = &self.object_stroke else {
+                    return Vec::new();
+                };
+                let space = stroke.space;
+                let center = stroke.centre;
+                let degrees = drag_angle(
+                    &space.geometry,
+                    center,
+                    space.to_pixel(from),
+                    space.to_pixel(to),
+                    snap,
+                );
                 self.reapply(StrokeChange::Rotate { degrees, center })
+            }
+            ObjectStroke::Resize {
+                handle,
+                to,
+                from_centre,
+                keep_proportions,
+            } => {
+                let Some(stroke) = &self.object_stroke else {
+                    return Vec::new();
+                };
+                let space = stroke.space;
+                let at = snap(
+                    &space.geometry,
+                    space.to_pixel(to),
+                    self.snap_mode(SnapToggle::Keep),
+                );
+                let mut resize = Resize::handle_to(handle, at);
+                if from_centre {
+                    resize = resize.from_centre();
+                }
+                if keep_proportions {
+                    resize = resize.keeping_proportions();
+                }
+                self.reapply(StrokeChange::Resize(resize))
             }
             ObjectStroke::End => {
                 let Some(stroke) = self.object_stroke.take() else {
@@ -193,6 +265,9 @@ impl Editor {
                     StrokeChange::Rotate { degrees, center } => {
                         rotate_objects(map, ids, degrees, Pivot::Point(center))?;
                     }
+                    StrokeChange::Resize(resize) => {
+                        resize_objects(map, ids, resize)?;
+                    }
                 }
                 Ok::<_, EditError>(())
             }
@@ -210,6 +285,9 @@ impl Editor {
                         }
                         StrokeChange::Rotate { degrees, center } => {
                             rotate_objects_in(objects, space, ids, degrees, Pivot::Point(center))?;
+                        }
+                        StrokeChange::Resize(resize) => {
+                            resize_objects_in(objects, space, ids, resize)?;
                         }
                     }
                     Ok(())

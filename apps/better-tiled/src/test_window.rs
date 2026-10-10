@@ -233,7 +233,7 @@ impl TestWindow {
     }
 
     /// Where a point of the map's screen space is on screen.
-    fn screen_of_world(&mut self, world: glam::DVec2) -> egui::Pos2 {
+    pub(crate) fn screen_of_world(&mut self, world: glam::DVec2) -> egui::Pos2 {
         self.harness.run_steps(1);
         let Some(at) = self.harness.state().world_on_screen(world) else {
             panic!("no map is shown, so {world} is nowhere");

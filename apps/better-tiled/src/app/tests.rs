@@ -860,3 +860,73 @@ fn a_tilesets_collision_shapes_and_animations_are_edited_in_place_of_the_map() {
         2
     );
 }
+
+#[test]
+fn select_objects_resizes_by_its_handles_and_a_second_click_rotates() {
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::DVec2;
+
+    let scratch = Scratch::new("window-handles").unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.press(command(), Key::N);
+    window.press(Modifiers::NONE, Key::Enter);
+    run_command(&mut window, "new object layer");
+    let doc = window.editor().current().unwrap();
+    let object = |window: &TestWindow| {
+        window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .layers
+            .iter()
+            .find_map(|layer| layer.as_object_layer())
+            .and_then(|layer| layer.objects.first().cloned())
+            .unwrap()
+    };
+    let near = |a: DVec2, b: DVec2| (a - b).length() < 0.5;
+
+    window.press(Modifiers::NONE, Key::R);
+    window.drag_world(
+        DVec2::new(32.0, 32.0),
+        DVec2::new(64.0, 64.0),
+        Modifiers::NONE,
+    );
+    window.press(Modifiers::NONE, Key::S);
+
+    // The bottom-right handle follows the pointer; the top-left corner stays.
+    window.drag_world(
+        DVec2::new(64.0, 64.0),
+        DVec2::new(96.0, 80.0),
+        Modifiers::NONE,
+    );
+    let resized = object(&window);
+    assert!(near(resized.pos, DVec2::new(32.0, 32.0)), "{}", resized.pos);
+    assert!(
+        near(resized.size, DVec2::new(64.0, 48.0)),
+        "{}",
+        resized.size
+    );
+    window.press(command(), Key::Z);
+    assert!(
+        near(object(&window).size, DVec2::new(32.0, 32.0)),
+        "one step"
+    );
+
+    // A click on the selected object shows rotate handles; a quarter turn of one turns it.
+    let inside = window.screen_of_world(DVec2::new(48.0, 48.0));
+    window.click_on_screen(inside, PointerButton::Primary, Modifiers::NONE);
+    let frame = window.editor().selection_handles(doc).unwrap();
+    let centre = window.screen_of_world(frame.centre());
+    let corner = window.screen_of_world(frame.corners[2]);
+    let out = (corner - centre).normalized() * 14.0;
+    let start = corner + out;
+    let arm = start - centre;
+    let end = centre + egui::vec2(-arm.y, arm.x);
+    window.drag_on_screen(start, end, Modifiers::NONE);
+    let turned = object(&window);
+    assert!(
+        (turned.rotation - 90.0).abs() < 1.0,
+        "turned {} degrees",
+        turned.rotation
+    );
+}
