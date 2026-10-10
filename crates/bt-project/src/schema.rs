@@ -9,6 +9,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::Path;
 
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize, Serializer};
@@ -16,6 +17,7 @@ use serde_json::Value;
 
 use crate::automap::AutoMapRecord;
 use crate::godot::GodotSetup;
+use crate::paths;
 
 /// The format version this program writes. It changes only when a key's meaning changes:
 /// adding a key never bumps it, since unknown keys are kept and defaults are explicit.
@@ -171,6 +173,48 @@ impl Document {
     /// Removes the Godot setup and returns it; the file then has no `godot` section.
     pub fn remove_godot(&mut self) -> Option<GodotSetup> {
         self.godot.take()
+    }
+
+    /// Moves the entry of `from` to the key `to` (Save As, a move made in the editor), replacing
+    /// any entry `to` had, and returns whether there was an entry to move.
+    pub fn move_entry(&mut self, from: &str, to: &str) -> bool {
+        if from == to {
+            return self.maps.contains_key(from);
+        }
+        match self.maps.remove(from) {
+            Some(entry) => {
+                self.maps.insert(to.to_owned(), entry);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Puts `entry` under `key`, replacing any entry it had.
+    pub(crate) fn insert_entry(&mut self, key: &str, entry: MapEntry) {
+        self.maps.insert(key.to_owned(), entry);
+    }
+
+    /// Removes the entry of `key`, every record in it, and returns it: an orphan the person
+    /// chose to remove.
+    pub fn remove_entry(&mut self, key: &str) -> Option<MapEntry> {
+        self.maps.remove(key)
+    }
+
+    /// The keys of the entries whose map no longer exists, resolved against `file`, the project
+    /// file's path (`crate::paths::resolve`). An orphan is listed, never dropped: the editor
+    /// shows it with what its entry holds and offers to remove it, and `bt check` reports it.
+    pub fn orphans(&self, file: &Path) -> Vec<&str> {
+        self.maps
+            .keys()
+            .filter(|key| {
+                matches!(
+                    std::fs::metadata(paths::resolve(file, key)),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound
+                )
+            })
+            .map(String::as_str)
+            .collect()
     }
 
     /// Removes the entry of `key` when nothing is left in it.
@@ -432,5 +476,48 @@ mod tests {
         assert!(document.entry("a.tmx").unwrap().is_empty());
         assert!(!document.entry("b.tmx").unwrap().is_empty());
         assert!(document.entry("c.tmx").is_none());
+    }
+
+    #[test]
+    fn an_entry_moves_whole_and_replaces_the_one_it_lands_on() {
+        let mut document = Document::from_json(
+            r#"{"maps": {
+                "a.tmx": {"zones": 1, "automap": {"rules": "a.txt", "seed": 1, "runs": []}},
+                "b.tmx": {"automap": {"rules": "b.txt", "seed": 2, "runs": []}}
+            }}"#,
+        )
+        .unwrap();
+        let a = document.entry("a.tmx").cloned();
+        assert!(document.move_entry("a.tmx", "b.tmx"));
+        assert_eq!(document.keys().collect::<Vec<_>>(), ["b.tmx"]);
+        assert_eq!(
+            document.entry("b.tmx").cloned(),
+            a,
+            "records and unknown keys alike"
+        );
+        assert!(!document.move_entry("a.tmx", "c.tmx"), "nothing to move");
+        assert!(document.move_entry("b.tmx", "b.tmx"));
+        assert!(!document.move_entry("c.tmx", "c.tmx"));
+        assert_eq!(document.entry("b.tmx").cloned(), a);
+        assert_eq!(document.remove_entry("b.tmx"), a);
+        assert_eq!(document.to_json().unwrap(), EMPTY);
+    }
+
+    #[test]
+    fn orphans_are_the_entries_whose_map_is_gone() {
+        let scratch = bt_test_data::Scratch::new("bt-project-orphans").unwrap();
+        std::fs::create_dir_all(scratch.join("levels")).unwrap();
+        std::fs::write(scratch.join("levels/here.tmx"), "").unwrap();
+        let document = Document::from_json(
+            r#"{"maps": {"levels/here.tmx": {"x": 1}, "levels/gone.tmx": {"x": 2},
+                "../outside.tmx": {"x": 3}}}"#,
+        )
+        .unwrap();
+        let file = scratch.join("better-tiled.json");
+        assert_eq!(
+            document.orphans(&file),
+            ["../outside.tmx", "levels/gone.tmx"]
+        );
+        assert_eq!(document.keys().count(), 3, "listed, not dropped");
     }
 }
