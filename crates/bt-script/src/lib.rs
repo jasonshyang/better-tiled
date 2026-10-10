@@ -18,6 +18,7 @@ mod history;
 mod names;
 mod report;
 mod script;
+mod shapes;
 mod words;
 
 pub use context::{Context, Selection};
@@ -41,4 +42,5 @@ pub use script::{
     TerrainPart, TileIds, parse_area, parse_cell, parse_definitions, parse_extent, parse_point,
     parse_region, parse_script, parse_size, split_do,
 };
+pub use shapes::{area_cells, map_cells, object_cells, shape_cells};
 pub use words::{capped_list, cell_text, cells_text, number_text, point_text, region_text};

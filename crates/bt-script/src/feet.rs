@@ -245,7 +245,7 @@ fn cell_at_pixel(geometry: &MapGeometry, pixel: DVec2) -> IVec2 {
 }
 
 /// A coordinate as a cell index, saturating far outside any map.
-fn to_i32(value: f64) -> i32 {
+pub(crate) fn to_i32(value: f64) -> i32 {
     // `as` saturates, and NaN becomes 0.
     value.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
 }
