@@ -290,6 +290,22 @@ pub enum Intent {
     },
     /// Whether Bucket Fill and Shape Fill fill with the terrain (the toolbar's).
     SetTerrainFill(bool),
+    /// The set and terrain the tileset editor's Terrain mode labels tiles with.
+    ChooseLabelTerrain {
+        /// The document.
+        doc: DocumentId,
+        /// The set and terrain.
+        label: crate::terrain_sets::LabelTerrain,
+    },
+    /// A step of a labelling stroke in the tileset editor's Terrain mode.
+    LabelStroke(crate::terrain_sets::LabelStroke),
+    /// A change to the edited tileset's terrain sets.
+    EditTerrainSets {
+        /// The document.
+        doc: DocumentId,
+        /// The change.
+        edit: crate::terrain_sets::TerrainSetEdit,
+    },
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

@@ -23,6 +23,7 @@ mod recovery;
 mod session;
 mod settings;
 mod store;
+mod terrain_sets;
 mod tileset_commands;
 mod tools;
 mod type_commands;
@@ -80,3 +81,4 @@ pub use bt_edit::{
     Brush, BrushMode, FillShape, LayerLocation, Node, ResizeHandle, SelectionMode, TileRegion,
     rect_select_rect, shape_fill_region,
 };
+pub use terrain_sets::{LabelMark, LabelStroke, LabelTerrain, TerrainSetEdit};

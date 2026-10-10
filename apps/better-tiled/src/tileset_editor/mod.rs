@@ -7,6 +7,7 @@
 
 mod animation;
 mod collision;
+mod terrain;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -23,6 +24,7 @@ use crate::tools::ToolBox;
 
 use animation::AnimationEditor;
 use collision::CollisionView;
+use terrain::TerrainLabeller;
 
 /// The zoom range of the tiles.
 const ZOOM_RANGE: std::ops::RangeInclusive<f32> = 0.25..=8.0;
@@ -33,6 +35,7 @@ pub(crate) struct TilesetEditorView {
     zoom: HashMap<DocumentId, f32>,
     collision: CollisionView,
     animation: AnimationEditor,
+    terrain: TerrainLabeller,
     /// Where each document's tiles were drawn last.
     shown: HashMap<DocumentId, ShownTiles>,
 }
@@ -94,6 +97,7 @@ impl TilesetEditorView {
                 (TilesetMode::Tiles, "Tiles"),
                 (TilesetMode::Collision, "Collision"),
                 (TilesetMode::Animation, "Animation"),
+                (TilesetMode::Terrain, "Terrain"),
             ] {
                 if ui.selectable_label(editing.mode() == mode, label).clicked() {
                     out.push(Intent::SetTilesetMode {
@@ -122,6 +126,11 @@ impl TilesetEditorView {
         };
         if editing.mode() == TilesetMode::Tiles {
             let shown = show_tiles(ui, &tileset, &mut zoom, chosen, &mut source, doc, out);
+            self.remember_shown(doc, shown);
+        } else if editing.mode() == TilesetMode::Terrain {
+            let shown = self
+                .terrain
+                .show(ui, &tileset, &editing, doc, &mut zoom, &mut source, out);
             self.remember_shown(doc, shown);
         } else {
             let mut shown = None;
@@ -158,7 +167,7 @@ impl TilesetEditorView {
                     self.animation
                         .show(ui, &tileset, tile, doc, &mut source, out);
                 }
-                TilesetMode::Tiles => {}
+                TilesetMode::Tiles | TilesetMode::Terrain => {}
             }
         }
         self.zoom.insert(doc, zoom);
@@ -223,17 +232,24 @@ struct TilesChosen<'a> {
     current: Option<TileId>,
 }
 
-/// Draws the tileset's tiles with a zoom slider; a click chooses a tile, Shift a range from the
-/// current one, Command adds or removes one. Where the tiles were drawn, if any were.
-fn show_tiles(
+/// The tiles drawn: where, and the grid's response to the pointer.
+pub(crate) struct DrawnTiles {
+    /// The grid's response.
+    pub(crate) response: egui::Response,
+    /// Where the tiles are.
+    pub(crate) shown: ShownTiles,
+}
+
+/// Draws the tileset's tiles with a zoom slider, each tile passed to `overlay` to draw over;
+/// the grid answers the pointer with `sense`. `None` when the tileset has no tiles.
+pub(crate) fn draw_tiles(
     ui: &mut egui::Ui,
     tileset: &Tileset,
     zoom: &mut f32,
-    chosen: TilesChosen<'_>,
     source: &mut TileSource<'_>,
-    doc: DocumentId,
-    out: &mut Vec<Intent>,
-) -> Option<ShownTiles> {
+    sense: Sense,
+    mut overlay: impl FnMut(&egui::Ui, TileId, egui::Rect),
+) -> Option<DrawnTiles> {
     ui.add(
         egui::Slider::new(zoom, ZOOM_RANGE)
             .logarithmic(true)
@@ -249,8 +265,7 @@ fn show_tiles(
         0 => ((ui.available_width() / cell.x).floor() as usize).max(1),
         columns => columns as usize,
     };
-    let selection = ui.visuals().selection.stroke.color;
-    let mut shown = None;
+    let mut drawn = None;
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show_viewport(ui, |ui, viewport| {
@@ -261,17 +276,8 @@ fn show_tiles(
                 count: ids.len(),
             };
             let size = vec2(columns as f32 * cell.x, grid.rows() as f32 * cell.y);
-            let (area, response) = ui.allocate_exact_size(size, Sense::click());
+            let (area, response) = ui.allocate_exact_size(size, sense);
             grid.origin = area.min;
-            if response.clicked()
-                && let Some(id) = response
-                    .interact_pointer_pos()
-                    .and_then(|at| grid.index_at(at))
-                    .and_then(|index| ids.get(index).copied())
-            {
-                let modifiers = ui.input(|input| input.modifiers);
-                out.push(choose_tile(&ids, chosen, id, modifiers, doc));
-            }
             let first_row = (viewport.min.y / cell.y).floor().max(0.0) as usize;
             let end_row = ((viewport.max.y / cell.y).ceil().max(0.0) as usize).min(grid.rows());
             for row in first_row..end_row {
@@ -282,42 +288,74 @@ fn show_tiles(
                     };
                     let rect = grid.rect(index);
                     paint_tile(ui, tileset, id, rect, source);
-                    let animated = tileset.tile(id).is_some_and(|d| !d.animation.is_empty());
-                    let shaped = tileset.tile(id).is_some_and(|d| d.collision.is_some());
-                    if animated || shaped {
-                        let mark = if animated { "▶" } else { "◇" };
-                        ui.painter().text(
-                            rect.right_top() + vec2(-2.0, 1.0),
-                            egui::Align2::RIGHT_TOP,
-                            mark,
-                            egui::FontId::proportional(10.0),
-                            ui.visuals().strong_text_color(),
-                        );
-                    }
-                    if chosen.tiles.contains(&id) {
-                        let width = if chosen.current == Some(id) { 3.0 } else { 2.0 };
-                        ui.painter().rect_stroke(
-                            rect.shrink(1.0),
-                            0.0,
-                            Stroke::new(width, selection),
-                            StrokeKind::Inside,
-                        );
-                    }
+                    overlay(ui, id, rect);
                 }
             }
-            if let Some(id) = response
-                .hover_pos()
-                .and_then(|at| grid.index_at(at))
-                .and_then(|index| ids.get(index).copied())
-            {
-                response.on_hover_text(format!("Tile {}", id.0));
-            }
-            shown = Some(ShownTiles {
-                grid,
-                ids: ids.clone(),
+            drawn = Some(DrawnTiles {
+                response,
+                shown: ShownTiles {
+                    grid,
+                    ids: ids.clone(),
+                },
             });
         });
-    shown
+    drawn
+}
+
+/// Draws the tileset's tiles with a zoom slider; a click chooses a tile, Shift a range from the
+/// current one, Command adds or removes one. Where the tiles were drawn, if any were.
+fn show_tiles(
+    ui: &mut egui::Ui,
+    tileset: &Tileset,
+    zoom: &mut f32,
+    chosen: TilesChosen<'_>,
+    source: &mut TileSource<'_>,
+    doc: DocumentId,
+    out: &mut Vec<Intent>,
+) -> Option<ShownTiles> {
+    let selection = ui.visuals().selection.stroke.color;
+    let drawn = draw_tiles(ui, tileset, zoom, source, Sense::click(), |ui, id, rect| {
+        let animated = tileset.tile(id).is_some_and(|d| !d.animation.is_empty());
+        let shaped = tileset.tile(id).is_some_and(|d| d.collision.is_some());
+        if animated || shaped {
+            let mark = if animated { "▶" } else { "◇" };
+            ui.painter().text(
+                rect.right_top() + vec2(-2.0, 1.0),
+                egui::Align2::RIGHT_TOP,
+                mark,
+                egui::FontId::proportional(10.0),
+                ui.visuals().strong_text_color(),
+            );
+        }
+        if chosen.tiles.contains(&id) {
+            let width = if chosen.current == Some(id) { 3.0 } else { 2.0 };
+            ui.painter().rect_stroke(
+                rect.shrink(1.0),
+                0.0,
+                Stroke::new(width, selection),
+                StrokeKind::Inside,
+            );
+        }
+    })?;
+    let DrawnTiles { response, shown } = drawn;
+    let ids = &shown.ids;
+    if response.clicked()
+        && let Some(id) = response
+            .interact_pointer_pos()
+            .and_then(|at| shown.grid.index_at(at))
+            .and_then(|index| ids.get(index).copied())
+    {
+        let modifiers = ui.input(|input| input.modifiers);
+        out.push(choose_tile(ids, chosen, id, modifiers, doc));
+    }
+    if let Some(id) = response
+        .hover_pos()
+        .and_then(|at| shown.grid.index_at(at))
+        .and_then(|index| ids.get(index).copied())
+    {
+        response.on_hover_text(format!("Tile {}", id.0));
+    }
+    Some(shown)
 }
 
 /// The selection a click on `id` makes: that tile; with Shift the tiles from the current one to

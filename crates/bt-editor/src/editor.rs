@@ -82,6 +82,7 @@ impl EditorBuilder {
             stroke: None,
             object_stroke: None,
             terrain_stroke: None,
+            label_stroke: None,
             keymap,
             tools: ToolState::default(),
             palette: PaletteState::default(),
@@ -112,6 +113,8 @@ pub struct Editor {
     pub(crate) object_stroke: Option<ObjectStrokeState>,
     /// A Terrain tool stroke under way.
     pub(crate) terrain_stroke: Option<TerrainStrokeState>,
+    /// A labelling stroke of the tileset editor's Terrain mode under way.
+    pub(crate) label_stroke: Option<crate::terrain_sets::LabelStrokeState>,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
     pub(crate) palette: PaletteState,
@@ -251,6 +254,9 @@ impl Editor {
                 self.tools.terrain_fill = on;
                 Vec::new()
             }
+            Intent::ChooseLabelTerrain { doc, label } => self.choose_label_terrain(doc, label),
+            Intent::LabelStroke(step) => self.label_stroke(step),
+            Intent::EditTerrainSets { doc, edit } => self.edit_terrain_sets(doc, edit),
             Intent::PasteObjects { doc, at } => self.paste_copied_objects(doc, at),
             Intent::MoveObjectsToLayer { doc, layer } => self.move_selected_objects_to(doc, layer),
             Intent::Stroke(step) => self.stroke(step),

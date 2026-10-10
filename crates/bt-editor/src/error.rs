@@ -62,6 +62,18 @@ pub enum EditError {
     /// A terrain paint or fill was refused.
     #[error(transparent)]
     Terrain(#[from] bt_terrain::TerrainError),
+    /// The tileset has no terrain set at this index.
+    #[error("the tileset has no terrain set {0}")]
+    NoSuchTerrainSet(usize),
+    /// The terrain set has no terrain with this index.
+    #[error("the terrain set has no terrain {0}")]
+    NoSuchTerrain(u8),
+    /// A terrain set holds at most 254 terrains.
+    #[error("a terrain set holds at most 254 terrains")]
+    TooManyTerrains,
+    /// A terrain's weight must be a number of at least 0.
+    #[error("a terrain's probability must be 0 or more, not {0}")]
+    BadProbability(f64),
     /// A later change to an asset was made where it cannot be named (its history was dropped).
     #[error("{asset} changed since; undo its later changes first")]
     ChangedSince {

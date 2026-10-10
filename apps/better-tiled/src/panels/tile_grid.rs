@@ -53,10 +53,6 @@ impl TileGrid {
 
 /// Where tiles were drawn in the last frame.
 #[derive(Clone, Debug)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the window's tests click the tiles drawn")
-)]
 pub(crate) struct ShownTiles {
     /// The grid.
     pub(crate) grid: TileGrid,

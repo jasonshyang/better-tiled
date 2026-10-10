@@ -1765,3 +1765,56 @@ fn the_terrain_tool_paints_a_terrain_chosen_in_the_terrains_panel() {
     window.click("Terrain fill");
     assert!(window.editor().tools().terrain_fill());
 }
+
+#[test]
+fn the_tileset_editor_labels_terrain_lane_by_lane() {
+    use bt_core::{Lane, TileId, WangSetType};
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Modifiers, PointerButton};
+    use glam::UVec2;
+
+    let scratch = Scratch::new("window-terrain-labels").unwrap();
+    let atlas = Atlas::builder()
+        .name("ground")
+        .grid(4, 4)
+        .build_in(scratch.path())
+        .unwrap();
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(4))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", "")
+        .build()
+        .unwrap();
+    let path = scratch.join("labels.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+
+    window.click("Edit Tileset");
+    window.click("Terrain");
+    window.click("New");
+    window.click("Corner Set");
+    let set =
+        |window: &TestWindow| window.editor().edited_tileset(doc).unwrap().wang_sets[0].clone();
+    assert_eq!(set(&window).kind, WangSetType::Corner);
+
+    // The top-left quadrant of tile 5 takes the set's first terrain.
+    let centre = window.tileset_tile(5);
+    window.click_on_screen(
+        centre + egui::vec2(-6.0, -6.0),
+        PointerButton::Primary,
+        Modifiers::NONE,
+    );
+    let label = set(&window).tiles[&TileId(5)];
+    assert_eq!(label.lane(Lane::TopLeft), 1);
+    assert_eq!(label.lanes().iter().filter(|&&c| c != 0).count(), 1);
+
+    // A right-click clears it, and the label goes.
+    window.click_on_screen(
+        centre + egui::vec2(-6.0, -6.0),
+        PointerButton::Secondary,
+        Modifiers::NONE,
+    );
+    assert!(!set(&window).tiles.contains_key(&TileId(5)));
+}

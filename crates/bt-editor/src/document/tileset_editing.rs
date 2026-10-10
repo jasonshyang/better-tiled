@@ -6,6 +6,7 @@
 use bt_core::TileId;
 
 use crate::store::TilesetHome;
+use crate::terrain_sets::LabelTerrain;
 
 /// What the tileset editor shows of its tiles.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -17,6 +18,8 @@ pub enum TilesetMode {
     Collision,
     /// The current tile's animation.
     Animation,
+    /// The tiles' terrain labels, painted lane by lane.
+    Terrain,
 }
 
 /// What a document's tileset editor edits.
@@ -26,6 +29,8 @@ pub struct TilesetEditing {
     pub(crate) tiles: Vec<TileId>,
     pub(crate) current: Option<TileId>,
     pub(crate) mode: TilesetMode,
+    /// The terrain labelling paints, once chosen.
+    pub(crate) label: Option<LabelTerrain>,
 }
 
 impl TilesetEditing {
@@ -36,6 +41,7 @@ impl TilesetEditing {
             tiles: Vec::new(),
             current: None,
             mode: TilesetMode::Tiles,
+            label: None,
         }
     }
 
@@ -57,5 +63,10 @@ impl TilesetEditing {
     /// What is shown of the tiles.
     pub fn mode(&self) -> TilesetMode {
         self.mode
+    }
+
+    /// The terrain the Terrain mode's labelling paints, once chosen.
+    pub fn label_terrain(&self) -> Option<LabelTerrain> {
+        self.label
     }
 }
