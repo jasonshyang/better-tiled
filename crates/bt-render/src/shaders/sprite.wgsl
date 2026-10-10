@@ -132,6 +132,37 @@ fn minified(page: i32, rect: vec4<i32>, t: vec2<f32>, fw: vec2<f32>, level: i32)
     return sum / f32(n.x * n.y);
 }
 
+// An impostor texel, already premultiplied, clamped to the impostor's rectangle.
+fn impostor_texel(page: i32, rect: vec4<i32>, p: vec2<i32>) -> vec4<f32> {
+    let q = clamp(p, vec2<i32>(0, 0), max(rect.zw - vec2<i32>(1, 1), vec2<i32>(0, 0)));
+    return textureLoad(impostors, rect.xy + q, page, 0);
+}
+
+// An impostor is made at about the screen's resolution: bilinear when magnified, a box of up to
+// 2×2 texels when minified.
+fn impostor(page: i32, rect: vec4<i32>, t: vec2<f32>, fw: vec2<f32>) -> vec4<f32> {
+    if (max(fw.x, fw.y) <= 1.0) {
+        let tc = t - 0.5;
+        let i = floor(tc);
+        let f = tc - i;
+        let ii = vec2<i32>(i);
+        let a = impostor_texel(page, rect, ii);
+        let b = impostor_texel(page, rect, ii + vec2<i32>(1, 0));
+        let c = impostor_texel(page, rect, ii + vec2<i32>(0, 1));
+        let d = impostor_texel(page, rect, ii + vec2<i32>(1, 1));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+    let n = vec2<i32>(clamp(ceil(fw), vec2<f32>(1.0), vec2<f32>(2.0)));
+    var sum = vec4<f32>(0.0);
+    for (var y = 0; y < n.y; y++) {
+        for (var x = 0; x < n.x; x++) {
+            let o = (vec2<f32>(f32(x), f32(y)) + 0.5) / vec2<f32>(n) - 0.5;
+            sum += impostor_texel(page, rect, vec2<i32>(floor(t + o * fw)));
+        }
+    }
+    return sum / f32(n.x * n.y);
+}
+
 // Tiled's marker for what cannot be drawn: a half-transparent dark quad with a red border and
 // a red cross, its lines one world pixel wide (at least one device pixel).
 fn marker(local: vec2<f32>, per_px: vec2<f32>) -> vec4<f32> {
@@ -189,9 +220,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let page = i32(s.page);
     var color: vec4<f32>;
     if (s.state == 3u) {
-        let q = clamp(vec2<i32>(floor(t)), vec2<i32>(0, 0), rect.zw - vec2<i32>(1, 1));
-        let c = textureLoad(impostors, rect.xy + q, page, 0);
-        color = c;
+        color = tinted(impostor(page, rect, t, fw));
     } else if (max(fw.x, fw.y) <= 1.0) {
         color = tinted(magnified(page, rect, t, fw));
     } else if (max(fw.x, fw.y) <= 3.0) {

@@ -19,7 +19,7 @@ use crate::sprites::Sprites;
 
 /// What a cached chunk's instances were built from.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct ChunkKey {
+pub(crate) struct ChunkKey {
     chunk: usize,
     pos: ChunkPos,
     geometry: MapGeometry,
@@ -39,7 +39,17 @@ struct CachedChunk {
     /// Held so the address in the key is not reused while cached.
     _chunk: Arc<Chunk>,
     instances: Vec<KeyedInstance>,
+    /// What its instances cover, in world pixels before the layer's offset.
+    bounds: Option<DRect>,
     last_used: u64,
+}
+
+/// A visible chunk: its key, what it covers and where it starts in the draw order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct VisibleChunk {
+    pub(crate) key: ChunkKey,
+    pub(crate) bounds: DRect,
+    pub(crate) first: DrawOrderKey,
 }
 
 impl CachedChunk {
@@ -83,35 +93,71 @@ impl ChunkCache {
         frame: u64,
         out: &mut Vec<Instance>,
     ) {
-        let visible = visible_chunks(layer, tiles);
-        let mut keys = Vec::with_capacity(visible.len());
-        for found in visible {
-            let key = ChunkKey {
-                chunk: Arc::as_ptr(found.chunk) as usize,
-                pos: found.pos,
-                geometry: cx.geometry,
-                tilesets: cx.tilesets,
-            };
-            match self.entries.get_mut(&key) {
-                Some(entry) => entry.last_used = frame,
-                None => {
-                    let entry = CachedChunk {
-                        _chunk: Arc::clone(found.chunk),
-                        instances: build(found.chunk, found.pos, cx),
-                        last_used: frame,
-                    };
-                    self.bytes += entry.bytes();
-                    self.entries.insert(key.clone(), entry);
-                }
-            }
-            keys.push(key);
-        }
-        let lists: Vec<&[KeyedInstance]> = keys
+        let visible = self.visible(layer, tiles, cx, frame);
+        let lists: Vec<&[KeyedInstance]> = visible
             .iter()
-            .filter_map(|key| self.entries.get(key))
+            .filter_map(|chunk| self.entries.get(&chunk.key))
             .map(|entry| entry.instances.as_slice())
             .collect();
         merge(&lists, out);
+    }
+
+    /// The chunks of `layer` with cells that may show in `tiles`, built when not cached, in the
+    /// order of their first cell; empty chunks are left out.
+    pub(crate) fn visible(
+        &mut self,
+        layer: &TileLayer,
+        tiles: IRect,
+        cx: &ChunkContext<'_>,
+        frame: u64,
+    ) -> Vec<VisibleChunk> {
+        let found = visible_chunks(layer, tiles);
+        let mut visible = Vec::with_capacity(found.len());
+        for chunk in found {
+            let key = ChunkKey {
+                chunk: Arc::as_ptr(chunk.chunk) as usize,
+                pos: chunk.pos,
+                geometry: cx.geometry,
+                tilesets: cx.tilesets,
+            };
+            let entry = match self.entries.get_mut(&key) {
+                Some(entry) => {
+                    entry.last_used = frame;
+                    entry
+                }
+                None => {
+                    let instances = build(chunk.chunk, chunk.pos, cx);
+                    let entry = CachedChunk {
+                        _chunk: Arc::clone(chunk.chunk),
+                        bounds: bounds_of(&instances),
+                        instances,
+                        last_used: frame,
+                    };
+                    self.bytes += entry.bytes();
+                    self.entries.entry(key.clone()).or_insert(entry)
+                }
+            };
+            let Some(bounds) = entry.bounds else { continue };
+            let Some(first) = entry.instances.first().map(|keyed| keyed.key) else {
+                continue;
+            };
+            visible.push(VisibleChunk { first, key, bounds });
+        }
+        visible.sort_by_key(|chunk| chunk.first);
+        visible
+    }
+
+    /// A cached chunk's instances, in draw order.
+    pub(crate) fn instances(&self, key: &ChunkKey) -> &[KeyedInstance] {
+        self.entries
+            .get(key)
+            .map_or(&[], |entry| entry.instances.as_slice())
+    }
+
+    /// Drops every chunk not drawn in `frame`.
+    pub(crate) fn trim_unused(&mut self, frame: u64) {
+        self.entries.retain(|_, entry| entry.last_used >= frame);
+        self.bytes = self.entries.values().map(CachedChunk::bytes).sum();
     }
 
     /// Drops chunks not drawn in `frame`, oldest first, while over the budget.
@@ -213,6 +259,22 @@ fn build(chunk: &Chunk, pos: ChunkPos, cx: &ChunkContext<'_>) -> Vec<KeyedInstan
         .collect();
     out.sort_by_key(|keyed| keyed.key);
     out
+}
+
+/// What a chunk's instances cover: their rectangles, grown to the circle a turned quad sweeps.
+fn bounds_of(instances: &[KeyedInstance]) -> Option<DRect> {
+    let rects = instances.iter().map(|keyed| {
+        let [x, y, w, h] = keyed.instance.dst.map(f64::from);
+        let rect = DRect::from_min_size(DVec2::new(x, y), DVec2::new(w, h));
+        if keyed.instance.pivot_rot[3] == 0.0 {
+            rect
+        } else {
+            let center = (rect.min + rect.max) * 0.5;
+            let radius = DVec2::new(w, h).length() * 0.5;
+            DRect::from_min_size(center - DVec2::splat(radius), DVec2::splat(radius * 2.0))
+        }
+    });
+    rects.reduce(|a, b| a.union(b))
 }
 
 /// Merges sorted lists by key, copying runs that stay ahead at once.

@@ -204,3 +204,84 @@ fn animations_show_their_frame_and_say_when_the_next_is_due() {
     let stats = renderer.prepare(&mut store, &[still]).unwrap();
     assert!(!stats.animating && stats.next_frame_ms.is_none());
 }
+
+#[test]
+fn far_out_chunks_are_drawn_as_impostors_that_match_the_tiles() {
+    let Some(device) = device() else { return };
+    let atlas = Atlas::builder()
+        .tile_size(16, 16)
+        .grid(4, 4)
+        .build_embedded()
+        .unwrap();
+    let grid: Vec<String> = (0..64)
+        .map(|y| {
+            (0..64)
+                .map(|x| ((x / 3 + y / 5 + x * y) % 16).to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    let map = MapBuilder::new(UVec2::new(16, 16), UVec2::new(64, 64))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", &grid.join("\n"))
+        .build()
+        .unwrap();
+    let map = Arc::new(map);
+    // 16-pixel cells at a quarter: 4 pixels on screen, drawn through impostors of 4 per cell.
+    let far = Render::of(Arc::clone(&map))
+        .scale(0.25)
+        .run(device)
+        .unwrap();
+    let near = Render::of(Arc::clone(&map)).run(device).unwrap();
+    // The tiles at full size, averaged 4×4 (premultiplied), are what the impostor should show.
+    let mut expected = vec![0u8; (far.width * far.height * 4) as usize];
+    for y in 0..far.height {
+        for x in 0..far.width {
+            let mut sum = [0u32; 4];
+            for dy in 0..4 {
+                for dx in 0..4 {
+                    let p = near.pixel(4 * x + dx, 4 * y + dy).unwrap();
+                    let a = u32::from(p[3]);
+                    for c in 0..3 {
+                        sum[c] += u32::from(p[c]) * a / 255;
+                    }
+                    sum[3] += a;
+                }
+            }
+            let a = sum[3] / 16;
+            let at = ((y * far.width + x) * 4) as usize;
+            for c in 0..3 {
+                expected[at + c] = ((sum[c] / 16) * 255)
+                    .checked_div(a)
+                    .map_or(0, |v| v.min(255) as u8);
+            }
+            expected[at + 3] = a as u8;
+        }
+    }
+    let expected = bt_render::Picture {
+        width: far.width,
+        height: far.height,
+        rgba: expected,
+    };
+    let share = differing_share(&far, &expected, 24);
+    assert!(share < 0.02, "{:.2} % of pixels differ", share * 100.0);
+
+    let mut renderer = MapRenderer::builder(
+        device.device(),
+        device.queue(),
+        wgpu::TextureFormat::Rgba8Unorm,
+    )
+    .build();
+    let mut store = ImageStore::builder().build().unwrap();
+    let camera = Camera {
+        origin: DVec2::ZERO,
+        zoom: 0.25,
+    };
+    let frame = FrameInput::new(Arc::clone(&map), camera, UVec2::new(256, 256));
+    renderer
+        .prepare(&mut store, std::slice::from_ref(&frame))
+        .unwrap();
+    let stats = renderer.prepare(&mut store, &[frame]).unwrap();
+    assert_eq!(stats.impostors, 16, "one per chunk");
+    assert_eq!(stats.instances, 16);
+}

@@ -22,6 +22,8 @@ use crate::text::{GlyphKey, rasterize};
 pub(crate) const READY: u32 = 1;
 /// The image cannot be drawn: draw Tiled's marker.
 pub(crate) const MISSING: u32 = 2;
+/// The texels are in the impostor pages.
+pub(crate) const IMPOSTOR: u32 = 3;
 
 /// A sprite as the shader reads it.
 #[repr(C)]
@@ -31,7 +33,7 @@ pub(crate) struct GpuSprite {
     pub(crate) rect: [u32; 4],
     /// The page (texture array layer).
     pub(crate) page: u32,
-    /// 0 (pending), [`READY`] or [`MISSING`].
+    /// 0 (pending), [`READY`], [`MISSING`] or [`IMPOSTOR`].
     pub(crate) state: u32,
     /// Unused; keeps the size a multiple of 16 bytes.
     pub(crate) pad: [u32; 2],
@@ -468,6 +470,32 @@ impl Sprites {
             }
         }
         pending
+    }
+
+    /// A sprite for an impostor in `region` of the impostor pages.
+    pub(crate) fn impostor_sprite(&mut self, region: Region) -> u32 {
+        let sprite = self.allocate(1);
+        self.set(
+            sprite,
+            GpuSprite {
+                rect: [
+                    region.origin.x,
+                    region.origin.y,
+                    region.size.x,
+                    region.size.y,
+                ],
+                page: region.page,
+                state: IMPOSTOR,
+                pad: [0; 2],
+            },
+        );
+        sprite
+    }
+
+    /// Frees a sprite allocated alone (an impostor's).
+    pub(crate) fn free_sprite(&mut self, sprite: u32) {
+        self.set(sprite, GpuSprite::default());
+        self.release(sprite, 1);
     }
 
     /// Waits for every image asked for and not yet decoded (headless renders).

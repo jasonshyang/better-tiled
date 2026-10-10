@@ -9,13 +9,14 @@ use std::hash::{Hash, Hasher};
 
 use bt_core::{
     BlendMode, Color, DrawOrder, EffectiveLayer, ImageLayer, Layer, LayerId, LayerKind, Map,
-    MapGeometry, ObjectLayer, Shape,
+    MapGeometry, ObjectLayer, Shape, TileLayer,
 };
 use bt_utils::DRect;
 use glam::{DVec2, UVec2};
 
 use crate::chunks::{ChunkCache, ChunkContext, tiles_for_view};
 use crate::error::RenderError;
+use crate::impostors::{IMPOSTOR_CELL_PX, ImpostorKey, Impostors};
 use crate::input::FrameInput;
 use crate::instance::{Instance, cell_instance, marker, object_instance, plain, solid};
 use crate::objects::{object_color, shape_vectors};
@@ -138,6 +139,7 @@ pub(crate) struct Resources<'a> {
     pub(crate) sprites: &'a mut Sprites,
     pub(crate) pages: &'a mut Pages,
     pub(crate) chunks: &'a mut ChunkCache,
+    pub(crate) impostors: &'a mut Impostors,
     pub(crate) store: &'a mut dyn ImageSupply,
     pub(crate) device: &'a wgpu::Device,
     pub(crate) queue: &'a wgpu::Queue,
@@ -374,24 +376,7 @@ where
                 LayerKind::Tile(tiles) => {
                     self.begin_group(layer.blend_mode);
                     let params = self.params(LayerParams::tinted(offset, opacity, effective.tint));
-                    let tiles_rect =
-                        tiles_for_view(&self.geometry, self.map, self.view_rect, offset);
-                    let start = self.data.instances.len() as u32;
-                    let cx = ChunkContext {
-                        map: self.map,
-                        geometry: self.geometry,
-                        sprites: self.res.sprites,
-                        tilesets: self.tilesets,
-                    };
-                    self.res.chunks.collect(
-                        tiles,
-                        tiles_rect,
-                        &cx,
-                        self.res.frame,
-                        &mut self.data.instances,
-                    );
-                    let end = self.data.instances.len() as u32;
-                    self.push_step(StepKind::Sprites, start, end, params);
+                    self.tile_layer(tiles, offset, params);
                 }
                 LayerKind::Object(objects) => {
                     self.begin_group(layer.blend_mode);
@@ -419,6 +404,55 @@ where
                 self.vector_items(&items, params);
             }
         }
+    }
+
+    /// A tile layer's cells from the chunk caches, or far out its chunks' impostors.
+    fn tile_layer(&mut self, tiles: &TileLayer, offset: DVec2, params: u32) {
+        let tiles_rect = tiles_for_view(&self.geometry, self.map, self.view_rect, offset);
+        let tile_px = f64::from(self.map.tile_width.max(self.map.tile_height));
+        let cell_px = tile_px * self.input.camera.zoom;
+        let cx = ChunkContext {
+            map: self.map,
+            geometry: self.geometry,
+            sprites: self.res.sprites,
+            tilesets: self.tilesets,
+        };
+        if cell_px >= IMPOSTOR_CELL_PX {
+            let start = self.data.instances.len() as u32;
+            self.res.chunks.collect(
+                tiles,
+                tiles_rect,
+                &cx,
+                self.res.frame,
+                &mut self.data.instances,
+            );
+            let end = self.data.instances.len() as u32;
+            self.push_step(StepKind::Sprites, start, end, params);
+            return;
+        }
+        let visible = self
+            .res
+            .chunks
+            .visible(tiles, tiles_rect, &cx, self.res.frame);
+        let level = Impostors::level_for(cell_px);
+        let mut instances = Vec::with_capacity(visible.len());
+        for chunk in visible {
+            let key = ImpostorKey {
+                chunk: chunk.key,
+                level,
+            };
+            let sprite = self.res.impostors.sprite_for(
+                key,
+                chunk.bounds,
+                tile_px,
+                self.res.sprites,
+                self.res.frame,
+            );
+            if let Some(sprite) = sprite {
+                instances.push(plain(chunk.bounds, sprite, [255; 4]));
+            }
+        }
+        self.push_instances(params, &instances);
     }
 
     /// Tiled's darkening rectangle under the lowest highlighted layer.

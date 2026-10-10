@@ -14,6 +14,7 @@ use crate::draw_list::{
     FrameData, Globals, LayerParams, Resources, Step, StepKind, build_view, check_layers,
 };
 use crate::error::RenderError;
+use crate::impostors::{ImpostorWork, Impostors};
 use crate::input::FrameInput;
 use crate::instance::INSTANCE_SIZE;
 use crate::pages::Pages;
@@ -57,10 +58,13 @@ impl MapRendererBuilder {
     /// The renderer.
     pub fn build(self) -> MapRenderer {
         let gpu = Gpu::new(&self.device, self.format);
-        // Pages take most of the budget; chunk caches the rest.
-        let pages = Pages::new(&self.device, self.page_side, self.budget_bytes / 4 * 3);
+        // Texture pages take half the budget, impostors and chunk caches a quarter each.
+        let pages = Pages::new(&self.device, self.page_side, self.budget_bytes / 2);
+        let impostor_page_bytes = 2048 * 2048 * 4;
+        let impostor_pages = (self.budget_bytes / 4 / impostor_page_bytes).max(1) as u32;
         MapRenderer {
             compositor: Compositor::new(&self.device, self.format),
+            impostors: Impostors::new(&self.device, impostor_pages),
             gpu,
             pages,
             sprites: Sprites::new(),
@@ -83,6 +87,7 @@ pub struct MapRenderer {
     pages: Pages,
     sprites: Sprites,
     chunks: ChunkCache,
+    impostors: Impostors,
     compositor: Compositor,
     frame: u64,
     data: FrameData,
@@ -137,6 +142,7 @@ impl MapRenderer {
                 sprites: &mut self.sprites,
                 pages: &mut self.pages,
                 chunks: &mut self.chunks,
+                impostors: &mut self.impostors,
                 store: images,
                 device: &self.device,
                 queue: &self.queue,
@@ -145,6 +151,11 @@ impl MapRenderer {
             build_view(view, &mut self.data, &mut resources);
         }
         let uploaded = self.upload();
+        let work = self.impostors.take_work();
+        if pending > 0 {
+            self.impostors.mark_incomplete(&work.jobs);
+        }
+        self.draw_impostors(&work);
         self.chunks.trim(frame);
         self.sprites.release_unused(frame);
         self.stats = RenderStats {
@@ -152,7 +163,7 @@ impl MapRenderer {
             vector_vertices: self.data.vertices.len(),
             draws: self.data.views.iter().map(|view| view.steps.len()).sum(),
             pages: self.pages.count(),
-            impostors: 0,
+            impostors: self.impostors.count(),
             pending_images: pending,
             animating: next_frame_ms.is_some(),
             next_frame_ms,
@@ -233,6 +244,13 @@ impl MapRenderer {
         self.sprites.wait_for_images(images);
     }
 
+    /// Lets go of every cached chunk and tileset the last frame did not draw (a closed tab, a
+    /// switch to a smaller map). Preparing also trims, but only above the budget.
+    pub fn trim(&mut self) {
+        self.chunks.trim_unused(self.frame);
+        self.sprites.release_unused(self.frame);
+    }
+
     /// The last prepared frame's account.
     pub fn stats(&self) -> &RenderStats {
         &self.stats
@@ -285,6 +303,96 @@ impl MapRenderer {
         }
     }
 
+    /// Draws the impostors planned this frame into their pages, page by page.
+    fn draw_impostors(&mut self, work: &ImpostorWork) {
+        if work.clear.is_empty() && work.jobs.is_empty() {
+            return;
+        }
+        let mut instances = Vec::new();
+        let mut ranges = Vec::with_capacity(work.jobs.len());
+        let mut globals = Vec::with_capacity(work.jobs.len());
+        for job in &work.jobs {
+            let start = instances.len() as u32;
+            instances.extend(
+                self.chunks
+                    .instances(&job.chunk)
+                    .iter()
+                    .map(|keyed| keyed.instance),
+            );
+            ranges.push(start..instances.len() as u32);
+            globals.push(Globals {
+                origin: [job.bounds.min.x as f32, job.bounds.min.y as f32],
+                zoom: job.scale as f32,
+                pad0: 0.0,
+                viewport: [job.region.size.x as f32, job.region.size.y as f32],
+                pad1: [0.0; 2],
+            });
+        }
+        let gpu = &mut self.gpu;
+        gpu.impostor_globals
+            .write_strided(&self.device, &self.queue, &globals);
+        gpu.impostor_instances
+            .write_all(&self.device, &self.queue, &instances);
+        gpu.rebind_impostor_pass(&self.device, &self.pages);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("bt impostors"),
+            });
+        for page in &work.clear {
+            if let Some(view) = self.impostors.layer_view(*page) {
+                drop(begin_pass(&mut encoder, view, true));
+            }
+        }
+        let pipelines = gpu.offscreen.as_ref().unwrap_or(&gpu.target);
+        let mut pages: Vec<u32> = work.jobs.iter().map(|job| job.region.page).collect();
+        pages.sort_unstable();
+        pages.dedup();
+        for page in pages {
+            let Some(view) = self.impostors.layer_view(page) else {
+                continue;
+            };
+            let Some(group0) = &gpu.impostor_group0 else {
+                continue;
+            };
+            let Some(group1) = &gpu.impostor_group1 else {
+                continue;
+            };
+            let mut pass = begin_pass(&mut encoder, view, false);
+            pass.set_pipeline(&pipelines.sprite);
+            pass.set_vertex_buffer(0, gpu.impostor_instances.buffer.slice(..));
+            pass.set_bind_group(1, group1, &[0]);
+            for (index, job) in work
+                .jobs
+                .iter()
+                .enumerate()
+                .filter(|(_, job)| job.region.page == page)
+            {
+                let Some(range) = ranges.get(index) else {
+                    continue;
+                };
+                let region = job.region;
+                pass.set_viewport(
+                    region.origin.x as f32,
+                    region.origin.y as f32,
+                    region.size.x as f32,
+                    region.size.y as f32,
+                    0.0,
+                    1.0,
+                );
+                pass.set_scissor_rect(
+                    region.origin.x,
+                    region.origin.y,
+                    region.size.x,
+                    region.size.y,
+                );
+                pass.set_bind_group(0, group0, &[(index as u64 * UNIFORM_STRIDE) as u32]);
+                pass.draw(0..6, range.clone());
+            }
+        }
+        self.queue.submit([encoder.finish()]);
+    }
+
     /// Uploads the frame's data; returns the bytes written.
     fn upload(&mut self) -> usize {
         let device = &self.device;
@@ -326,7 +434,7 @@ impl MapRenderer {
                 .remap
                 .write_at(queue, u64::from(dirty.remap.start) * 4, range);
         }
-        gpu.rebind(device, &self.pages);
+        gpu.rebind(device, &self.pages, &self.impostors);
         bytes
     }
 }
@@ -480,10 +588,17 @@ struct Gpu {
     vertices: GrowingBuffer,
     sprites: GrowingBuffer,
     remap: GrowingBuffer,
-    impostors_view: wgpu::TextureView,
+    /// What the impostor pass binds instead of the impostor pages it draws into.
+    dummy_view: wgpu::TextureView,
     group0: Option<wgpu::BindGroup>,
     group1: Option<wgpu::BindGroup>,
     bound: Option<BoundTo>,
+    impostor_globals: GrowingBuffer,
+    impostor_instances: GrowingBuffer,
+    impostor_params: wgpu::Buffer,
+    impostor_group0: Option<wgpu::BindGroup>,
+    impostor_group1: Option<wgpu::BindGroup>,
+    impostor_bound: Option<BoundTo>,
 }
 
 impl Gpu {
@@ -543,8 +658,8 @@ impl Gpu {
         let target = pipelines(device, &layout0, &layout1, format);
         let offscreen =
             (format != OFFSCREEN).then(|| pipelines(device, &layout0, &layout1, OFFSCREEN));
-        let impostors = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("bt impostors"),
+        let dummy = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("bt no impostors"),
             size: wgpu::Extent3d {
                 width: 1,
                 height: 1,
@@ -557,10 +672,29 @@ impl Gpu {
             usage: wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        let impostors_view = impostors.create_view(&wgpu::TextureViewDescriptor {
+        let dummy_view = dummy.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..wgpu::TextureViewDescriptor::default()
         });
+        // The impostor pass draws tiles as they are; the frame applies the layer to the impostor.
+        let neutral = LayerParams {
+            offset: [0.0; 2],
+            opacity: 1.0,
+            tinted: 0,
+            tint: [1.0; 4],
+        };
+        let mut contents = vec![0u8; UNIFORM_STRIDE as usize];
+        if let Some(target) = contents.get_mut(..std::mem::size_of::<LayerParams>()) {
+            target.copy_from_slice(bytemuck::bytes_of(&neutral));
+        }
+        let impostor_params = wgpu::util::DeviceExt::create_buffer_init(
+            device,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("bt impostor params"),
+                contents: &contents,
+                usage: wgpu::BufferUsages::UNIFORM,
+            },
+        );
         Gpu {
             layout0,
             layout1,
@@ -597,15 +731,31 @@ impl Gpu {
                 SPRITE_SIZE * 1024,
             ),
             remap: GrowingBuffer::new(device, "bt remap", wgpu::BufferUsages::STORAGE, 4 * 1024),
-            impostors_view,
+            dummy_view,
             group0: None,
             group1: None,
             bound: None,
+            impostor_globals: GrowingBuffer::new(
+                device,
+                "bt impostor globals",
+                wgpu::BufferUsages::UNIFORM,
+                UNIFORM_STRIDE * 16,
+            ),
+            impostor_instances: GrowingBuffer::new(
+                device,
+                "bt impostor instances",
+                wgpu::BufferUsages::VERTEX,
+                INSTANCE_SIZE * 4096,
+            ),
+            impostor_params,
+            impostor_group0: None,
+            impostor_group1: None,
+            impostor_bound: None,
         }
     }
 
     /// Remakes the bind groups whose buffers or textures changed.
-    fn rebind(&mut self, device: &wgpu::Device, pages: &Pages) {
+    fn rebind(&mut self, device: &wgpu::Device, pages: &Pages, impostors: &Impostors) {
         let now = BoundTo {
             pages: pages.generation(),
             globals: self.globals.generation,
@@ -647,7 +797,7 @@ impl Gpu {
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&self.impostors_view),
+                        resource: wgpu::BindingResource::TextureView(impostors.array_view()),
                     },
                 ],
             }));
@@ -667,6 +817,68 @@ impl Gpu {
             }));
         }
         self.bound = Some(now);
+    }
+}
+
+impl Gpu {
+    /// Remakes the impostor pass's bind groups when their buffers or the pages changed. The pass
+    /// binds a placeholder where the frame binds the impostor pages, since it draws into them.
+    fn rebind_impostor_pass(&mut self, device: &wgpu::Device, pages: &Pages) {
+        let now = BoundTo {
+            pages: pages.generation(),
+            globals: self.impostor_globals.generation,
+            sprites: self.sprites.generation,
+            remap: self.remap.generation,
+            params: 0,
+        };
+        if self.impostor_bound == Some(now) && self.impostor_group0.is_some() {
+            return;
+        }
+        self.impostor_group0 = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bt impostor frame"),
+            layout: &self.layout0,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &self.impostor_globals.buffer,
+                        offset: 0,
+                        size: NonZeroU64::new(std::mem::size_of::<Globals>() as u64),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(pages.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.sprites.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.remap.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&self.dummy_view),
+                },
+            ],
+        }));
+        if self.impostor_group1.is_none() {
+            self.impostor_group1 = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("bt impostor layer"),
+                layout: &self.layout1,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &self.impostor_params,
+                        offset: 0,
+                        size: NonZeroU64::new(std::mem::size_of::<LayerParams>() as u64),
+                    }),
+                }],
+            }));
+        }
+        self.impostor_bound = Some(now);
     }
 }
 
