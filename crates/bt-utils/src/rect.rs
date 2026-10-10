@@ -5,8 +5,10 @@
 use glam::{DVec2, IVec2};
 
 /// A rectangle of integer positions: `x`, `y` is its top-left and `w`, `h` its size, so it covers
-/// columns `x..x + w` and rows `y..y + h`. It is empty when `w` or `h` is not positive.
+/// columns `x..x + w` and rows `y..y + h`. It is empty when `w` or `h` is not positive. With the
+/// `serde` feature it is written as `{"x": …, "y": …, "w": …, "h": …}`.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IRect {
     /// The left column.
     pub x: i32,

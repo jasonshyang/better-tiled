@@ -737,6 +737,7 @@ dependencies = [
  "bt-test-data",
  "glam",
  "rustix 1.1.5",
+ "serde",
  "thiserror 2.0.21",
 ]
 

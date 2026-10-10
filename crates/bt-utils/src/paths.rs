@@ -1,5 +1,6 @@
 //! Path helpers: lexical cleaning, absolute and relative paths, file stems and labels, the
-//! upward search that finds a project file above a map, and the user's private runtime folder.
+//! upward search that finds a project file above a map, and the user's private runtime folder
+//! with the check that keeps a folder the user's alone.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -164,7 +165,7 @@ pub fn runtime_dir() -> Result<PathBuf, Error> {
     {
         let uid = rustix::process::getuid().as_raw();
         let dir = runtime_dir_of(uid);
-        make_private_dir(&dir, uid)?;
+        make_private_dir_of(&dir, uid)?;
         Ok(dir)
     }
     #[cfg(not(unix))]
@@ -184,12 +185,22 @@ fn runtime_dir_of(uid: u32) -> PathBuf {
     PathBuf::from(format!("/tmp/better-tiled-{uid}"))
 }
 
+/// Makes `dir` a folder of the current user alone, the check [`runtime_dir`] makes of its own
+/// folder, for a folder chosen otherwise (the live link's `BT_LIVE_DIR`): creates it with mode
+/// `0700` when it is missing, refuses a symbolic link, anything that is not a folder and a folder
+/// someone else owns ([`Error::NotPrivate`], saying which), and narrows a mode open to others to
+/// `0700`. Unix only.
+#[cfg(unix)]
+pub fn make_private_dir(dir: &Path) -> Result<(), Error> {
+    make_private_dir_of(dir, rustix::process::getuid().as_raw())
+}
+
 /// Makes `dir` a folder of the user `uid` alone: creates it with mode `0700` when it is missing,
 /// refuses a symbolic link, anything that is not a folder and a folder someone else owns, and
 /// narrows a mode open to others to `0700`. In `/tmp`, whose sticky bit lets only an entry's
 /// owner rename or remove it, a folder that passed cannot be swapped for another afterwards.
 #[cfg(unix)]
-fn make_private_dir(dir: &Path, uid: u32) -> Result<(), Error> {
+fn make_private_dir_of(dir: &Path, uid: u32) -> Result<(), Error> {
     use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 
     let folder = |source: std::io::Error| Error::Folder {
@@ -368,19 +379,42 @@ mod tests {
         let scratch = Scratch::new("bt-utils-private-dir").unwrap();
         let uid = owner(scratch.path());
         let dir = scratch.join("runtime");
-        make_private_dir(&dir, uid).unwrap();
+        make_private_dir_of(&dir, uid).unwrap();
         assert_eq!(mode(&dir), 0o700, "made private");
         std::fs::write(dir.join("editor.sock"), "").unwrap();
-        make_private_dir(&dir, uid).unwrap();
+        make_private_dir_of(&dir, uid).unwrap();
         assert!(
             dir.join("editor.sock").is_file(),
             "an existing folder is kept"
         );
         for wider in [0o755, 0o711, 0o701, 0o770, 0o777] {
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(wider)).unwrap();
-            make_private_dir(&dir, uid).unwrap();
+            make_private_dir_of(&dir, uid).unwrap();
             assert_eq!(mode(&dir), 0o700, "{wider:o} narrowed");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_current_user_makes_private_folders_of_their_own() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = Scratch::new("bt-utils-private-dir-own").unwrap();
+        let dir = scratch.join("live");
+        make_private_dir(&dir).unwrap();
+        assert_eq!(mode(&dir), 0o700, "made private");
+        assert_eq!(owner(&dir), owner(scratch.path()));
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o777)).unwrap();
+        make_private_dir(&dir).unwrap();
+        assert_eq!(mode(&dir), 0o700, "narrowed");
+        let file = scratch.join("file");
+        std::fs::write(&file, "").unwrap();
+        assert!(matches!(
+            make_private_dir(&file),
+            Err(Error::NotPrivate {
+                reason: NotPrivate::NotAFolder,
+                ..
+            })
+        ));
     }
 
     #[cfg(unix)]
@@ -390,8 +424,8 @@ mod tests {
         let scratch = Scratch::new("bt-utils-private-dir-refused").unwrap();
         let uid = owner(scratch.path());
         let real = scratch.join("real");
-        make_private_dir(&real, uid).unwrap();
-        let refusal = |dir: &Path, uid: u32| match make_private_dir(dir, uid) {
+        make_private_dir_of(&real, uid).unwrap();
+        let refusal = |dir: &Path, uid: u32| match make_private_dir_of(dir, uid) {
             Err(Error::NotPrivate { reason, .. }) => reason,
             other => panic!("{} was not refused: {other:?}", dir.display()),
         };
@@ -416,7 +450,7 @@ mod tests {
             NotPrivate::OwnedByOther { owner: uid }
         );
         assert_eq!(mode(&real), 0o755, "left alone");
-        let error = make_private_dir(&real, someone_else).unwrap_err();
+        let error = make_private_dir_of(&real, someone_else).unwrap_err();
         assert_eq!(
             error.to_string(),
             format!("{} is not used: it belongs to user {uid}", real.display())

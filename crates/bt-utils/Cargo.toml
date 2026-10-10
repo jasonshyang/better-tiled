@@ -8,8 +8,13 @@ authors.workspace = true
 license = "MIT OR Apache-2.0"
 publish = false
 
+[features]
+# Serialize and Deserialize for IRect, for a crate that sends rectangles as JSON (bt-live).
+serde = ["dep:serde"]
+
 [dependencies]
 glam.workspace = true
+serde = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [target.'cfg(unix)'.dependencies]
