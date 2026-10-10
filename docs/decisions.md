@@ -749,3 +749,43 @@ editor state; a person's own labels outlive a proposal; a pattern Tiled counts a
 count here; writing over a file loses someone's work. Detection still misses 31 blocks of the
 packs (see-through tops, two-coloured tops, checkerboard previews, rocky ground on rocky
 ground), each listed with its reason in `tests/layouts.rs`.
+
+## 2026-10-10 — How the editor reads and runs a map's rules
+
+**Decided:** a map's rules are looked for the first time it is current (the AutoMap layers'
+own rules file, else Tiled's order: a `rules.txt` beside the map, else the project's), read on a
+worker through a loader that holds the editor's tilesets, so rules name the very tilesets the
+map uses, unsaved changes and all, and read again when a file they came from changes, a
+`rules.txt` appears beside the map, or the project's classes would give a rule tile another
+`MatchType`. A read that fails keeps the rules there were. Map ▸ AutoMap asked for while the
+rules are being read runs when they arrive. A run that does nothing says why: the layers the
+rules read that the map lacks, or the rule maps that cannot run.
+**Instead of:** reading the rules on the first AutoMap, as Tiled does; reading them on the
+window's thread; a fresh loader with tilesets of its own; a silent run.
+**Why:** the AutoMap panel says what the rules are before they run; no frame waits on files; a
+rule naming the map's tileset must match the tiles the map shows; Tiled's silence when rules
+read a missing layer is the commonest reason pack rules seem broken.
+
+## 2026-10-10 — AutoMap layers as built
+
+**Decided:** a run of AutoMap layers is the engine's own layer-name binding (`LayerNames`) with
+unbound names temporary, so the setup is the rules file, a list of those and a seed; each run
+draws from the seed plus its index. The setup is part of every transaction beside the
+selection, and a transaction that changes it gives the map a new version even when no layer
+changed, since the map's file will hold another result. Starting binds every name the rules use
+to the map's layer of that name and makes the output layers the map lacks on top, empty, so what
+was painted and the result have the same layers; started right after AutoMap ran, what was
+painted is the map before that run. Tools read the shown map, as the design says, and edit what
+was painted. The result is derived after every intent whose painted map, setup or rules changed,
+as full runs until region runs exist. The project-file record keeps a painted tile layer whole,
+row by row; objects that `DeleteTiles` removed are not kept, so they do not come back. A map
+opened whose rules now make something else than its file holds opens unsaved, with a notice.
+Project files are locked in a folder the program passes in: the runtime folder in the app, a
+scratch folder in tests.
+**Instead of:** `Run { bindings: Vec<Bound> }`, a second type for the same binding; a setup
+outside the history, so undo would not bring it back; layers that exist only in the result,
+which the Layers panel could not show or select; recording only the cells that differ, which
+needs a third state per cell the row format does not have.
+**Why:** one binding type means explanations and runs speak the same names; undo restores what
+the user saw; a layer the user cannot select is a layer they cannot fix; the painted layers of
+outputs are mostly empty, so keeping them whole costs little and restores without the result.
