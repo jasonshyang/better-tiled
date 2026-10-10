@@ -201,4 +201,3 @@ fn a_drag_of_the_opacity_slider_is_one_step() {
     assert!(matches!(&effects[..], [Effect::Notify(_)]), "{effects:?}");
     assert_eq!(opacity(&editor, 4), 1.0);
 }
-
