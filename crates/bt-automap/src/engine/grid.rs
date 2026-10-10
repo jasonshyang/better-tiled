@@ -4,7 +4,7 @@
 //! overflow. The end of the run writes back only the cells written that differ, so the map's
 //! copy-on-write chunks stay shared wherever nothing changed.
 
-use bt_core::{Cell, TileLayer};
+use bt_core::{Cell, PlacedCell, TileLayer};
 use bt_utils::IRect;
 use bt_utils::hash::CellHashMap;
 use glam::IVec2;
@@ -120,20 +120,22 @@ impl Grid {
     }
 
     /// Every cell written, with what it holds now, once each.
-    pub(crate) fn written(&self) -> Vec<(IVec2, Cell)> {
-        let mut cells: Vec<(IVec2, Cell)> = self
+    pub(crate) fn written(&self) -> Vec<PlacedCell> {
+        let mut cells: Vec<PlacedCell> = self
             .dirty
             .iter()
             .enumerate()
             .filter(|&(_, &dirty)| dirty)
-            .map(|(i, _)| {
-                (
-                    position_of(self.area, i),
-                    self.dense.get(i).copied().unwrap_or_default(),
-                )
+            .map(|(i, _)| PlacedCell {
+                at: position_of(self.area, i),
+                cell: self.dense.get(i).copied().unwrap_or_default(),
             })
             .collect();
-        cells.extend(self.overflow.iter().map(|(&p, &cell)| (p, cell)));
+        cells.extend(
+            self.overflow
+                .iter()
+                .map(|(&at, &cell)| PlacedCell { at, cell }),
+        );
         cells
     }
 
@@ -198,7 +200,8 @@ mod tests {
         assert_eq!(grid.before(IVec2::new(40, -3)), tile(2));
         assert_eq!(grid.set_cell(IVec2::new(2, 2), tile(3)), Cell::EMPTY);
         let mut written = grid.written();
-        written.sort_by_key(|(p, _)| (p.y, p.x));
+        written.sort_by_key(|placed| (placed.at.y, placed.at.x));
+        let written: Vec<(IVec2, Cell)> = written.iter().map(|p| (p.at, p.cell)).collect();
         assert_eq!(
             written,
             [(IVec2::new(40, -3), tile(5)), (IVec2::new(2, 2), tile(3))]

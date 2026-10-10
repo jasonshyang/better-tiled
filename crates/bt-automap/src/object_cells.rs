@@ -32,18 +32,18 @@ impl QtRect {
         (!rect.is_empty()).then_some(rect)
     }
 
-    /// Whether `QRegion::intersects(rect)` holds for `region`: a rectangle of no width and no
-    /// height intersects nothing; otherwise the rectangle is normalized as Qt normalizes it and
-    /// compared, by inclusive edges, with each of the region's band rectangles. A rectangle one
-    /// cell wide but of no height so "intersects" a band rectangle that spans its top edge.
-    pub(crate) fn intersects(self, region: &CellSet) -> bool {
-        if region.is_empty() || (self.w == 0 && self.h == 0) {
+    /// Whether `QRegion::intersects(rect)` holds for a region whose band rectangles are `bands`
+    /// ([`CellSet::rects`]): a rectangle of no width and no height intersects nothing;
+    /// otherwise the rectangle is normalized as Qt normalizes it and compared, by inclusive
+    /// edges, with each band rectangle. A rectangle one cell wide but of no height so
+    /// "intersects" a band rectangle that spans its top edge.
+    pub(crate) fn intersects(self, bands: &[IRect]) -> bool {
+        if bands.is_empty() || (self.w == 0 && self.h == 0) {
             return false;
         }
         let (left, right) = normalized(self.x, self.w);
         let (top, bottom) = normalized(self.y, self.h);
-        region
-            .rects()
+        bands
             .iter()
             .any(|r| r.x + r.w > left && r.x <= right && r.y + r.h > top && r.y <= bottom)
     }
@@ -119,9 +119,10 @@ pub(crate) fn objects_in_region<'o>(
     objects: &'o [MapObject],
     region: &CellSet,
 ) -> Vec<&'o MapObject> {
+    let bands = region.rects();
     objects
         .iter()
-        .filter(|object| object_tile_rect(map, object).is_some_and(|r| r.intersects(region)))
+        .filter(|object| object_tile_rect(map, object).is_some_and(|r| r.intersects(&bands)))
         .collect()
 }
 
@@ -200,8 +201,11 @@ mod tests {
             w: 5,
             h: 5,
         });
-        assert!(inside.intersects(&region));
-        assert!(!corner.intersects(&region), "a corner covers nothing");
+        assert!(inside.intersects(&region.rects()));
+        assert!(
+            !corner.intersects(&region.rects()),
+            "a corner covers nothing"
+        );
         // On a cell's edge: no width, one row. It meets a region only where the region spans
         // the edge.
         let edge = object_tile_rect(&map, &point(32.0, 24.0)).unwrap();
@@ -214,13 +218,14 @@ mod tests {
                 h: 1
             }
         );
-        assert!(edge.intersects(&region));
-        assert!(!edge.intersects(&CellSet::from_rect(IRect {
+        assert!(edge.intersects(&region.rects()));
+        let right_of_the_edge = CellSet::from_rect(IRect {
             x: 2,
             y: 0,
             w: 3,
-            h: 3
-        })));
+            h: 3,
+        });
+        assert!(!edge.intersects(&right_of_the_edge.rects()));
     }
 
     #[test]
@@ -269,12 +274,13 @@ mod tests {
             h: 1,
         };
         assert_eq!(rect.cells(), None);
-        assert!(rect.intersects(&CellSet::from_rect(IRect {
+        let left = CellSet::from_rect(IRect {
             x: 3,
             y: 0,
             w: 1,
-            h: 1
-        })));
+            h: 1,
+        });
+        assert!(rect.intersects(&left.rects()));
         assert_eq!(normalized(5, -2), (3, 4));
         assert_eq!(normalized(5, 0), (5, 4));
     }

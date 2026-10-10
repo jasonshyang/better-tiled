@@ -202,16 +202,13 @@ impl RuleSet {
     /// Whether `types` would give some tile the rules use another `MatchType` than it has now,
     /// through its class: then the rules must be loaded again.
     pub fn classes_changed(&self, types: &CustomTypes) -> bool {
-        self.match_types
-            .entries
-            .iter()
-            .any(|(&(tileset, tile), was)| {
-                was.class.is_some()
-                    && self.table.get(tileset).is_some_and(|entry| {
-                        let now = resolve_match_type(&entry.reference.tileset, tile, types);
-                        now.match_type != was.match_type || now.unknown_name != was.unknown_name
-                    })
-            })
+        self.match_types.entries.iter().any(|(key, was)| {
+            was.class.is_some()
+                && self.table.get(key.tileset).is_some_and(|entry| {
+                    let now = resolve_match_type(&entry.reference.tileset, key.tile, types);
+                    now.match_type != was.match_type || now.unknown_name != was.unknown_name
+                })
+        })
     }
 }
 

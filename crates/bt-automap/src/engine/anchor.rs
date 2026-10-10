@@ -149,13 +149,20 @@ pub(crate) fn anchor_candidates(set: &BoundSet<'_>) -> Vec<Anchor> {
     found
 }
 
+/// An anchor tile on a grid.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct GridTile {
+    grid: usize,
+    tile: AnchorTile,
+}
+
 /// The positions of the anchor tiles in the grids.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct AnchorIndex {
     /// Per grid and key, a bitset of the tile ids anchors name.
     wanted: Vec<Vec<Vec<u64>>>,
     /// The positions of each anchor tile, per grid.
-    positions: HashMap<(usize, AnchorTile), Vec<IVec2>>,
+    positions: HashMap<GridTile, Vec<IVec2>>,
 }
 
 impl AnchorIndex {
@@ -190,7 +197,11 @@ impl AnchorIndex {
                 }
             });
             for (tile, p) in hits {
-                index.positions.entry((grid, tile)).or_default().push(p);
+                index
+                    .positions
+                    .entry(GridTile { grid, tile })
+                    .or_default()
+                    .push(p);
             }
         }
         index
@@ -238,7 +249,7 @@ impl AnchorIndex {
     /// Where `tile` is on `grid` (positions may repeat after writes).
     pub(crate) fn hits(&self, grid: usize, tile: AnchorTile) -> &[IVec2] {
         self.positions
-            .get(&(grid, tile))
+            .get(&GridTile { grid, tile })
             .map(Vec::as_slice)
             .unwrap_or_default()
     }
@@ -255,7 +266,10 @@ impl AnchorIndex {
     /// Records that `tile` was written at `p` on `grid`, if an anchor names it.
     pub(crate) fn record_write(&mut self, grid: usize, tile: AnchorTile, p: IVec2) {
         if self.is_wanted(grid, tile) {
-            self.positions.entry((grid, tile)).or_default().push(p);
+            self.positions
+                .entry(GridTile { grid, tile })
+                .or_default()
+                .push(p);
         }
     }
 }

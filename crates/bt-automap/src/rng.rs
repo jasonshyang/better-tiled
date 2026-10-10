@@ -10,7 +10,7 @@ use crate::rule_ref::RuleRef;
 
 /// What a random number decides, so two decisions at one position are independent.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Purpose {
+pub(crate) enum Purpose {
     /// Whether a rule whose `Probability` is below 1 is skipped at a position.
     Skip,
     /// Which of a rule's random outputs is applied at a position.
@@ -49,7 +49,7 @@ pub(crate) fn bits(seed: u64, rule: RuleRef, position: IVec2, purpose: Purpose) 
 }
 
 /// A number in `[0, 1)` for one decision, with 53 bits of precision.
-pub fn unit(seed: u64, rule: RuleRef, position: IVec2, purpose: Purpose) -> f64 {
+pub(crate) fn unit(seed: u64, rule: RuleRef, position: IVec2, purpose: Purpose) -> f64 {
     const SCALE: f64 = 1.0 / (1u64 << 53) as f64;
     (bits(seed, rule, position, purpose) >> 11) as f64 * SCALE
 }

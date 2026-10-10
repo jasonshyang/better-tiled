@@ -104,11 +104,17 @@ pub(crate) enum RuleCell {
     Typed(MatchType, TableTile),
 }
 
-/// The meaning of every tile of the rule set met so far, by tileset (in the table's numbering)
-/// and tile.
+/// A tile of the rule set: its tileset in the table's numbering and its id.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TileKey {
+    pub(crate) tileset: usize,
+    pub(crate) tile: TileId,
+}
+
+/// The meaning of every tile of the rule set met so far.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct MatchTypeCache {
-    pub(crate) entries: HashMap<(usize, TileId), ResolvedMatchType>,
+    pub(crate) entries: HashMap<TileKey, ResolvedMatchType>,
 }
 
 /// The meanings of one rule map's cells.
@@ -151,7 +157,10 @@ impl CellMeanings<'_> {
             tile: cell.tile(),
             flip: cell.flip(),
         };
-        let key = (tileset, cell.tile());
+        let key = TileKey {
+            tileset,
+            tile: cell.tile(),
+        };
         let resolved = match self.cache.entries.get(&key) {
             Some(resolved) => resolved,
             None => {

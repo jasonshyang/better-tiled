@@ -51,11 +51,6 @@ impl CellSet {
         set
     }
 
-    /// Whether there are no cells.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.rows.is_empty()
-    }
-
     /// Adds the cells of a rectangle.
     pub(crate) fn insert_rect(&mut self, rect: IRect) {
         let Some(b) = Bx::from_rect(rect) else {
@@ -339,7 +334,7 @@ mod tests {
                 rect(20, 1, 2, 1)
             ]
         );
-        assert!(set.intersection_with_rect(rect(0, 5, 3, 3)).is_empty());
+        assert_eq!(set.intersection_with_rect(rect(0, 5, 3, 3)).len(), 0);
         let cells: Vec<IVec2> = clipped.cells().take(2).collect();
         assert_eq!(cells, [IVec2::new(5, 1), IVec2::new(6, 1)]);
     }

@@ -88,8 +88,8 @@ fn add_tilesets(
     for target in &result.targets.tiles {
         match target.origin {
             TargetOrigin::Existing(_) => {
-                for (_, cell) in target.grid.written() {
-                    mark(cell);
+                for placed in target.grid.written() {
+                    mark(placed.cell);
                 }
             }
             TargetOrigin::New => target.grid.for_each_cell(|_, cell| mark(cell)),
@@ -182,11 +182,11 @@ pub(crate) fn write_back(set: &RuleSet, map: &mut Map, mut result: RunResult, re
             continue;
         };
         let mut written = target.grid.written();
-        written.sort_unstable_by_key(|(p, _)| (p.y, p.x));
-        for (p, cell) in written {
-            let cell = remap.cell(cell);
-            if tiles.cell(p) != cell && tiles.set_cell(p, cell).unwrap_or(false) {
-                include(&mut changed, p);
+        written.sort_unstable_by_key(|placed| (placed.at.y, placed.at.x));
+        for placed in written {
+            let cell = remap.cell(placed.cell);
+            if tiles.cell(placed.at) != cell && tiles.set_cell(placed.at, cell).unwrap_or(false) {
+                include(&mut changed, placed.at);
             }
         }
         tiles.prune_empty_chunks();
