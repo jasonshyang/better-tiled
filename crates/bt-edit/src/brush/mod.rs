@@ -262,7 +262,8 @@ mod tests {
     use glam::UVec2;
 
     use super::*;
-    use crate::testutil::{atlas, clip_grid, every_grid, tile, tile_of, trimmed};
+    use crate::clip::{PasteTarget, cut, erase, erase_targets, find_target_layers, paste};
+    use crate::testutil::{assert_valid, atlas, clip_grid, every_grid, tile, tile_of, trimmed};
 
     fn two_tilesets() -> Map {
         MapBuilder::new(UVec2::splat(16), UVec2::new(6, 4))
@@ -513,6 +514,119 @@ mod tests {
                     assert_eq!(mirrored, brush, "{direction:?}: {context}");
                 }
             }
+        }
+    }
+
+    /// Rows of random tiles of a 16-tile atlas, flipped now and then, with holes.
+    fn random_grid(rng: &mut Rng, size: IVec2) -> String {
+        (0..size.y)
+            .map(|_| {
+                (0..size.x)
+                    .map(|_| match rng.below(4).unwrap() {
+                        0 => ".".to_owned(),
+                        1 => format!("{}h", rng.below(16).unwrap()),
+                        _ => rng.below(16).unwrap().to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn random_rect(rng: &mut Rng) -> IRect {
+        IRect {
+            x: rng.below(12).unwrap() as i32 - 3,
+            y: rng.below(12).unwrap() as i32 - 3,
+            w: 1 + rng.below(6).unwrap() as i32,
+            h: 1 + rng.below(6).unwrap() as i32,
+        }
+    }
+
+    #[test]
+    fn every_operation_keeps_the_map_valid() {
+        let fuzz = Fuzz::from_env(0x0A11_D0E5, 120);
+        let grids = every_grid();
+        for case in 0..fuzz.cases {
+            let mut rng = Rng::new(fuzz.case_seed(case));
+            let geometry = grids[rng.below(grids.len() as u64).unwrap() as usize];
+            let mut builder = MapBuilder::new(UVec2::splat(32), UVec2::splat(8))
+                .orientation(geometry.orientation)
+                .stagger(geometry.stagger_axis, geometry.stagger_index)
+                .hex_side_length(geometry.hex_side_length)
+                .tileset(atlas("a"));
+            if rng.below(2) == Some(0) {
+                builder = builder.infinite();
+            }
+            let (ground, top) = (
+                random_grid(&mut rng, IVec2::splat(8)),
+                random_grid(&mut rng, IVec2::splat(8)),
+            );
+            let mut map = builder
+                .tile_layer("ground", &ground)
+                .tile_layer("top", &top)
+                .build()
+                .unwrap();
+            map.layers[1].locked = rng.below(3) == Some(0);
+            let layers = [LayerId(1), LayerId(2)];
+            let context = |step: u32| format!("case {case} ({}), step {step}", fuzz.reproduce());
+            for step in 0..10 {
+                let rect = random_rect(&mut rng);
+                let mask = if rng.below(2) == Some(0) {
+                    TileRegion::new()
+                } else {
+                    TileRegion::from_rect(random_rect(&mut rng))
+                };
+                let geometry = map.geometry();
+                let painted = match rng.below(6).unwrap() {
+                    0 | 1 => {
+                        let mut brush = Brush::capture(&map, &layers, rect).unwrap();
+                        if rng.below(2) == Some(0) {
+                            brush = brush.rotated(RotateDirection::Clockwise, &geometry);
+                        }
+                        if rng.below(2) == Some(0) {
+                            brush = brush.flipped(FlipDirection::Vertical, &geometry);
+                        }
+                        if rng.below(3) == Some(0) {
+                            brush = brush.with_mode(BrushMode::Random).with_size(2);
+                        }
+                        let points: Vec<IVec2> = (0..1 + rng.below(6).unwrap())
+                            .map(|_| random_rect(&mut rng).min())
+                            .collect();
+                        if rng.below(2) == Some(0) {
+                            brush.placement(&points, &geometry, &mut rng)
+                        } else {
+                            brush.fill(&TileRegion::from_rect(random_rect(&mut rng)), &mut rng)
+                        }
+                    }
+                    2 => {
+                        cut(&mut map, &layers, &TileRegion::from_rect(rect)).unwrap();
+                        None
+                    }
+                    3 => {
+                        let targets =
+                            erase_targets(&map, &layers, rng.below(2) == Some(0)).unwrap();
+                        erase(&mut map, &targets, &TileRegion::from_rect(rect)).unwrap();
+                        None
+                    }
+                    _ => {
+                        let mut clip = copy(&map, &layers, &TileRegion::from_rect(rect)).unwrap();
+                        clip.origin += random_rect(&mut rng).min();
+                        Some(clip)
+                    }
+                };
+                if let Some(clip) = painted {
+                    let current = (rng.below(2) == Some(0)).then_some(LayerId(1));
+                    let mut targets = find_target_layers(&map, &clip, current, &layers).unwrap();
+                    if rng.below(4) == Some(0) {
+                        targets = vec![PasteTarget::NewLayer; clip.layers.len()];
+                    }
+                    paste(&mut map, &clip, clip.origin, &targets, &mask).unwrap();
+                }
+                let violations = map.validate();
+                assert!(violations.is_empty(), "{violations:?}: {}", context(step));
+            }
+            assert_valid(&map);
         }
     }
 }

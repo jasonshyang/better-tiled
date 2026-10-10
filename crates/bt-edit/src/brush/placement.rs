@@ -180,6 +180,7 @@ mod tests {
     use std::sync::Arc;
 
     use bt_core::{LayerId, Map, Orientation, StaggerIndex, Tileset};
+    use bt_test_data::Fuzz;
     use bt_test_data::fixtures::MapBuilder;
     use bt_utils::IRect;
     use bt_utils::rng::RandomPicker;
@@ -187,6 +188,7 @@ mod tests {
 
     use super::*;
     use crate::clip::{find_target_layers, paste};
+    use crate::lattice::{FlipDirection, RotateDirection};
     use crate::testutil::{assert_valid, atlas, clip_grid, every_grid, map_grid, trimmed};
 
     fn square() -> MapGeometry {
@@ -355,6 +357,78 @@ mod tests {
                     let covered = IRect::from_min_size(clip.origin, clip.size);
                     assert_eq!(footprint.union(covered), footprint, "inside the footprint");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn random_shapes_keep_their_form_wherever_they_are_placed() {
+        let fuzz = Fuzz::from_env(0x0057_A6E5, 100);
+        let grids: Vec<MapGeometry> = every_grid()
+            .into_iter()
+            .filter(|geometry| Lattice::of(geometry).stagger().is_some())
+            .collect();
+        for case in 0..fuzz.cases {
+            let mut rng = Rng::new(fuzz.case_seed(case));
+            for geometry in &grids {
+                // Each tile once, so a tile names its cell.
+                let (w, h) = (1 + rng.below(4).unwrap(), 1 + rng.below(4).unwrap());
+                let mut next = 0;
+                let grid: Vec<String> = (0..h)
+                    .map(|_| {
+                        let row: Vec<String> = (0..w)
+                            .map(|_| {
+                                if rng.below(3) == Some(0) {
+                                    return ".".to_owned();
+                                }
+                                next += 1;
+                                next.to_string()
+                            })
+                            .collect();
+                        row.join(" ")
+                    })
+                    .collect();
+                let corner = IVec2::new(rng.below(5).unwrap() as i32, rng.below(5).unwrap() as i32);
+                let map = MapBuilder::new(UVec2::splat(32), UVec2::splat(10))
+                    .orientation(geometry.orientation)
+                    .stagger(geometry.stagger_axis, geometry.stagger_index)
+                    .hex_side_length(geometry.hex_side_length)
+                    .tileset(atlas("a"))
+                    .tile_layer_at("ground", corner, &grid.join("\n"))
+                    .build()
+                    .unwrap();
+                let rect = IRect::from_min_size(IVec2::ZERO, IVec2::splat(10));
+                let brush = Brush::capture(&map, &[LayerId(1)], rect).unwrap();
+                // Mirrored and turned brushes keep their shapes too.
+                let brush = match rng.below(5).unwrap() {
+                    0 => brush.flipped(FlipDirection::Horizontal, geometry),
+                    1 => brush.flipped(FlipDirection::Vertical, geometry),
+                    2 => brush.rotated(RotateDirection::Clockwise, geometry),
+                    3 => brush.rotated(RotateDirection::CounterClockwise, geometry),
+                    _ => brush,
+                };
+                let point = IVec2::new(
+                    rng.below(21).unwrap() as i32 - 10,
+                    rng.below(21).unwrap() as i32 - 10,
+                );
+                let Some(clip) = brush.placement(&[point], geometry, &mut rng) else {
+                    assert!(brush.variations()[0].clip.is_empty());
+                    continue;
+                };
+                let captured = positions(&brush.variations()[0].clip);
+                let painted = positions(&clip);
+                let lattice = Lattice::of(geometry);
+                let step = lattice.step(captured[0], painted[0]);
+                let moved: Vec<IVec2> = captured
+                    .iter()
+                    .map(|&at| lattice.stepped(at, step))
+                    .collect();
+                assert_eq!(
+                    painted,
+                    moved,
+                    "case {case} ({}) at {point} on {geometry:?}",
+                    fuzz.reproduce()
+                );
             }
         }
     }
