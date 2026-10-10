@@ -9,6 +9,7 @@ mod status_bar;
 mod tabs;
 #[cfg(test)]
 mod tests;
+mod toolbar;
 
 pub(crate) use frame::App;
 pub(crate) use startup::Startup;

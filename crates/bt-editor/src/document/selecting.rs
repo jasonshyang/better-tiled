@@ -30,6 +30,27 @@ impl Editor {
         self.session_changed();
     }
 
+    /// Selects tiles: `region` combined with the selection as `mode` says, kept to the map's
+    /// cells on a finite map.
+    pub(crate) fn select_tiles(
+        &mut self,
+        doc: DocumentId,
+        region: &TileRegion,
+        mode: bt_edit::SelectionMode,
+    ) {
+        let Some(map) = self.map_of(doc).cloned() else {
+            return;
+        };
+        let region = if map.infinite {
+            region.clone()
+        } else {
+            region.clipped(map.tile_bounding_rect())
+        };
+        self.change_selection(doc, |selection| {
+            selection.tiles = mode.apply(&selection.tiles, &region);
+        });
+    }
+
     /// Select All: the cells of every selected unlocked tile layer (the map on a finite map, the
     /// allocated chunks on an infinite one) and the objects of every selected unlocked object
     /// layer (Tiled's `selectAll`).

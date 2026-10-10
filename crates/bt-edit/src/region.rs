@@ -15,6 +15,24 @@ pub struct TileRegion {
     rows: BTreeMap<i32, Vec<Span>>,
 }
 
+/// A cell corner, ordered as `MapGeometry::region_outline` orders its vertices (by x, then y),
+/// so both trace the same loops.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Corner {
+    x: i32,
+    y: i32,
+}
+
+impl Corner {
+    fn at(x: i32, y: i32) -> Corner {
+        Corner { x, y }
+    }
+
+    fn ivec2(self) -> IVec2 {
+        IVec2::new(self.x, self.y)
+    }
+}
+
 /// Columns `start..end` of a row.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct Span {
@@ -237,6 +255,83 @@ impl TileRegion {
         banded_runs(self.runs())
     }
 
+    /// The region's outline as closed loops of grid vertices (cell corners), clockwise with
+    /// y down, without points in the middle of straight edges. Worked out from the runs, so a
+    /// large region costs its perimeter, not its area. Cells that touch only at a corner may
+    /// give separate loops.
+    pub fn outline(&self) -> Vec<Vec<IVec2>> {
+        let mut next: BTreeMap<Corner, Vec<Corner>> = BTreeMap::new();
+        let mut add = |from: Corner, to: Corner| next.entry(from).or_default().push(to);
+        let empty: Vec<Span> = Vec::new();
+        for (&y, spans) in &self.rows {
+            let above = self.rows.get(&(y - 1)).unwrap_or(&empty);
+            let below = self.rows.get(&(y + 1)).unwrap_or(&empty);
+            for top in subtract_spans(spans, above) {
+                add(Corner::at(top.start, y), Corner::at(top.end, y));
+            }
+            for bottom in subtract_spans(spans, below) {
+                add(
+                    Corner::at(bottom.end, y + 1),
+                    Corner::at(bottom.start, y + 1),
+                );
+            }
+            for span in spans {
+                add(Corner::at(span.end, y), Corner::at(span.end, y + 1));
+                add(Corner::at(span.start, y + 1), Corner::at(span.start, y));
+            }
+        }
+        // Horizontal edges cover whole runs; split them where another edge starts, so every
+        // vertex is where an edge ends.
+        let starts: Vec<Corner> = next.keys().copied().collect();
+        let mut split: BTreeMap<Corner, Vec<Corner>> = BTreeMap::new();
+        for (from, targets) in &next {
+            for &to in targets {
+                if from.y != to.y {
+                    split.entry(*from).or_default().push(to);
+                    continue;
+                }
+                let step = (to.x - from.x).signum();
+                let mut at = *from;
+                let mut x = from.x + step;
+                while x != to.x {
+                    let point = Corner::at(x, from.y);
+                    if starts.binary_search(&point).is_ok() {
+                        split.entry(at).or_default().push(point);
+                        at = point;
+                    }
+                    x += step;
+                }
+                split.entry(at).or_default().push(to);
+            }
+        }
+        // At a vertex where two loops touch, take the same target `MapGeometry::region_outline`
+        // takes, so loops never cross.
+        for targets in split.values_mut() {
+            targets.sort_unstable_by(|a, b| b.cmp(a));
+        }
+        let mut loops = Vec::new();
+        while let Some((&start, _)) = split.first_key_value() {
+            let mut points = vec![start.ivec2()];
+            let mut current = start;
+            while let Some(targets) = split.get_mut(&current) {
+                let to = targets.pop().unwrap_or(start);
+                if targets.is_empty() {
+                    split.remove(&current);
+                }
+                if to == start {
+                    break;
+                }
+                points.push(to.ivec2());
+                current = to;
+            }
+            let points = without_straight_points(points);
+            if points.len() >= 4 {
+                loops.push(points);
+            }
+        }
+        loops
+    }
+
     /// Whether the regions share a cell.
     pub fn intersects(&self, other: &TileRegion) -> bool {
         self.rows.iter().any(|(y, spans)| {
@@ -284,6 +379,24 @@ impl SelectionMode {
             SelectionMode::Intersect => current.intersect(new),
         }
     }
+}
+
+/// A closed loop without the points that lie on a straight line between their neighbours.
+fn without_straight_points(points: Vec<IVec2>) -> Vec<IVec2> {
+    let count = points.len();
+    let mut kept = Vec::with_capacity(count);
+    for (index, &point) in points.iter().enumerate() {
+        let before = points
+            .get((index + count - 1) % count)
+            .copied()
+            .unwrap_or(point);
+        let after = points.get((index + 1) % count).copied().unwrap_or(point);
+        let straight = (point - before).perp_dot(after - point) == 0;
+        if !straight {
+            kept.push(point);
+        }
+    }
+    kept
 }
 
 /// The spans covering either list's cells, merged where they overlap or touch.
@@ -480,6 +593,84 @@ mod tests {
             region.rects(),
             [rect(0, 0, 2, 2), rect(3, 0, 2, 2), rect(0, 2, 5, 1)]
         );
+    }
+
+    #[test]
+    fn outlines_follow_the_edge_of_the_region() {
+        let square = TileRegion::from_rect(rect(1, 1, 3, 2));
+        assert_eq!(
+            square.outline(),
+            [vec![
+                IVec2::new(1, 1),
+                IVec2::new(4, 1),
+                IVec2::new(4, 3),
+                IVec2::new(1, 3)
+            ]]
+        );
+        let l_shape = drawn(
+            "
+            #.
+            ##
+            ",
+        );
+        let outline = l_shape.outline();
+        assert_eq!(outline.len(), 1);
+        assert_eq!(outline[0].len(), 6, "an L has six corners: {outline:?}");
+        let ring = drawn(
+            "
+            ###
+            #.#
+            ###
+            ",
+        );
+        assert_eq!(ring.outline().len(), 2, "the outside and the hole");
+        let diagonal = drawn(
+            "
+            #.
+            .#
+            ",
+        );
+        assert_eq!(
+            diagonal.outline().len(),
+            2,
+            "touching at a corner: two loops"
+        );
+        assert!(TileRegion::new().outline().is_empty());
+    }
+
+    /// A loop rotated to start at its top-left point, so loops compare whatever their start.
+    fn normalized(points: Vec<IVec2>) -> Vec<(i32, i32)> {
+        let start = (0..points.len())
+            .min_by_key(|&i| (points[i].y, points[i].x))
+            .unwrap_or(0);
+        let mut rotated: Vec<(i32, i32)> = points.iter().map(|p| (p.x, p.y)).collect();
+        rotated.rotate_left(start);
+        rotated
+    }
+
+    #[test]
+    fn outlines_agree_with_the_geometrys() {
+        use bt_core::{MapGeometry, Orientation};
+        let geometry = MapGeometry::new(Orientation::Orthogonal, IVec2::ONE, IVec2::splat(20));
+        let fuzz = Fuzz::from_env(0x0071_11E5, 200);
+        for case in 0..fuzz.cases {
+            let mut rng = Rng::new(fuzz.case_seed(case));
+            let region = region_of(&random_cells(&mut rng));
+            let mut ours: Vec<_> = region.outline().into_iter().map(normalized).collect();
+            let mut theirs: Vec<_> = geometry
+                .region_outline(region.iter())
+                .into_iter()
+                .map(|points| normalized(points.iter().map(|p| p.as_ivec2()).collect()))
+                .collect();
+            ours.sort();
+            theirs.sort();
+            assert_eq!(
+                ours,
+                theirs,
+                "case {case} ({}): {region:?}",
+                fuzz.reproduce()
+            );
+        }
     }
 
     #[test]

@@ -163,6 +163,14 @@ impl Editor {
                 self.select_layer(doc, layer);
                 Vec::new()
             }
+            Intent::SelectTiles { doc, region, mode } => {
+                self.select_tiles(doc, &region, mode);
+                Vec::new()
+            }
+            Intent::SetSelectionMode(mode) => {
+                self.tools.selection_mode = mode;
+                Vec::new()
+            }
             Intent::SetLayerVisible {
                 doc,
                 layer,

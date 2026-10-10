@@ -1,5 +1,6 @@
 //! Documents: tabs onto assets.
 
+mod areas;
 #[allow(
     clippy::module_inception,
     reason = "the document module holds the document"

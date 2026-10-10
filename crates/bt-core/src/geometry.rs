@@ -215,7 +215,8 @@ impl MapGeometry {
         DVec2::new(f64::from(self.tile_width), f64::from(self.tile_height))
     }
 
-    fn is_hex_grid(&self) -> bool {
+    /// Whether cells are hexagons or the diamonds of staggered rows, which connect six ways.
+    pub fn is_hex_grid(&self) -> bool {
         matches!(
             self.orientation,
             Orientation::Hexagonal | Orientation::Staggered

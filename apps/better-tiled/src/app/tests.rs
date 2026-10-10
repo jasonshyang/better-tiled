@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use bt_core::LayerId;
 use bt_editor::ActionId;
 use bt_test_data::Scratch;
+use glam::IVec2;
 
 use crate::platform::SystemQuit;
 use crate::test_window::TestWindow;
@@ -233,6 +234,67 @@ fn a_map_and_a_tileset_are_made_from_scratch() {
         "named after the image"
     );
     assert_eq!(map.tilesets[0].tileset.tile_count(), 8);
+}
+
+#[test]
+fn the_selection_tools_select_on_the_map() {
+    let scratch = Scratch::new("window-select").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let selected = |window: &TestWindow| {
+        let doc = window.editor().current().unwrap();
+        window
+            .editor()
+            .document(doc)
+            .unwrap()
+            .selection()
+            .tiles
+            .clone()
+    };
+    window.press(egui::Modifiers::NONE, egui::Key::R);
+    assert_eq!(
+        window.editor().tools().tool(),
+        bt_editor::ToolKind::RectSelect
+    );
+    window.drag_cells(IVec2::new(2, 3), IVec2::new(5, 6), egui::Modifiers::NONE);
+    assert_eq!(selected(&window).len(), 16);
+    assert_eq!(
+        selected(&window).bounds(),
+        Some(bt_utils::IRect {
+            x: 2,
+            y: 3,
+            w: 4,
+            h: 4
+        })
+    );
+    // Shift adds another rectangle; a click without dragging clears.
+    window.drag_cells(
+        IVec2::new(10, 10),
+        IVec2::new(11, 10),
+        egui::Modifiers::SHIFT,
+    );
+    assert_eq!(selected(&window).len(), 18);
+    window.click_cell(
+        IVec2::new(20, 20),
+        egui::PointerButton::Primary,
+        egui::Modifiers::NONE,
+    );
+    assert!(selected(&window).is_empty());
+
+    // The wand takes what it previewed: the connected cells like the one clicked.
+    window.press(egui::Modifiers::NONE, egui::Key::W);
+    let doc = window.editor().current().unwrap();
+    let expected = window.editor().wand_area(doc, IVec2::new(0, 0), &[]);
+    assert!(!expected.is_empty());
+    window.click_cell(
+        IVec2::new(0, 0),
+        egui::PointerButton::Primary,
+        egui::Modifiers::NONE,
+    );
+    assert_eq!(selected(&window), expected);
 }
 
 #[test]

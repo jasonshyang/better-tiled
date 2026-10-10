@@ -16,6 +16,7 @@ use super::menu::menu_bar;
 use super::startup::{RunOutcome, Startup};
 use super::status_bar::{StatusInput, status_bar};
 use super::tabs::tab_strip;
+use super::toolbar::toolbar;
 use crate::canvas::{Canvas, CanvasFrame, CanvasGpu};
 use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun};
 use crate::dialogs::{DialogRequest, Modals};
@@ -24,6 +25,7 @@ use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::panels::{LayersPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::apply_theme;
+use crate::tools::ToolBox;
 use crate::workers::Workers;
 
 /// How long the session waits after a change before it is written.
@@ -40,6 +42,8 @@ pub(crate) struct App {
     pub(super) editor: Editor,
     pub(super) canvases: HashMap<DocumentId, Canvas>,
     layers_panel: LayersPanel,
+    /// The canvas's tools.
+    toolbox: ToolBox,
     tiles_panel: TilesPanel,
     pub(super) tile_images: TileImages,
     pub(super) modals: Modals,
@@ -140,6 +144,14 @@ impl App {
         self.watcher.poll_now();
     }
 
+    /// Where the middle of a cell of the current map is on screen (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn cell_on_screen(&self, cell: glam::IVec2) -> Option<egui::Pos2> {
+        let doc = self.editor.current()?;
+        let map = self.editor.map_of(doc)?;
+        self.canvases.get(&doc)?.cell_on_screen(map, cell)
+    }
+
     /// Delivers intents as a worker would (for the window's tests: a file dialog's answer).
     #[cfg(test)]
     pub(crate) fn inject_worker_result(&mut self, intents: Vec<Intent>) {
@@ -187,6 +199,7 @@ impl App {
             editor,
             canvases: HashMap::new(),
             layers_panel: LayersPanel::default(),
+            toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
             tile_images: TileImages::default(),
             modals: Modals::default(),
@@ -361,9 +374,10 @@ impl App {
             settings: self.editor.settings(),
             gpu: self.gpu.as_ref(),
             typing: is_typing(ui.ctx()),
+            editor: &self.editor,
         };
         let canvas = self.canvases.entry(doc).or_default();
-        canvas.show(ui, &frame, &mut self.intents);
+        canvas.show(ui, &frame, &mut self.toolbox, &mut self.intents);
     }
 
     fn show_welcome(&mut self, ui: &mut egui::Ui) {
@@ -400,6 +414,7 @@ impl App {
             map: current
                 .and_then(|doc| self.editor.map_of(doc))
                 .map(|map| &**map),
+            hint: canvas.and_then(Canvas::hint),
         };
         egui::Panel::bottom("status_bar").show(ui, |ui| status_bar(ui, &input));
     }
@@ -600,6 +615,9 @@ impl eframe::App for App {
             }
         }
         egui::Panel::top("menu_bar").show(ui, |ui| menu_bar(ui, &self.editor, &mut self.intents));
+        if self.editor.current().is_some() {
+            egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, &self.editor, &mut self.intents));
+        }
         self.show_status_bar(ui);
         self.show_panels(ui);
         self.show_center(ui);

@@ -1,5 +1,5 @@
 //! The status bar: the zoom and the map's size on the right; on the left the flash notice, or
-//! the cell and pixel under the pointer.
+//! the cell and pixel under the pointer and what the current tool does.
 
 use bt_core::Map;
 use bt_editor::{Notice, Severity};
@@ -16,6 +16,8 @@ pub(crate) struct StatusInput<'a> {
     pub(crate) zoom: Option<f64>,
     /// The current map.
     pub(crate) map: Option<&'a Map>,
+    /// What the current tool does.
+    pub(crate) hint: Option<&'a str>,
 }
 
 /// Draws the status bar.
@@ -39,11 +41,16 @@ pub(crate) fn status_bar(ui: &mut egui::Ui, input: &StatusInput<'_>) {
                     ui.add(
                         egui::Label::new(egui::RichText::new(&notice.text).color(color)).truncate(),
                     );
-                } else if let Some(hover) = input.hover {
-                    ui.label(format!(
-                        "{}, {}  ·  {:.1}, {:.1} px",
-                        hover.cell.x, hover.cell.y, hover.pixel.x, hover.pixel.y
-                    ));
+                } else {
+                    if let Some(hover) = input.hover {
+                        ui.label(format!(
+                            "{}, {}  ·  {:.1}, {:.1} px",
+                            hover.cell.x, hover.cell.y, hover.pixel.x, hover.pixel.y
+                        ));
+                    }
+                    if let Some(hint) = input.hint {
+                        ui.add(egui::Label::new(egui::RichText::new(hint).weak()).truncate());
+                    }
                 }
             });
         });

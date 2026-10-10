@@ -71,6 +71,19 @@ impl ViewTransform {
         self.origin + offset * self.pixels_per_point / self.zoom_px
     }
 
+    /// The screen point at a world point.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the object tools measure their handles on screen")
+    )]
+    pub(crate) fn world_to_screen(&self, world: DVec2) -> Pos2 {
+        let offset = (world - self.origin) * self.zoom_px / self.pixels_per_point;
+        Pos2::new(
+            self.rect.min.x + offset.x as f32,
+            self.rect.min.y + offset.y as f32,
+        )
+    }
+
     /// The renderer's camera for this view.
     pub(crate) fn render_camera(&self) -> bt_render::Camera {
         bt_render::Camera {

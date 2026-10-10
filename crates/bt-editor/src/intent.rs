@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use bt_core::LayerId;
+use bt_edit::{SelectionMode, TileRegion};
 
 use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, ViewState};
@@ -57,6 +58,17 @@ pub enum Intent {
         /// The layer.
         layer: LayerId,
     },
+    /// Select tiles: `region` combined with the selection as `mode` says.
+    SelectTiles {
+        /// The document.
+        doc: DocumentId,
+        /// The cells.
+        region: TileRegion,
+        /// How they combine with what is selected.
+        mode: SelectionMode,
+    },
+    /// The selection tools' default mode (the toolbar's).
+    SetSelectionMode(SelectionMode),
     /// Show or hide a layer.
     SetLayerVisible {
         /// The document.

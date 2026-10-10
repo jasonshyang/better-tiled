@@ -4,15 +4,19 @@
 
 use std::sync::Arc;
 
-use bt_core::{LayerId, Map};
-use bt_editor::{DocumentId, Intent, Settings, ViewRequest, ViewState, ViewToggles};
+use bt_core::{LayerId, Map, MapGeometry};
+use bt_editor::{
+    DocumentId, Editor, Intent, Settings, TileRegion, ViewRequest, ViewState, ViewToggles,
+};
 use bt_render::{FrameInput, LayerVisibility, ObjectStyle};
 use egui::{CursorIcon, Event, MouseWheelUnit, PointerButton, Pos2, Sense, Vec2};
 use glam::{DVec2, IVec2, UVec2};
 
 use super::camera::{Camera, ViewTransform};
+use super::gesture::{GestureReader, Pointer, ReadFrame};
 use super::overlay::{OverlayInput, overlay_vectors};
 use super::paint::CanvasGpu;
+use crate::tools::{Overlay, ToolBox, ToolContext, region_polygons};
 
 /// Tiled's zoom steps within the zoom range: what Zoom In and Zoom Out and wheel notches step
 /// through.
@@ -55,6 +59,21 @@ pub(crate) struct Canvas {
     pointer: Option<Pos2>,
     wheel_notches: f32,
     told: Option<ViewState>,
+    gestures: GestureReader,
+    /// What the current tool draws over the map.
+    tool_overlay: Overlay,
+    /// What the current tool says it does.
+    hint: Option<String>,
+    /// The selection's outline, kept while the selection and the grid stay the same.
+    selection_outline: Option<SelectionOutline>,
+}
+
+/// A selection's outline on screen, with what it was worked out from.
+#[derive(Clone, Debug)]
+struct SelectionOutline {
+    region: TileRegion,
+    geometry: MapGeometry,
+    polygons: Vec<Vec<DVec2>>,
 }
 
 /// What is under the pointer.
@@ -84,14 +103,18 @@ pub(crate) struct CanvasFrame<'a> {
     pub(crate) gpu: Option<&'a CanvasGpu>,
     /// A text field has the keyboard, so Space types instead of panning.
     pub(crate) typing: bool,
+    /// The editor, which the tools read.
+    pub(crate) editor: &'a Editor,
 }
 
 impl Canvas {
-    /// Shows the canvas in the rest of `ui`; camera moves are told to the editor in `out`.
+    /// Shows the canvas in the rest of `ui`; camera moves and the current tool's edits are
+    /// told to the editor in `out`.
     pub(crate) fn show(
         &mut self,
         ui: &mut egui::Ui,
         frame: &CanvasFrame<'_>,
+        tools: &mut ToolBox,
         out: &mut Vec<Intent>,
     ) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
@@ -130,6 +153,7 @@ impl Canvas {
                     pixel: geometry.screen_to_pixel(world),
                 }
             });
+        self.run_tool(ui, frame, &view, response.hovered(), tools, out);
         ui.painter()
             .rect_filled(view.rect, 0.0, ui.visuals().extreme_bg_color);
         if let Some(gpu) = frame.gpu {
@@ -146,6 +170,90 @@ impl Canvas {
                 view: state,
             });
         }
+    }
+
+    /// Hands the frame's gestures to the current tool and keeps what it shows and says.
+    fn run_tool(
+        &mut self,
+        ui: &egui::Ui,
+        frame: &CanvasFrame<'_>,
+        view: &ViewTransform,
+        hovered: bool,
+        tools: &mut ToolBox,
+        out: &mut Vec<Intent>,
+    ) {
+        let geometry = frame.map.geometry();
+        let to_pointer = |screen: egui::Pos2| {
+            let world = view.screen_to_world(screen);
+            Pointer {
+                screen,
+                pixel: geometry.screen_to_pixel(world),
+                cell: geometry.tile_at(world),
+            }
+        };
+        let space = !frame.typing && ui.input(|input| input.key_down(egui::Key::Space));
+        let read = ReadFrame {
+            rect: view.rect,
+            hovered,
+            panning: space || frame.typing,
+            to_pointer: &to_pointer,
+        };
+        let gestures = ui.input(|input| self.gestures.read(input, &read));
+        self.tool_overlay = Overlay::default();
+        self.hint = None;
+        let Some(tool) = tools.activate(frame.editor.tools().tool(), frame.doc) else {
+            return;
+        };
+        let mut cx = ToolContext {
+            editor: frame.editor,
+            doc: frame.doc,
+            map: frame.map,
+            out,
+        };
+        for gesture in &gestures {
+            tool.handle(gesture, &mut cx);
+        }
+        tool.overlay(&cx, &mut self.tool_overlay);
+        self.hint = Some(tool.hint(&cx));
+    }
+
+    /// Where the middle of a cell is on screen in the last frame (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn cell_on_screen(&self, map: &Map, cell: IVec2) -> Option<egui::Pos2> {
+        let view = self.last_view?;
+        let corners = map.geometry().tile_polygon(cell);
+        let middle = corners.iter().copied().sum::<DVec2>() / corners.len().max(1) as f64;
+        Some(view.world_to_screen(middle))
+    }
+
+    /// What the current tool says it does.
+    pub(crate) fn hint(&self) -> Option<&str> {
+        self.hint.as_deref()
+    }
+
+    /// The selection's outline, worked out again only when the selection or the grid changed.
+    fn selection_polygons(&mut self, frame: &CanvasFrame<'_>) -> &[Vec<DVec2>] {
+        let region = frame
+            .editor
+            .document(frame.doc)
+            .map(|d| d.selection().tiles.clone())
+            .unwrap_or_default();
+        let geometry = frame.map.geometry();
+        let fresh = self
+            .selection_outline
+            .as_ref()
+            .is_some_and(|o| o.region == region && o.geometry == geometry);
+        if !fresh {
+            let polygons = region_polygons(&geometry, &region);
+            self.selection_outline = Some(SelectionOutline {
+                region,
+                geometry,
+                polygons,
+            });
+        }
+        self.selection_outline
+            .as_ref()
+            .map_or(&[], |o| o.polygons.as_slice())
     }
 
     /// Carries out a camera move the editor asked for, about the pointer when it is over the
@@ -194,12 +302,13 @@ impl Canvas {
     }
 
     fn frame_input(
-        &self,
+        &mut self,
         frame: &CanvasFrame<'_>,
         view: &ViewTransform,
         time_ms: u64,
     ) -> FrameInput {
         let pixels_per_point = view.pixels_per_point as f32;
+        let selection = self.selection_polygons(frame).to_vec();
         let overlays = overlay_vectors(&OverlayInput {
             map: frame.map,
             visible: view.render_camera().visible_rect(viewport_px(view)),
@@ -208,6 +317,8 @@ impl Canvas {
             grid: frame.toggles.grid,
             hover: self.hover.map(|hover| hover.cell),
             settings: frame.settings,
+            selection: &selection,
+            tool: &self.tool_overlay.vectors,
         });
         let layers = if frame.toggles.highlight_current_layer {
             LayerVisibility::default().highlight(
@@ -219,16 +330,20 @@ impl Canvas {
         };
         let objects = ObjectStyle::default()
             .line_width(frame.settings.interface.object_line_width * pixels_per_point);
-        FrameInput::new(
+        let mut input = FrameInput::new(
             Arc::clone(frame.map),
             view.render_camera(),
             viewport_px(view),
-        )
-        .time_ms(time_ms)
-        .layers(layers)
-        .objects(objects)
-        .vectors(overlays)
-        .background(frame.map.background_color)
+        );
+        if let Some(layer) = self.tool_overlay.preview_layer {
+            input = input.previews(layer, Arc::from(self.tool_overlay.previews.clone()));
+        }
+        input
+            .time_ms(time_ms)
+            .layers(layers)
+            .objects(objects)
+            .vectors(overlays)
+            .background(frame.map.background_color)
     }
 
     fn apply_wheel(&mut self, ui: &egui::Ui, view: &ViewTransform, at: Pos2, settings: &Settings) {

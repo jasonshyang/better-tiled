@@ -47,3 +47,6 @@ pub use settings::{
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
 pub use tools::{MAX_BRUSH_SIZE, ToolFamily, ToolKind, ToolState};
 pub use watch::{Found, Observation};
+
+// The editing types the intents and queries speak in.
+pub use bt_edit::{FillShape, SelectionMode, TileRegion, rect_select_rect};

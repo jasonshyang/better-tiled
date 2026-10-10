@@ -3,10 +3,12 @@
 //! items the renderer draws with it.
 
 mod camera;
+mod gesture;
 mod overlay;
 mod paint;
 mod view;
 
 pub(crate) use camera::{MAX_ZOOM, MIN_ZOOM, ViewTransform};
+pub(crate) use gesture::Gesture;
 pub(crate) use paint::CanvasGpu;
 pub(crate) use view::{Canvas, CanvasFrame, Hover};

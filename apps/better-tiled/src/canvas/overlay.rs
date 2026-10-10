@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use bt_core::{Color, Map};
 use bt_editor::Settings;
-use bt_render::{GridStyle, VectorItem, grid_vectors};
+use bt_render::{Dash, GridStyle, VectorItem, grid_vectors};
 use bt_utils::DRect;
-use glam::IVec2;
+use glam::{DVec2, IVec2};
 
 /// What the overlays of a frame depend on.
 pub(crate) struct OverlayInput<'a> {
@@ -25,7 +25,18 @@ pub(crate) struct OverlayInput<'a> {
     pub(crate) hover: Option<IVec2>,
     /// The preferences (the grid's colour and major lines, the selection colour).
     pub(crate) settings: &'a Settings,
+    /// The selected cells' outline, in the map's pixels on screen.
+    pub(crate) selection: &'a [Vec<DVec2>],
+    /// What the current tool draws.
+    pub(crate) tool: &'a [VectorItem],
 }
+
+/// The dashes of the selection's outline, in device pixels.
+const ANTS: Dash = Dash {
+    on: 4.0,
+    off: 4.0,
+    phase: 0.0,
+};
 
 /// The overlays' vector items.
 pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
@@ -47,10 +58,22 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
             items.push(VectorItem::polygon(outline).stroke(border, line));
         }
     }
+    let selection = input.settings.theme.selection_color.0;
+    for outline in input.selection {
+        // Ants: dark dashes over a light line, visible on any tiles.
+        items.push(
+            VectorItem::polygon(outline.clone()).stroke(Color::rgba(255, 255, 255, 220), line),
+        );
+        items.push(
+            VectorItem::polygon(outline.clone())
+                .stroke(with_alpha(selection, 255), line)
+                .dashed(ANTS),
+        );
+    }
+    items.extend(input.tool.iter().cloned());
     if let Some(cell) = input.hover
         && (input.map.infinite || map_cells.contains(cell))
     {
-        let selection = input.settings.theme.selection_color.0;
         items.push(
             VectorItem::polygon(geometry.tile_polygon(cell))
                 .fill(with_alpha(selection, 48))
@@ -67,7 +90,7 @@ fn with_alpha(color: Color, alpha: u8) -> Color {
 #[cfg(test)]
 mod tests {
     use bt_test_data::fixtures::MapBuilder;
-    use glam::{DVec2, UVec2};
+    use glam::UVec2;
 
     use super::*;
 
@@ -80,6 +103,8 @@ mod tests {
             grid,
             hover: Some(IVec2::new(1, 1)),
             settings,
+            selection: &[],
+            tool: &[],
         }
     }
 
@@ -101,6 +126,16 @@ mod tests {
             overlay_vectors(&outside).len(),
             1,
             "no cell outside the map"
+        );
+        let outline = vec![vec![DVec2::ZERO, DVec2::X, DVec2::ONE]];
+        let selected = OverlayInput {
+            selection: &outline,
+            ..input(&map, &settings, false)
+        };
+        assert_eq!(
+            overlay_vectors(&selected).len(),
+            4,
+            "a selection is a light line under dark dashes"
         );
     }
 }

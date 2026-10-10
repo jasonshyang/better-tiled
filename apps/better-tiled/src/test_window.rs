@@ -93,6 +93,72 @@ impl TestWindow {
         self.settle();
     }
 
+    /// Drags on the map from the middle of cell `from` to the middle of cell `to` with the
+    /// primary button, holding `modifiers`, passing every cell between.
+    pub(crate) fn drag_cells(
+        &mut self,
+        from: glam::IVec2,
+        to: glam::IVec2,
+        modifiers: egui::Modifiers,
+    ) {
+        let start = self.screen_of(from);
+        let end = self.screen_of(to);
+        self.pointer(egui::Event::PointerMoved(start));
+        self.pointer(egui::Event::PointerButton {
+            pos: start,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers,
+        });
+        let steps = 8;
+        for step in 1..=steps {
+            let t = step as f32 / steps as f32;
+            self.pointer(egui::Event::PointerMoved(start.lerp(end, t)));
+        }
+        self.pointer(egui::Event::PointerButton {
+            pos: end,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers,
+        });
+        self.settle();
+    }
+
+    /// Clicks cell `cell` of the map with `button`, holding `modifiers`.
+    pub(crate) fn click_cell(
+        &mut self,
+        cell: glam::IVec2,
+        button: egui::PointerButton,
+        modifiers: egui::Modifiers,
+    ) {
+        let at = self.screen_of(cell);
+        self.pointer(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            self.pointer(egui::Event::PointerButton {
+                pos: at,
+                button,
+                pressed,
+                modifiers,
+            });
+        }
+        self.settle();
+    }
+
+    /// Where a cell's middle is on screen.
+    fn screen_of(&mut self, cell: glam::IVec2) -> egui::Pos2 {
+        self.harness.run_steps(1);
+        let Some(at) = self.harness.state().cell_on_screen(cell) else {
+            panic!("no map is shown, so cell {cell} is nowhere");
+        };
+        at
+    }
+
+    /// Sends one pointer event, in a frame of its own.
+    fn pointer(&mut self, event: egui::Event) {
+        self.harness.event(event);
+        self.harness.run_steps(1);
+    }
+
     /// Presses a key with modifiers.
     pub(crate) fn press(&mut self, modifiers: egui::Modifiers, key: egui::Key) {
         self.harness.key_press_modifiers(modifiers, key);
