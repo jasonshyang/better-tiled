@@ -14,8 +14,12 @@ pub enum Area {
     /// their input box overlaps a selected cell (only the selection's cells, not everything
     /// inside their bounds), and the region grows by what earlier rule maps wrote.
     Selection(Vec<IRect>),
-    /// The cells an edit touched. An exact region run recomputes only what the edit can
-    /// change; until those exist this runs on the whole map and says so in the report.
+    /// The cells an edit touched: an exact region run, which gives what a full run gives inside
+    /// the area the edit can change ([`RuleSet::affected_area`](crate::RuleSet::affected_area))
+    /// and changes nothing outside it. Objects are placed for the matches whose objects meet
+    /// that area, and `DeleteTiles` removes the objects meeting the cells it erases there. When
+    /// the rules cannot be run exactly around an edit, the run is a full run whose report says
+    /// why (a `FullRunFallback` problem).
     Edit(IRect),
 }
 

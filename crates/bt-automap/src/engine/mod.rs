@@ -6,6 +6,9 @@
 //! matches are collected against the layers as they are and applied rule by rule (the default),
 //! or, with `MatchInOrder`, each rule is matched and applied position by position, seeing its own
 //! writes and those of the rules before it.
+//!
+//! A region run (§7) runs every rule map inside its window of the plan (`window`), and keeps
+//! only what falls in the area the plan recomputes.
 
 mod anchor;
 mod apply;
@@ -16,6 +19,7 @@ mod matching;
 mod objects;
 mod request;
 mod targets;
+mod window;
 mod writeback;
 
 use std::collections::{BTreeSet, HashMap};
@@ -27,7 +31,8 @@ use glam::IVec2;
 use crate::bx::Bx;
 use crate::cell_set::CellSet;
 use crate::observer::{Attempt, Observer, Outcome};
-use crate::problem::{Problem, ProblemKind};
+use crate::problem::Problem;
+use crate::region::{RegionPlan, plan_region};
 use crate::rng::{self, Purpose};
 use crate::rule_ref::RuleRef;
 use crate::rulemap::{Rule, RuleMap};
@@ -42,6 +47,7 @@ use matching::{Border, BoundSet, Reader};
 use objects::PlacedGroup;
 pub(crate) use objects::rewire;
 use targets::{Targets, refused_bindings};
+use window::RuleMapWindow;
 
 pub use request::{
     Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
@@ -68,6 +74,8 @@ pub(crate) struct Run<'a, O: Observer> {
     pub(crate) locked: Vec<LockedOutput>,
     pub(crate) matches: Vec<usize>,
     pub(crate) problems: Vec<Problem>,
+    /// The plan of a region run; `None` for every other run.
+    pub(crate) plan: Option<RegionPlan>,
 }
 
 /// A rule map bound for a run: its layers, its border and where its rules may be tried.
@@ -87,8 +95,11 @@ pub(crate) struct RuleMapRun<'r> {
     pub(crate) tile_outputs: Vec<usize>,
     /// The object target for each object output name.
     pub(crate) object_outputs: Vec<usize>,
-    /// The cells the rules are run around (the region, grown by `AutomappingRadius`).
+    /// The cells the rules are run around (the region, grown by `AutomappingRadius`); in a
+    /// region run, those of the window.
     pub(crate) region: CellSet,
+    /// The window of a region run; `None` for every other run.
+    pub(crate) window: Option<RuleMapWindow>,
 }
 
 impl RuleMapRun<'_> {
@@ -131,6 +142,7 @@ impl<'a, O: Observer> Run<'a, O> {
         request: &'a RunRequest,
         observer: &'a mut O,
         area: IRect,
+        plan: Option<RegionPlan>,
     ) -> Run<'a, O> {
         let (tilesets, problems) = TilesetBinding::new(&set.table, map);
         let mut run = Run {
@@ -146,6 +158,7 @@ impl<'a, O: Observer> Run<'a, O> {
             locked: Vec::new(),
             matches: vec![0; set.rule_maps().len()],
             problems,
+            plan,
         };
         // Output layers are bound, and those the map lacks created, in rule map order before
         // anything runs, as Tiled prepares every rule map first.
@@ -182,19 +195,40 @@ impl<'a, O: Observer> Run<'a, O> {
             )
         });
         let radius = options.radius;
-        let region = if radius == 0 {
-            region.clone()
-        } else {
-            let mut grown = CellSet::new();
-            for rect in region.rects() {
-                grown.insert_rect(IRect {
-                    x: rect.x - radius,
-                    y: rect.y - radius,
-                    w: rect.w + 2 * radius,
-                    h: rect.h + 2 * radius,
-                });
+        let grow = |rect: IRect| IRect {
+            x: rect.x - radius,
+            y: rect.y - radius,
+            w: rect.w + 2 * radius,
+            h: rect.h + 2 * radius,
+        };
+        let (region, window) = match &self.plan {
+            None if radius == 0 => (region.clone(), None),
+            None => {
+                let mut grown = CellSet::new();
+                for rect in region.rects() {
+                    grown.insert_rect(grow(rect));
+                }
+                (grown, None)
             }
-            grown
+            Some(plan) => {
+                // A full run's region on a finite map is the map; on an infinite one the rules
+                // a region run allows are tried wherever they can match.
+                let cells = plan.window(index)?;
+                let full_region = match map_size {
+                    Some(size) => Some(Bx::from_rect(grow(IRect::from_min_size(
+                        IVec2::ZERO,
+                        size,
+                    )))?),
+                    None => None,
+                };
+                let erased = match full_region {
+                    Some(full) => cells.intersection(full),
+                    None => Some(cells),
+                };
+                let window = RuleMapWindow { cells, full_region };
+                let region = erased.map_or_else(CellSet::new, |b| CellSet::from_rect(b.rect()));
+                (region, Some(window))
+            }
         };
         let tile_outputs = rule_map
             .tile_outputs
@@ -222,15 +256,36 @@ impl<'a, O: Observer> Run<'a, O> {
             tile_outputs,
             object_outputs,
             region,
+            window,
         })
     }
 
+    /// Where a full run may match a rule whose input box is `input_box`: inside a finite map,
+    /// unless the rule map lets rules match outside.
+    fn fit(run: &RuleMapRun<'_>, input_box: Bx) -> Option<IRect> {
+        (!run.match_outside_map)
+            .then(|| run.inside(input_box))
+            .flatten()
+    }
+
+    /// In a region run, the positions to try rule `index` at; `None` when there are none (and
+    /// in every other run).
+    fn window_area(&self, run: &RuleMapRun<'_>, index: usize, rule: &Rule) -> Option<Bx> {
+        let window = run.window?;
+        let reach = self.set.locality.reach(run.index, index);
+        window.rule_area(rule.input_box, reach, Self::fit(run, rule.input_box))
+    }
+
     /// The rules of a rule map that can match in this run, bound: enabled, with an output, and
-    /// with an input set that is possible and whose layers allow it.
+    /// with an input set that is possible and whose layers allow it; in a region run, with a
+    /// position to try in the window.
     fn bind_rules(&self, run: &RuleMapRun<'a>) -> Vec<BoundRule<'a>> {
         let mut bound = Vec::new();
         for (index, rule) in run.rule_map.rules.iter().enumerate() {
             if rule.options.disabled || !rule.has_output() {
+                continue;
+            }
+            if run.window.is_some() && self.window_area(run, index, rule).is_none() {
                 continue;
             }
             let mut sets = Vec::new();
@@ -273,6 +328,11 @@ impl<'a, O: Observer> Run<'a, O> {
             }
         }
         bound
+    }
+
+    /// The cells a region run recomputes and keeps; `None` in every other run.
+    pub(crate) fn exact_area(&self) -> Option<Bx> {
+        self.plan.as_ref().and_then(|plan| plan.exact)
     }
 
     /// Whether the rule's `Probability` skips it at `p`.
@@ -330,15 +390,29 @@ impl<'a, O: Observer> Run<'a, O> {
             self.delete_tiles(&run);
         }
         let rules = self.bind_rules(&run);
-        let mut areas: HashMap<IVec2, MatchArea> = HashMap::new();
+        // Where each rule may be tried: in a full run shared by the rules of one size, in a
+        // region run each rule's own.
+        let mut areas: Vec<MatchArea> = Vec::new();
+        let mut area_of: Vec<usize> = Vec::with_capacity(rules.len());
+        let mut by_size: HashMap<IVec2, usize> = HashMap::new();
         for rule in &rules {
-            let size = rule.rule.input_box.size();
-            areas.entry(size).or_insert_with(|| {
-                let fit = (!run.match_outside_map)
-                    .then(|| run.inside(rule.rule.input_box))
-                    .flatten();
-                MatchArea::new(&run.region, rule.rule.input_box, fit)
-            });
+            let input_box = rule.rule.input_box;
+            let area = if run.window.is_some() {
+                areas.push(MatchArea::of_box(
+                    self.window_area(&run, rule.index, rule.rule),
+                ));
+                areas.len() - 1
+            } else {
+                *by_size.entry(input_box.size()).or_insert_with(|| {
+                    areas.push(MatchArea::new(
+                        &run.region,
+                        input_box,
+                        Self::fit(&run, input_box),
+                    ));
+                    areas.len() - 1
+                })
+            };
+            area_of.push(area);
         }
         let candidates: Vec<Vec<Vec<Anchor>>> = rules
             .iter()
@@ -348,6 +422,7 @@ impl<'a, O: Observer> Run<'a, O> {
             &self.targets,
             &self.tilesets,
             candidates.iter().flatten().flatten(),
+            run.window.map(|w| w.cells.rect()),
         );
         let anchors: Vec<Option<Vec<Anchor>>> = rules
             .iter()
@@ -365,9 +440,10 @@ impl<'a, O: Observer> Run<'a, O> {
             })
             .collect();
         let mut tracked = track.then(CellSet::new);
+        let area_of_rule = |position: usize| area_of.get(position).and_then(|&a| areas.get(a));
         if run.rule_map.options.match_in_order {
-            for (rule, anchors) in rules.iter().zip(&anchors) {
-                let Some(area) = areas.get(&rule.rule.input_box.size()) else {
+            for (position, (rule, anchors)) in rules.iter().zip(&anchors).enumerate() {
+                let Some(area) = area_of_rule(position) else {
                     continue;
                 };
                 self.run_rule_in_order(
@@ -381,8 +457,8 @@ impl<'a, O: Observer> Run<'a, O> {
             }
         } else {
             let mut found: Vec<Vec<IVec2>> = Vec::with_capacity(rules.len());
-            for (rule, anchors) in rules.iter().zip(&anchors) {
-                let Some(area) = areas.get(&rule.rule.input_box.size()) else {
+            for (position, (rule, anchors)) in rules.iter().zip(&anchors).enumerate() {
+                let Some(area) = area_of_rule(position) else {
                     found.push(Vec::new());
                     continue;
                 };
@@ -538,8 +614,34 @@ pub(crate) fn run<O: Observer>(
             CellSet::from_rect(map_rect)
         }
     };
+    let plan = match &request.area {
+        Area::Edit(edit) => match plan_region(&set.locality, set.rule_maps(), map, *edit) {
+            Ok(plan) => Some(plan),
+            Err(problem) => {
+                report.problems.push(problem);
+                None
+            }
+        },
+        Area::Whole | Area::Selection(_) => None,
+    };
+    if let Some(plan) = plan {
+        report.incremental = true;
+        if plan.exact.is_none() {
+            report.rule_map_matches = vec![0; set.rule_maps().len()];
+            return report;
+        }
+        let interest = plan.interest((!map.infinite).then_some(map_rect));
+        let mut run_state = Run::new(set, map, request, observer, interest, Some(plan));
+        let region = CellSet::new();
+        for index in 0..set.rule_maps().len() {
+            run_state.run_rule_map(index, &region, false);
+        }
+        let state = writeback::RunResult::from_run(run_state);
+        writeback::write_back(set, map, state, &mut report);
+        return report;
+    }
     let mut region = match &request.area {
-        Area::Whole => whole(),
+        Area::Whole | Area::Edit(_) => whole(),
         Area::Selection(rects) => {
             report.incremental = true;
             let mut cells = CellSet::new();
@@ -548,17 +650,9 @@ pub(crate) fn run<O: Observer>(
             }
             cells
         }
-        Area::Edit(_) => {
-            report.problems.push(Problem::new(
-                ProblemKind::FullRunFallback,
-                "region runs that recompute only what an edit changes are not built yet; the \
-                 rules ran on the whole map",
-            ));
-            whole()
-        }
     };
     let interest = area_of_interest(set, map, &region, map_rect);
-    let mut run_state = Run::new(set, map, request, observer, interest);
+    let mut run_state = Run::new(set, map, request, observer, interest, None);
     // Tiled grows the region by what each rule map wrote, until it covers a finite map.
     let mut tracking = map.infinite || !covers(&region, map_rect);
     for index in 0..set.rule_maps().len() {
@@ -611,9 +705,10 @@ fn area_of_interest(set: &RuleSet, map: &Map, region: &CellSet, map_rect: IRect)
 }
 
 impl RuleSet {
-    /// Runs the rules on the whole map (`None`), or after an edit of `region`. Region runs that
-    /// recompute only what an edit changes are not built yet: a region runs on the whole map and
-    /// the report says so.
+    /// Runs the rules on the whole map (`None`), or after an edit of `region`: an exact region
+    /// run ([`Area::Edit`]) that gives what a full run gives inside the area the edit can
+    /// change ([`RuleSet::affected_area`]) and changes nothing outside it, or, when the rules
+    /// cannot be run exactly around an edit, a full run whose report says why.
     pub fn apply(&self, map: &mut Map, region: Option<IRect>, seed: u64) -> Report {
         let area = region.map_or(Area::Whole, Area::Edit);
         self.run(map, &RunRequest::builder(seed).area(area).build())
@@ -654,6 +749,7 @@ mod tests {
 
     use super::*;
     use crate::observer::{Check, Write};
+    use crate::problem::ProblemKind;
 
     /// Counts what a run reports.
     #[derive(Default)]

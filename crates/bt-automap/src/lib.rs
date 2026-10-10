@@ -21,6 +21,7 @@ pub mod layers;
 mod object_cells;
 mod observer;
 mod problem;
+mod region;
 mod rng;
 mod rule_ref;
 mod rulemap;

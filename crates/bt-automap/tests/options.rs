@@ -576,26 +576,75 @@ fn names_can_be_bound_to_layers_of_other_names() {
 }
 
 #[test]
-fn a_region_run_runs_on_the_whole_map_until_exact_region_runs_exist() {
+fn a_region_run_recomputes_only_what_the_edit_can_change() {
     let tiles = atlas();
-    let rules = rules_of(vec![simple_rule(&tiles, "1", "2")]);
-    let mut map = target_map(&tiles, UVec2::new(3, 1))
-        .tile_layer("set", "1 1 1")
-        .build()
-        .unwrap();
-    let report = rules.apply(
-        &mut map,
-        Some(IRect {
-            x: 0,
+    // A 1 with a 1 right of it becomes a 2: a cell's result depends on it and its right
+    // neighbour, so an edit changes the result of the edited cell and the one left of it.
+    let rules = rules_of(vec![simple_rule(&tiles, "1 1", "2 .")]);
+    let map = || {
+        target_map(&tiles, UVec2::new(6, 1))
+            .tile_layer("set", "1 1 1 1 1 1")
+            .build()
+            .unwrap()
+    };
+    let edit = IRect {
+        x: 3,
+        y: 0,
+        w: 1,
+        h: 1,
+    };
+    assert!(rules.supports_incremental());
+    assert_eq!(
+        rules.margin(),
+        IRect {
+            x: -1,
             y: 0,
-            w: 1,
-            h: 1,
-        }),
-        1,
+            w: 2,
+            h: 1
+        }
     );
-    assert_eq!(grid_of(&map, "set"), "2 2 2");
+    let mut region = map();
+    assert_eq!(
+        rules.affected_area(&region, edit),
+        Some(IRect {
+            x: 2,
+            y: 0,
+            w: 2,
+            h: 1
+        })
+    );
+    let report = rules.apply(&mut region, Some(edit), 1);
+    assert_eq!(grid_of(&region, "set"), "1 1 2 2 1 1");
+    assert!(report.incremental);
+    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    assert_eq!(
+        report.changed,
+        Some(IRect {
+            x: 2,
+            y: 0,
+            w: 2,
+            h: 1
+        })
+    );
+    // A full run gives the same there.
+    let mut full = map();
+    rules.apply(&mut full, None, 1);
+    assert_eq!(grid_of(&full, "set"), "2 2 2 2 2 1");
+
+    // WrapBorder reads across the map: the run falls back to a full run and says why.
+    let wrapping = rules_of(vec![with_property(
+        simple_rule(&tiles, "1 1", "2 ."),
+        "WrapBorder",
+        Value::Bool(true),
+    )]);
+    assert!(!wrapping.supports_incremental());
+    let mut wrapped = map();
+    assert_eq!(wrapping.affected_area(&wrapped, edit), None);
+    let report = wrapping.apply(&mut wrapped, Some(edit), 1);
+    assert_eq!(grid_of(&wrapped, "set"), "2 2 2 2 2 2");
     assert!(!report.incremental);
     assert_eq!(report.problems[0].kind, ProblemKind::FullRunFallback);
+    assert!(report.problems[0].text.contains("WrapBorder"));
 }
 
 /// A one-rule rule map placing a rectangle (cell (1, 1)) and a point referring to it, in two

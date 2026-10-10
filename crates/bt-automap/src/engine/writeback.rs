@@ -2,7 +2,8 @@
 //! the map are set (only those, so chunks nothing changed stay shared with undo snapshots),
 //! properties merged, the new layers that hold something added on top in the order they were
 //! declared, the placed objects given ids and added, the objects `DeleteTiles` removed taken out,
-//! and the tilesets whose tiles were placed added to the map.
+//! and the tilesets whose tiles were placed added to the map. A region run keeps only the cells
+//! of the area it recomputes.
 
 use std::sync::Arc;
 
@@ -12,6 +13,7 @@ use bt_core::{
 use bt_utils::IRect;
 use glam::{IVec2, UVec2};
 
+use crate::bx::Bx;
 use crate::engine::RemovedObject;
 use crate::engine::objects::{PlacedGroup, assign_ids};
 use crate::engine::targets::{Created, TargetOrigin, Targets};
@@ -22,18 +24,21 @@ use crate::rules::{LockedOutput, Report, RuleSet};
 
 /// What a run leaves to write back.
 pub(crate) struct RunResult {
-    tilesets: TilesetBinding,
-    targets: Targets,
+    pub(crate) tilesets: TilesetBinding,
+    pub(crate) targets: Targets,
     placed: Vec<PlacedGroup>,
     removed: Vec<RemovedObject>,
     locked: Vec<LockedOutput>,
-    matches: Vec<usize>,
+    pub(crate) matches: Vec<usize>,
     problems: Vec<Problem>,
+    /// The cells a region run keeps; `None` keeps every cell.
+    exact: Option<Bx>,
 }
 
 impl RunResult {
     /// What `run` leaves.
     pub(crate) fn from_run<O: Observer>(run: Run<'_, O>) -> RunResult {
+        let exact = run.exact_area();
         RunResult {
             tilesets: run.tilesets,
             targets: run.targets,
@@ -42,7 +47,13 @@ impl RunResult {
             locked: run.locked,
             matches: run.matches,
             problems: run.problems,
+            exact,
         }
+    }
+
+    /// Whether the run keeps what it wrote at `p`.
+    fn keeps(&self, p: IVec2) -> bool {
+        self.exact.is_none_or(|exact| exact.contains(p))
     }
 }
 
@@ -89,10 +100,16 @@ fn add_tilesets(
         match target.origin {
             TargetOrigin::Existing(_) => {
                 for placed in target.grid.written() {
-                    mark(placed.cell);
+                    if result.keeps(placed.at) {
+                        mark(placed.cell);
+                    }
                 }
             }
-            TargetOrigin::New => target.grid.for_each_cell(|_, cell| mark(cell)),
+            TargetOrigin::New => target.grid.for_each_cell(|p, cell| {
+                if result.keeps(p) {
+                    mark(cell);
+                }
+            }),
             TargetOrigin::Temporary => {}
         }
     }
@@ -182,6 +199,7 @@ pub(crate) fn write_back(set: &RuleSet, map: &mut Map, mut result: RunResult, re
             continue;
         };
         let mut written = target.grid.written();
+        written.retain(|placed| result.keeps(placed.at));
         written.sort_unstable_by_key(|placed| (placed.at.y, placed.at.x));
         for placed in written {
             let cell = remap.cell(placed.cell);
@@ -201,19 +219,19 @@ pub(crate) fn write_back(set: &RuleSet, map: &mut Map, mut result: RunResult, re
                 let Some(target) = result.targets.tiles.get(index) else {
                     continue;
                 };
-                if !target.grid.has_tiles() {
-                    continue;
-                }
                 let mut tiles = if map.infinite {
                     TileLayer::infinite(size)
                 } else {
                     TileLayer::finite(size)
                 };
                 target.grid.for_each_cell(|p, cell| {
-                    if tiles.set_cell(p, remap.cell(cell)).unwrap_or(false) {
+                    if result.keeps(p) && tiles.set_cell(p, remap.cell(cell)).unwrap_or(false) {
                         include(&mut changed, p);
                     }
                 });
+                if tiles.chunks().next().is_none() {
+                    continue;
+                }
                 let id = LayerId(map.next_layer_id);
                 map.next_layer_id = map.next_layer_id.saturating_add(1);
                 let mut layer = Layer::new(id, target.name.clone(), LayerKind::Tile(tiles));

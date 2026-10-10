@@ -299,6 +299,75 @@ fn highlands_full_run_stays_under_its_time_bound() {
     }
 }
 
+/// A region run after a stroke, on the Highlands rules and the scene's platforms repeated to a
+/// 480×480 map: exact (a full run's result inside the area the stroke can change, nothing
+/// changed outside it) and timed. The bound is asserted only in optimised builds.
+#[test]
+fn highlands_region_run_after_a_stroke_is_exact_and_stays_under_its_time_bound() {
+    let Some(pack) = highlands() else {
+        return;
+    };
+    let family = &FAMILIES[0];
+    assert!(pack.rules.supports_incremental());
+    let mut map = repeated(&pack.scene_with_walls(family), 8);
+    pack.rules.apply(&mut map, None, 1);
+    // The stroke: three cells of a platform's row in the middle of the map painted with the
+    // tile of its first cell, as a pen drags along it.
+    let (start, tile) = tiles(&map, "walls")
+        .cells()
+        .find(|placed| placed.at.x >= 240 && placed.at.y >= 240)
+        .map(|placed| (placed.at, placed.cell))
+        .unwrap();
+    let stroke = bt_utils::IRect {
+        x: start.x,
+        y: start.y,
+        w: 3,
+        h: 1,
+    };
+    for p in stroke.points() {
+        walls_mut(&mut map).set_cell(p, tile).unwrap();
+    }
+    let area = pack.rules.affected_area(&map, stroke).unwrap();
+    let mut full = map.clone();
+    pack.rules.apply(&mut full, None, 1);
+    let mut times = Vec::new();
+    let mut region = map.clone();
+    for _ in 0..9 {
+        region = map.clone();
+        let start = Instant::now();
+        let report = pack.rules.apply(&mut region, Some(stroke), 1);
+        times.push(start.elapsed());
+        assert!(report.incremental, "{:?}", report.problems);
+    }
+    let time = median(times);
+    let (walls, full_walls, before) = (
+        tiles(&region, "walls"),
+        tiles(&full, "walls"),
+        tiles(&map, "walls"),
+    );
+    for y in 0..map.height as i32 {
+        for x in 0..map.width as i32 {
+            let p = IVec2::new(x, y);
+            let want = if area.contains(p) {
+                full_walls.cell(p)
+            } else {
+                before.cell(p)
+            };
+            assert_eq!(walls.cell(p), want, "at {p} (inside: {})", area.contains(p));
+        }
+    }
+    println!(
+        "Highlands: a region run after a 3-cell stroke on a 480×480 map {time:?}; it may change \
+         {}×{} cells (margin {:?})",
+        area.w,
+        area.h,
+        pack.rules.margin()
+    );
+    if !cfg!(debug_assertions) {
+        assert!(time < Duration::from_millis(5), "region run {time:?}");
+    }
+}
+
 /// `map` with its `walls` repeated `times`×`times` over a map that many times larger.
 fn repeated(map: &Map, times: u32) -> Map {
     let mut large = map.clone();

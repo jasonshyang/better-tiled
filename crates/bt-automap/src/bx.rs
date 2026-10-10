@@ -75,6 +75,38 @@ impl Bx {
             max: self.max + margin,
         }
     }
+
+    /// The Minkowski sum: every `a + b` with `a` in `self` and `b` in `other`.
+    pub(crate) fn sum(self, other: Bx) -> Bx {
+        Bx {
+            min: self.min + other.min,
+            max: self.max + other.max,
+        }
+    }
+
+    /// The positions `p` such that `p + d` is in `self` for every `d` of `offsets` (the
+    /// Minkowski erosion), or `None` when there are none.
+    pub(crate) fn eroded(self, offsets: Bx) -> Option<Bx> {
+        let eroded = Bx {
+            min: self.min - offsets.min,
+            max: self.max - offsets.max,
+        };
+        eroded.min.cmple(eroded.max).all().then_some(eroded)
+    }
+
+    /// The cells in both, or `None` when they do not meet.
+    pub(crate) fn intersection(self, other: Bx) -> Option<Bx> {
+        let both = Bx {
+            min: self.min.max(other.min),
+            max: self.max.min(other.max),
+        };
+        both.min.cmple(both.max).all().then_some(both)
+    }
+
+    /// Whether `p` is in the box.
+    pub(crate) fn contains(self, p: IVec2) -> bool {
+        p.cmpge(self.min).all() && p.cmple(self.max).all()
+    }
 }
 
 #[cfg(test)]
@@ -124,5 +156,20 @@ mod tests {
         assert_eq!(Bx::bounding([]), None);
         assert_eq!(a.grown(IVec2::ONE), bx(-1, -1, 5, 5));
         assert_eq!(a.translated(IVec2::new(1, 2)), bx(1, 2, 5, 6));
+    }
+
+    #[test]
+    fn sums_erosions_and_intersections() {
+        let window = bx(0, 0, 9, 4);
+        let reads = bx(-1, 0, 1, 2);
+        assert_eq!(window.sum(reads), bx(-1, 0, 10, 6));
+        // A read box fits at the positions whose reads all fall inside the window.
+        let fits = window.eroded(reads).unwrap();
+        assert_eq!(fits, bx(1, 0, 8, 2));
+        assert_eq!(fits.sum(reads).intersection(window), Some(fits.sum(reads)));
+        assert_eq!(bx(0, 0, 1, 1).eroded(bx(0, 0, 2, 0)), None);
+        assert_eq!(window.intersection(bx(5, 3, 20, 20)), Some(bx(5, 3, 9, 4)));
+        assert_eq!(window.intersection(bx(10, 0, 12, 0)), None);
+        assert!(window.contains(IVec2::new(9, 4)) && !window.contains(IVec2::new(10, 4)));
     }
 }

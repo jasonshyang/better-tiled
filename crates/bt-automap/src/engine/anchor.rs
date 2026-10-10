@@ -41,8 +41,10 @@ impl ScanKey {
 /// inside a finite map unless it may match outside): Tiled's `ruleMatchRegion`.
 #[derive(Clone, Debug)]
 pub(crate) struct MatchArea {
-    cells: CellSet,
+    /// The area's rectangles, in band order.
     rects: Vec<IRect>,
+    /// Its cells, when it is more than one rectangle.
+    cells: Option<CellSet>,
 }
 
 impl MatchArea {
@@ -55,20 +57,47 @@ impl MatchArea {
             cells = cells.intersection_with_rect(fit);
         }
         let rects = cells.rects();
-        MatchArea { cells, rects }
+        let cells = (rects.len() > 1).then_some(cells);
+        MatchArea { rects, cells }
+    }
+
+    /// The positions of one box, or none.
+    pub(crate) fn of_box(area: Option<Bx>) -> MatchArea {
+        MatchArea {
+            rects: area.map(Bx::rect).into_iter().collect(),
+            cells: None,
+        }
     }
 
     /// Where `p` comes in the scan, if it is in the area.
     pub(crate) fn key(&self, p: IVec2) -> Option<ScanKey> {
-        if !self.cells.contains(p) {
-            return None;
-        }
-        let rect = self.rects.iter().position(|r| r.contains(p))?;
+        let rect = match &self.cells {
+            None => self.rects.first().filter(|r| r.contains(p)).map(|_| 0)?,
+            Some(cells) => {
+                if !cells.contains(p) {
+                    return None;
+                }
+                self.rects.iter().position(|r| r.contains(p))?
+            }
+        };
         Some(ScanKey {
             rect,
             y: p.y,
             x: p.x,
         })
+    }
+
+    /// The positions of the area outside `inside`.
+    fn outside(&self, inside: IRect) -> Vec<IVec2> {
+        match &self.cells {
+            Some(cells) => cells.difference_with_rect(inside).cells().collect(),
+            None => self
+                .rects
+                .iter()
+                .flat_map(|&rect| rect_difference(rect, inside))
+                .flat_map(|rect| rect.points())
+                .collect(),
+        }
     }
 
     /// Every position of the area on the lattice of `options`, in scan order.
@@ -89,6 +118,41 @@ impl MatchArea {
                 })
             })
     }
+}
+
+/// The parts of `rect` outside `inside`: up to four rectangles, above, below, left and right.
+fn rect_difference(rect: IRect, inside: IRect) -> Vec<IRect> {
+    let both = rect.intersection(inside);
+    if both.is_empty() {
+        return vec![rect];
+    }
+    let parts = [
+        IRect {
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: both.y - rect.y,
+        },
+        IRect {
+            x: rect.x,
+            y: both.y + both.h,
+            w: rect.w,
+            h: rect.y + rect.h - (both.y + both.h),
+        },
+        IRect {
+            x: rect.x,
+            y: both.y,
+            w: both.x - rect.x,
+            h: both.h,
+        },
+        IRect {
+            x: both.x + both.w,
+            y: both.y,
+            w: rect.x + rect.w - (both.x + both.w),
+            h: both.h,
+        },
+    ];
+    parts.into_iter().filter(|r| !r.is_empty()).collect()
 }
 
 /// Whether `p` is on the lattice of `options`: `x ≡ OffsetX (mod ModX)` and the same for `y`, in
@@ -156,6 +220,13 @@ struct GridTile {
     tile: AnchorTile,
 }
 
+/// An anchor tile found at a cell.
+#[derive(Copy, Clone, Debug)]
+struct AnchorHit {
+    tile: AnchorTile,
+    at: IVec2,
+}
+
 /// The positions of the anchor tiles in the grids.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct AnchorIndex {
@@ -166,11 +237,13 @@ pub(crate) struct AnchorIndex {
 }
 
 impl AnchorIndex {
-    /// An index of the tiles `anchors` name, over the grids of `targets` as they are now.
+    /// An index of the tiles `anchors` name, over the grids of `targets` as they are now,
+    /// within `limit` when given.
     pub(crate) fn new<'a>(
         targets: &Targets,
         tilesets: &TilesetBinding,
         anchors: impl Iterator<Item = &'a Anchor>,
+        limit: Option<IRect>,
     ) -> AnchorIndex {
         let mut index = AnchorIndex::default();
         let mut grids: Vec<usize> = Vec::new();
@@ -186,22 +259,25 @@ impl AnchorIndex {
             let Some(target) = targets.tiles.get(grid) else {
                 continue;
             };
-            let mut hits: Vec<(AnchorTile, IVec2)> = Vec::new();
-            target.grid.for_each_cell(|p, cell| {
+            let mut hits: Vec<AnchorHit> = Vec::new();
+            target.grid.for_each_cell_within(limit, |at, cell| {
                 let tile = AnchorTile {
                     key: tilesets.key_of(cell),
                     tile: cell.tile().0,
                 };
                 if index.is_wanted(grid, tile) {
-                    hits.push((tile, p));
+                    hits.push(AnchorHit { tile, at });
                 }
             });
-            for (tile, p) in hits {
+            for hit in hits {
                 index
                     .positions
-                    .entry(GridTile { grid, tile })
+                    .entry(GridTile {
+                        grid,
+                        tile: hit.tile,
+                    })
                     .or_default()
-                    .push(p);
+                    .push(hit.at);
             }
         }
         index
@@ -312,7 +388,7 @@ pub(crate) fn anchored_positions(
         }
     }
     if let Some(inside) = inside {
-        for p in area.cells.difference_with_rect(inside).cells() {
+        for p in area.outside(inside) {
             if on_lattice(p, options)
                 && let Some(key) = area.key(p)
             {

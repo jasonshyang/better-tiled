@@ -301,6 +301,20 @@ impl<O: Observer> Run<'_, O> {
         if set.objects.is_empty() {
             return;
         }
+        // A region run places the objects of the matches whose objects meet the area it keeps.
+        if let Some(exact) = self.exact_area() {
+            let meets = set.objects.iter().any(|output| {
+                output
+                    .footprint
+                    .translated(p)
+                    .intersection_with_rect(exact.rect())
+                    .len()
+                    > 0
+            });
+            if !meets {
+                return;
+            }
+        }
         let offset = pixel_offset(self.map, compiled.output_origin, p - compiled.origin);
         let mut group = PlacedGroup::default();
         for output in &set.objects {

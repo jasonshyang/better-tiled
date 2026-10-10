@@ -10,6 +10,7 @@ use std::sync::Arc;
 use bt_core::{CustomTypes, Map, TilesetRef};
 
 use crate::problem::Problem;
+use crate::region::Locality;
 use crate::rulemap::{CompileContext, MatchTypeCache, RuleMap, TilesetTable, compile_rule_map};
 
 pub use report::{LockedOutput, Report};
@@ -21,6 +22,8 @@ pub struct RuleSet {
     pub(crate) table: TilesetTable,
     pub(crate) match_types: MatchTypeCache,
     pub(crate) types: Arc<CustomTypes>,
+    /// How far each rule map's result depends on the cells around (§7).
+    pub(crate) locality: Locality,
     problems: Vec<Problem>,
     rules_file: Option<PathBuf>,
 }
@@ -138,11 +141,13 @@ impl RuleSetBuilder {
             }
             rule_maps.push(rule_map);
         }
+        let locality = Locality::of(&rule_maps, &table);
         RuleSet {
             rule_maps,
             table,
             match_types,
             types: self.types,
+            locality,
             problems: self.problems,
             rules_file: self.rules_file,
         }
