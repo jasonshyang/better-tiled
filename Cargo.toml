@@ -15,6 +15,7 @@ bt-core = { path = "crates/bt-core" }
 bt-edit = { path = "crates/bt-edit" }
 bt-editor = { path = "crates/bt-editor" }
 bt-image = { path = "crates/bt-image" }
+bt-live = { path = "crates/bt-live" }
 bt-project = { path = "crates/bt-project" }
 bt-render = { path = "crates/bt-render" }
 bt-script = { path = "crates/bt-script" }

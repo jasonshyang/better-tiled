@@ -1,0 +1,20 @@
+[package]
+name = "bt-live"
+description = "The live link between bt and a running better-tiled: the private folder editors listen in, one JSON line each way over a Unix socket, the versioned requests and answers, the client that finds editors and the server that hands work to the window's thread with a deadline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+# Rectangles in the protocol (the cells in view, an edit's area) are bt-utils' own.
+bt-utils = { workspace = true, features = ["serde"] }
+glam = { workspace = true, features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
