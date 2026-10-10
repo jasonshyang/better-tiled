@@ -741,3 +741,109 @@ fn problems_found_compiling_are_typed_with_their_severity() {
     );
     assert_eq!(grid("1 .\n. 2"), "1 .\n. 2");
 }
+
+#[test]
+fn input_indexes_are_alternatives() {
+    let tiles = atlas();
+    let rules = rule_map(&tiles, UVec2::new(1, 1))
+        .tile_layer("inputA_set", "1")
+        .tile_layer("inputB_set", "2")
+        .tile_layer("output_out", "7")
+        .build()
+        .unwrap();
+    let mut map = target_map(&tiles, UVec2::new(3, 1))
+        .tile_layer("set", "1 2 5")
+        .build()
+        .unwrap();
+    rules_of(vec![rules]).apply(&mut map, None, 1);
+    assert_eq!(grid_of(&map, "out"), "7 7 .");
+}
+
+#[test]
+fn auto_empty_and_inputnot_on_a_missing_layer() {
+    let tiles = atlas();
+    // AutoEmpty: where the layer has no tile inside the input region (which another input
+    // layer widens here), the cell must be empty.
+    let rule = |auto_empty: bool| {
+        let mut set = tile_layer("input_set", "1 .");
+        set.properties
+            .insert("AutoEmpty".into(), Property::new(Value::Bool(auto_empty)));
+        rule_map(&tiles, UVec2::new(2, 1))
+            .layer(set)
+            .tile_layer("input_other", ". 5")
+            .tile_layer("output_out", "2 .")
+            .build()
+            .unwrap()
+    };
+    let map = || {
+        target_map(&tiles, UVec2::new(4, 1))
+            .tile_layer("set", "1 . 1 1")
+            .tile_layer("other", ". 5 . 5")
+            .build()
+            .unwrap()
+    };
+    let mut strict = map();
+    rules_of(vec![rule(true)]).apply(&mut strict, None, 1);
+    assert_eq!(grid_of(&strict, "out"), "2 . . .");
+    let mut loose = map();
+    rules_of(vec![rule(false)]).apply(&mut loose, None, 1);
+    assert_eq!(grid_of(&loose, "out"), "2 . 2 .");
+    // "Not a 1 on a layer the map lacks" always holds.
+    let rules = rule_map(&tiles, UVec2::new(1, 1))
+        .tile_layer("input_set", "1")
+        .tile_layer("inputnot_missing", "1")
+        .tile_layer("output_out", "3")
+        .build()
+        .unwrap();
+    let mut map = map();
+    rules_of(vec![rules]).apply(&mut map, None, 1);
+    assert_eq!(grid_of(&map, "out"), "3 . 3 3");
+}
+
+#[test]
+fn content_far_apart_on_an_infinite_map_runs_without_a_dense_copy() {
+    // The tile bounds span 100 000 cells each way: far too many to copy.
+    let tiles = atlas();
+    let first = simple_rule(&tiles, ". .\n1 .", ". 2\n1 .");
+    let second = rule_map(&tiles, UVec2::new(1, 1))
+        .tile_layer("input_set", "2")
+        .tile_layer("output_out", "3")
+        .build()
+        .unwrap();
+    let far = 100_000;
+    let mut map = target_map(&tiles, UVec2::new(16, 16))
+        .infinite()
+        .tile_layer_at("set", IVec2::ZERO, "1 . 1")
+        .build()
+        .unwrap();
+    if let Some(LayerKind::Tile(set)) = map.layers.get_mut(0).map(|l| &mut l.kind) {
+        set.set_cell(
+            IVec2::new(far, far),
+            bt_core::Cell::new(bt_core::TilesetSlot::new(0).unwrap(), bt_core::TileId(1)),
+        )
+        .unwrap();
+    }
+    let report = rules_of(vec![first, second]).apply(&mut map, None, 1);
+    assert_eq!(report.matches, 6);
+    let set = tiles_of(&map);
+    let at = |x: i32, y: i32| set.cell(IVec2::new(x, y)).tile().0;
+    assert_eq!([at(1, -1), at(3, -1), at(far + 1, far - 1)], [2, 2, 2]);
+    let out = common::tiles(&map, "out");
+    assert_eq!(out.cell(IVec2::new(far + 1, far - 1)).tile().0, 3);
+    assert_eq!(
+        report.changed,
+        Some(IRect {
+            x: 1,
+            y: -1,
+            w: far + 1,
+            h: far + 1
+        })
+    );
+}
+
+#[test]
+fn rule_sets_and_reports_can_cross_threads() {
+    fn send_and_sync<T: Send + Sync>() {}
+    send_and_sync::<bt_automap::RuleSet>();
+    send_and_sync::<bt_automap::Report>();
+}
