@@ -10,9 +10,11 @@
 //! GPL-3.0-or-later with them.
 
 mod report;
+mod script;
 mod words;
 
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
 };
+pub use script::{Area, IdRange, LayerRef, Named, Nearness, ObjectRef, Shape, TileIds};
 pub use words::{capped_list, cell_text, cells_text, number_text, point_text, region_text};
