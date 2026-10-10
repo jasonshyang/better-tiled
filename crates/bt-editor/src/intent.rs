@@ -9,7 +9,7 @@ use bt_utils::IRect;
 use glam::{DVec2, IVec2, UVec2};
 
 use crate::actions::{ActionId, PaletteTarget};
-use crate::automap::RulesLoaded;
+use crate::automap::{LiveEdit, RulesLoaded};
 use crate::document::{DocumentId, TilesetMode, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
@@ -63,6 +63,13 @@ pub enum Intent {
     Loaded(Box<Loaded>),
     /// A read of a map's rules the editor asked for finished.
     RulesLoaded(Box<RulesLoaded>),
+    /// Change a document's AutoMap layers (one step).
+    EditLive {
+        /// The document.
+        doc: DocumentId,
+        /// The change.
+        edit: LiveEdit,
+    },
     /// The answer to a file request; `None` when it was cancelled.
     FilePicked {
         /// What was asked.

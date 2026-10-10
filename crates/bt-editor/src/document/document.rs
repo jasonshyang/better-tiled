@@ -1,6 +1,7 @@
 //! A document: a tab onto a map or a tileset, with its selection, camera, history, view
 //! switches and tileset editor.
 
+use bt_automap::layers::Setup;
 use std::fmt;
 
 use glam::DVec2;
@@ -37,6 +38,8 @@ pub struct ViewToggles {
     pub grid: bool,
     /// Tiled's Highlight Current Layer.
     pub highlight_current_layer: bool,
+    /// Show what was painted in place of AutoMap layers' result.
+    pub show_painted: bool,
 }
 
 impl Default for ViewToggles {
@@ -44,6 +47,7 @@ impl Default for ViewToggles {
         ViewToggles {
             grid: true,
             highlight_current_layer: false,
+            show_painted: false,
         }
     }
 }
@@ -62,6 +66,9 @@ pub struct Document {
     pub(crate) tileset: Option<TilesetEditing>,
     /// What its Properties panel inspects while no tileset editor is shown.
     pub(crate) inspecting: Inspecting,
+    /// Its map's AutoMap layers: which rules run on which layers (`05-editor-core.md`, §16);
+    /// part of every transaction.
+    pub(crate) automap: Option<Setup>,
 }
 
 impl Document {
@@ -98,6 +105,11 @@ impl Document {
     /// Its tileset editor, when it shows one.
     pub fn tileset_editing(&self) -> Option<&TilesetEditing> {
         self.tileset.as_ref()
+    }
+
+    /// Its map's AutoMap layers, while they are on.
+    pub fn automap(&self) -> Option<&Setup> {
+        self.automap.as_ref()
     }
 
     /// The selected objects become what the Properties panel inspects, when there are any and

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use crate::document::{DocumentId, Selection};
 use crate::editor::Editor;
 use crate::error::EditError;
-use crate::history::{AssetChange, MergeKey, SelectionChange, Transaction, Tx};
+use crate::history::{AssetChange, AutoMapChange, MergeKey, SelectionChange, Transaction, Tx};
 use crate::store::{AssetId, Root};
 
 impl Editor {
@@ -52,20 +52,34 @@ impl Editor {
         if self.gesture.is_some() {
             return Err(EditError::GestureUnderWay.into());
         }
-        let before_selection = self
+        let document = self
             .documents
             .get(doc)
-            .ok_or(EditError::NoSuchDocument(doc))?
-            .selection
-            .clone();
-        let mut tx = Tx::new(&self.store, before_selection.clone());
+            .ok_or(EditError::NoSuchDocument(doc))?;
+        let before_selection = document.selection.clone();
+        let before_automap = document.automap.clone();
+        let doc_asset = document.asset;
+        let mut tx = Tx::new(
+            &self.store,
+            before_selection.clone(),
+            before_automap.clone(),
+        );
         let result = f(&mut tx)?;
         let mut after_selection = tx.selection.clone();
+        let after_automap = tx.automap.clone();
         let keeps_carry = tx.keeps_carry;
-        let changed = self.changed_roots(tx.working);
+        let mut changed = self.changed_roots(tx.working);
+        if after_automap != before_automap
+            && !changed.contains_key(&doc_asset)
+            && let Some(asset) = self.store.get(doc_asset)
+        {
+            // AutoMap layers decide what the map's file holds: the map takes a new version.
+            changed.insert(doc_asset, asset.root().clone());
+        }
         settle_carry(&mut after_selection, keeps_carry || changed.is_empty());
         if let Some(document) = self.documents.get_mut(doc) {
             document.selection = after_selection.clone();
+            document.automap = after_automap.clone();
             if after_selection.objects != before_selection.objects {
                 document.inspect_selected_objects();
             }
@@ -78,7 +92,11 @@ impl Editor {
             before: before_selection,
             after: after_selection,
         };
-        self.record(doc, label, key, selection, changes);
+        let automap = AutoMapChange {
+            before: before_automap,
+            after: after_automap,
+        };
+        self.record(doc, label, key, selection, automap, changes);
         Ok(result)
     }
 
@@ -143,6 +161,7 @@ impl Editor {
         label: &str,
         key: Option<MergeKey>,
         selection: SelectionChange,
+        automap: AutoMapChange,
         changes: Vec<AssetChange>,
     ) {
         let Some(document) = self.documents.get_mut(doc) else {
@@ -162,6 +181,7 @@ impl Editor {
                 }
             }
             last.selection.after = selection.after;
+            last.automap.after = automap.after;
             return;
         }
         let merging = key.is_some();
@@ -171,6 +191,7 @@ impl Editor {
                 merge_key: key,
                 document: doc,
                 selection,
+                automap,
                 changes,
             },
             merging,
@@ -205,6 +226,7 @@ impl Editor {
             document.history.position -= 1;
             document.history.merge_open = false;
             document.selection = transaction.selection.before;
+            document.automap = transaction.automap.before;
         }
         Ok(())
     }
@@ -237,6 +259,7 @@ impl Editor {
             document.history.position += 1;
             document.history.merge_open = false;
             document.selection = transaction.selection.after;
+            document.automap = transaction.automap.after;
         }
         Ok(())
     }

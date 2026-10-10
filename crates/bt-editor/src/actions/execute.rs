@@ -6,6 +6,7 @@ use bt_edit::{Axis, Brush, LayerType, RotateDirection};
 
 use super::enabled::Enabled;
 use super::table::{ActionId, ActionKind};
+use crate::automap::LiveEdit;
 use crate::document::{DocumentId, Inspecting, Reorient};
 use crate::editor::{Editor, warn};
 use crate::effect::{Dialog, Effect, FileRequest, ViewRequest};
@@ -119,6 +120,10 @@ impl Editor {
                 self.toggle_view(|view| {
                     view.highlight_current_layer = !view.highlight_current_layer
                 });
+                Vec::new()
+            }
+            ActionId::ShowPainted => {
+                self.toggle_view(|view| view.show_painted = !view.show_painted);
                 Vec::new()
             }
             ActionId::NextDocument | ActionId::PreviousDocument => {
@@ -250,6 +255,11 @@ impl Editor {
             ActionId::CropToSelection => on_document(self, &Editor::crop_to_selection),
             ActionId::Autocrop => on_document(self, &Editor::autocrop_map),
             ActionId::AutoMap => on_document(self, &Editor::automap),
+            ActionId::LiveAutoMap => on_document(self, &|editor, doc| {
+                let on = editor.document(doc).is_some_and(|d| d.automap().is_some());
+                let edit = if on { LiveEdit::Stop } else { LiveEdit::Start };
+                editor.edit_live(doc, edit)
+            }),
             ActionId::NewTileLayer => {
                 on_document(self, &|editor, doc| editor.add_layer(doc, LayerType::Tile))
             }

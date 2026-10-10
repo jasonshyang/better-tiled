@@ -83,7 +83,13 @@ impl Editor {
     pub(crate) fn find_rules(&mut self, asset: AssetId, reread: bool) -> Vec<Effect> {
         let map_path = self.map_path(asset);
         let project = self.project_root();
-        let found = files::find_rules(map_path.as_deref(), None, project.as_deref());
+        let chosen = self
+            .documents
+            .in_order()
+            .find(|d| d.asset() == asset)
+            .and_then(|d| d.automap.as_ref())
+            .map(|setup| setup.rules.clone());
+        let found = files::find_rules(map_path.as_deref(), chosen.as_deref(), project.as_deref());
         let rules = self.automap.maps.entry(asset).or_default();
         let another_file = rules.file != found;
         if another_file {
@@ -166,10 +172,12 @@ impl Editor {
                 rules.error = Some(error);
                 if rules.rules.is_none() {
                     rules.waiting = None;
+                    rules.waiting_start = false;
                 }
             }
         }
         let waiting = rules.waiting.take();
+        let start = std::mem::take(&mut rules.waiting_start);
         let doc = self
             .documents
             .in_order()
@@ -177,6 +185,9 @@ impl Editor {
             .map(|d| d.id());
         if let (Some(area), Some(doc)) = (waiting, doc) {
             effects.extend(self.run_rules(doc, area));
+        }
+        if let (true, Some(doc)) = (start, doc) {
+            effects.extend(self.start_live(doc));
         }
         effects
     }

@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 
 use bt_core::{FileRef, LayerId, TilesetRef};
 use bt_edit::{SelectionMode, TileRegion};
-use bt_editor::{ActionId, DocumentId, Editor, Effect, Found, Intent, Observation, Severity};
+use bt_editor::{
+    ActionId, DocumentId, Editor, Effect, Found, Intent, LiveEdit, Observation, Severity,
+};
 use bt_test_data::Scratch;
 use bt_test_data::fixtures::{Atlas, MapBuilder};
 use bt_tmx::WriteRequest;
@@ -433,4 +435,208 @@ fn rules_are_read_again_when_a_class_gives_a_rule_tile_another_match_type() {
         )],
         "tile 9 is an ordinary tile now"
     );
+}
+
+/// The `top` layer of what the canvas shows.
+fn shown_top(editor: &Editor, doc: DocumentId) -> String {
+    let map = editor.shown_map(doc).unwrap();
+    let layer = map.layer(LayerId(2)).unwrap().as_tile_layer().unwrap();
+    (0..2)
+        .map(|y| {
+            (0..3)
+                .map(|x| match layer.cell(IVec2::new(x, y)).slot() {
+                    Some(_) => layer.cell(IVec2::new(x, y)).tile().0.to_string(),
+                    None => ".".to_owned(),
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Paints tile `tile` of the map's tileset at `at` on layer `layer`, as one step.
+fn paint(editor: &mut Editor, doc: DocumentId, layer: u32, at: IVec2, tile: u32) {
+    let asset = editor.document(doc).unwrap().asset();
+    editor
+        .transact(doc, "Paint", |tx| {
+            let map = tx.map_mut(asset)?;
+            let tiles = map
+                .layer_mut(LayerId(layer))
+                .and_then(|l| l.as_tile_layer_mut())
+                .unwrap();
+            let cell =
+                bt_core::Cell::new(bt_core::TilesetSlot::new(0).unwrap(), bt_core::TileId(tile));
+            tiles.set_cell(at, cell).unwrap();
+            Ok::<_, bt_editor::EditError>(())
+        })
+        .unwrap();
+    // The window ticks the editor every frame; that is when the result is made again.
+    apply(editor, Intent::Tick { now_ms: 2 });
+}
+
+fn is_dirty(editor: &Editor, doc: DocumentId) -> bool {
+    let asset = editor.document(doc).unwrap().asset();
+    editor.store().get(asset).unwrap().is_dirty()
+}
+
+#[test]
+fn live_automap_shows_the_rules_result_and_keeps_what_was_painted() {
+    let (scratch, map) = folder_with_rules("bt-editor-live", 6);
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    assert_eq!(editor.checked(ActionId::LiveAutoMap), Some(true));
+    let setup = editor.document(doc).unwrap().automap().unwrap();
+    assert_eq!(setup.rules, scratch.join("rules.txt"));
+    assert_eq!(setup.runs[0].tile_layer("ground"), Some(LayerId(1)));
+    assert_eq!(setup.runs[0].tile_layer("top"), Some(LayerId(2)));
+    assert_eq!(
+        shown_top(&editor, doc),
+        "6 6 6\n6 6 6",
+        "the result is shown"
+    );
+    assert_eq!(top(&editor, doc), ". . .\n. . .", "what was painted stays");
+    assert!(
+        is_dirty(&editor, doc),
+        "the map's file will hold the result"
+    );
+
+    // Painting changes what was painted; the result follows.
+    paint(&mut editor, doc, 1, IVec2::new(1, 0), 1);
+    assert_eq!(shown_top(&editor, doc), "6 . 6\n6 6 6");
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert_eq!(
+        shown_top(&editor, doc),
+        "6 6 6\n6 6 6",
+        "undo, and the result follows"
+    );
+
+    apply(&mut editor, Intent::Run(ActionId::ShowPainted));
+    assert_eq!(
+        shown_top(&editor, doc),
+        ". . .\n. . .",
+        "what was painted, shown"
+    );
+    apply(&mut editor, Intent::Run(ActionId::ShowPainted));
+
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    assert!(editor.document(doc).unwrap().automap().is_none());
+    assert_eq!(
+        top(&editor, doc),
+        "6 6 6\n6 6 6",
+        "stopping keeps the result as painted"
+    );
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert!(
+        editor.document(doc).unwrap().automap().is_some(),
+        "undo starts them again"
+    );
+    assert_eq!(top(&editor, doc), ". . .\n. . .");
+    let labels: Vec<String> = editor
+        .document(doc)
+        .unwrap()
+        .history()
+        .entries()
+        .into_iter()
+        .filter(|e| e.done)
+        .map(|e| e.label)
+        .collect();
+    assert_eq!(labels, ["Start AutoMap Layers"]);
+}
+
+#[test]
+fn starting_live_automap_makes_the_output_layers_the_map_lacks() {
+    let scratch = Scratch::new("bt-editor-live-outputs").unwrap();
+    let map = write_tiles_map(
+        scratch.path(),
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("ground", "0 0 0\n0 0 0")],
+    );
+    write_tiles_map(
+        scratch.path(),
+        "rule.tmx",
+        UVec2::new(1, 1),
+        &[("input_ground", "0"), ("output_Over", "6")],
+    );
+    std::fs::write(scratch.join("rules.txt"), "rule.tmx\n").unwrap();
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    let painted = editor.map_of(doc).unwrap();
+    let over = painted.layers.last().unwrap();
+    assert_eq!(over.name, "Over", "made on top");
+    let setup = editor.document(doc).unwrap().automap().unwrap();
+    assert_eq!(setup.runs[0].tile_layer("Over"), Some(over.id));
+    let shown = editor.shown_map(doc).unwrap();
+    let made = shown.layer(over.id).unwrap().as_tile_layer().unwrap();
+    assert_eq!(made.cells().count(), 6);
+}
+
+#[test]
+fn live_automap_binds_the_names_the_rules_use_to_other_layers() {
+    let scratch = Scratch::new("bt-editor-live-bind").unwrap();
+    // As in the Highlands pack: the rules read and write `walls`, the map paints on `plat1`.
+    let map = write_tiles_map(
+        scratch.path(),
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("walls", ". . .\n. . ."), ("plat1", "0 . 0\n. . .")],
+    );
+    write_tiles_map(
+        scratch.path(),
+        "rule.tmx",
+        UVec2::new(1, 1),
+        &[("input_walls", "0"), ("output_walls", "6")],
+    );
+    std::fs::write(scratch.join("rules.txt"), "rule.tmx\n").unwrap();
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    apply(
+        &mut editor,
+        Intent::EditLive {
+            doc,
+            edit: LiveEdit::Bind {
+                run: 0,
+                name: "walls".to_owned(),
+                objects: false,
+                layer: Some(LayerId(2)),
+            },
+        },
+    );
+    let shown = editor.shown_map(doc).unwrap();
+    let plat1 = shown.layer(LayerId(2)).unwrap().as_tile_layer().unwrap();
+    assert_eq!(
+        plat1.cell(IVec2::new(0, 0)).tile().0,
+        6,
+        "plat1 is read and written"
+    );
+    let walls = shown.layer(LayerId(1)).unwrap().as_tile_layer().unwrap();
+    assert_eq!(walls.cells().count(), 0);
+
+    let seed = editor.document(doc).unwrap().automap().unwrap().seed;
+    apply(
+        &mut editor,
+        Intent::EditLive {
+            doc,
+            edit: LiveEdit::Reroll,
+        },
+    );
+    assert_ne!(editor.document(doc).unwrap().automap().unwrap().seed, seed);
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert_eq!(editor.document(doc).unwrap().automap().unwrap().seed, seed);
+}
+
+#[test]
+fn live_automap_started_right_after_automap_keeps_the_map_before_that_run() {
+    let (scratch, map) = folder_with_rules("bt-editor-live-after-run", 6);
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(&mut editor, Intent::Run(ActionId::AutoMap));
+    assert_eq!(top(&editor, doc), "6 6 6\n6 6 6");
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    assert_eq!(
+        top(&editor, doc),
+        ". . .\n. . .",
+        "what was painted is the map before"
+    );
+    assert_eq!(shown_top(&editor, doc), "6 6 6\n6 6 6");
 }

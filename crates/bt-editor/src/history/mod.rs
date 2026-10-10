@@ -16,5 +16,5 @@ mod tests;
 pub(crate) use gesture::Gesture;
 
 pub use history::{DEFAULT_HISTORY_LIMIT, History, HistoryEntry};
-pub use transaction::{AssetChange, MergeKey, SelectionChange, Transaction};
+pub use transaction::{AssetChange, AutoMapChange, MergeKey, SelectionChange, Transaction};
 pub use tx::Tx;

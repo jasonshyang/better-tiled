@@ -34,7 +34,7 @@ pub use actions::{
     ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
     Modifiers, PaletteEntry, PaletteTarget, tool_action,
 };
-pub use automap::{AutoMapRules, LastRun, RulesJob, RulesLoaded};
+pub use automap::{AutoMapRules, LastRun, LiveEdit, RulesJob, RulesLoaded};
 pub use document::{
     Document, DocumentId, Documents, Selection, TilesetEditing, TilesetMode, ViewState, ViewToggles,
 };

@@ -337,6 +337,10 @@ action_table! {
         .on(Document)
         .keys(&[plain('h')])
         .toggle(),
+    /// Show what was painted in place of AutoMap layers' result.
+    ShowPainted => ActionSpec::new(ActionId::ShowPainted, "show_painted", "Show What I Painted", "view automap layers live result rules")
+        .on(Map)
+        .toggle(),
     /// The project's classes and enums.
     CustomTypesEditor => ActionSpec::new(ActionId::CustomTypesEditor, "custom_types_editor", "Custom Types Editor", "classes enums project property types")
         .on(Document),
@@ -386,6 +390,10 @@ action_table! {
     AutoMap => ActionSpec::new(ActionId::AutoMap, "automap", "AutoMap", "rules automapping run")
         .on(Map)
         .keys(&[cmd('m')]),
+    /// Keep the rules' result apart from what was painted, made again after every change.
+    LiveAutoMap => ActionSpec::new(ActionId::LiveAutoMap, "live_automap", "Live AutoMap", "automap layers rules while drawing non-destructive")
+        .on(Map)
+        .toggle(),
     /// Add a tileset file to the map.
     AddExternalTileset => ActionSpec::new(ActionId::AddExternalTileset, "add_external_tileset", "Add External Tileset…", "tsx file")
         .on(Map),

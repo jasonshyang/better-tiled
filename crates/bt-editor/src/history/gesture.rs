@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use crate::document::{DocumentId, Selection};
 use crate::editor::Editor;
 use crate::error::EditError;
-use crate::history::{AssetChange, SelectionChange, Transaction, Tx};
+use crate::history::{AssetChange, AutoMapChange, SelectionChange, Transaction, Tx};
 use crate::store::{AssetId, Root};
 
 /// A gesture under way.
@@ -53,14 +53,15 @@ impl Editor {
         f: impl FnOnce(&mut Tx<'_>) -> Result<R, E>,
     ) -> Result<R, E> {
         let doc = self.gesture.as_ref().ok_or(EditError::NoGesture)?.document;
-        let selection = self
+        let document = self
             .documents
             .get(doc)
-            .ok_or(EditError::NoSuchDocument(doc))?
-            .selection
-            .clone();
+            .ok_or(EditError::NoSuchDocument(doc))?;
+        let selection = document.selection.clone();
+        // A gesture paints; it leaves the AutoMap layers as they are.
+        let automap = document.automap.clone();
         let objects_before = selection.objects.clone();
-        let mut tx = Tx::new(&self.store, selection);
+        let mut tx = Tx::new(&self.store, selection, automap);
         let result = f(&mut tx)?;
         let mut after_selection = tx.selection.clone();
         let keeps_carry = tx.keeps_carry;
@@ -121,12 +122,17 @@ impl Editor {
             before: gesture.selection,
             after: document.selection.clone(),
         };
+        let automap = AutoMapChange {
+            before: document.automap.clone(),
+            after: document.automap.clone(),
+        };
         document.history.record(
             Transaction {
                 label: gesture.label,
                 merge_key: None,
                 document: gesture.document,
                 selection,
+                automap,
                 changes,
             },
             false,

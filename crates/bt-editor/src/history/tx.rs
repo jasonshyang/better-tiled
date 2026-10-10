@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use bt_automap::layers::Setup;
 use bt_core::{Map, Project, Tileset};
 
 use crate::document::Selection;
@@ -18,16 +19,23 @@ pub struct Tx<'s> {
     pub(crate) working: BTreeMap<AssetId, Root>,
     /// The document's selection; the closure may change it.
     pub selection: Selection,
+    /// The document's AutoMap layers; the closure may change them.
+    pub automap: Option<Setup>,
     /// The closure changed the carried tiles: the carry goes on. Any other change lets them go.
     pub(crate) keeps_carry: bool,
 }
 
 impl<'s> Tx<'s> {
-    pub(crate) fn new(store: &'s AssetStore, selection: Selection) -> Tx<'s> {
+    pub(crate) fn new(
+        store: &'s AssetStore,
+        selection: Selection,
+        automap: Option<Setup>,
+    ) -> Tx<'s> {
         Tx {
             store,
             working: BTreeMap::new(),
             selection,
+            automap,
             keeps_carry: false,
         }
     }

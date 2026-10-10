@@ -173,6 +173,11 @@ impl Editor {
                 }
             }
             ActionId::CropToSelection if !has_tiles => Enabled::Disabled(None),
+            ActionId::ShowPainted if here.document.is_none_or(|d| d.automap().is_none()) => {
+                Enabled::Disabled(Some(
+                    "Live AutoMap is off: what is shown is what was painted".to_owned(),
+                ))
+            }
             ActionId::ResizeMap => match here.map.and_then(crate::map_commands::resize_refusal) {
                 Some(reason) => Enabled::Disabled(Some(reason)),
                 None => Enabled::Enabled,
@@ -210,6 +215,12 @@ impl Editor {
         match id {
             ActionId::ShowGrid => Some(view.grid),
             ActionId::HighlightCurrentLayer => Some(view.highlight_current_layer),
+            ActionId::ShowPainted => Some(view.show_painted),
+            ActionId::LiveAutoMap => Some(
+                self.situation()
+                    .document
+                    .is_some_and(|d| d.automap().is_some()),
+            ),
             ActionId::RandomMode => Some(self.tools.random()),
             ActionId::SnapNone => Some(self.settings.behaviour.snapping == Snapping::None),
             ActionId::SnapToGrid => Some(self.settings.behaviour.snapping == Snapping::Grid),

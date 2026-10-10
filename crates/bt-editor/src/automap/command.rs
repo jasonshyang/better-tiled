@@ -77,12 +77,18 @@ impl Editor {
         self.automap.seed = Rng::new(seed).next_u64();
         self.add_rule_tilesets(asset, &report);
         let notice = run_notice(&rules, &before, &report);
+        let after = self
+            .store
+            .map(asset)
+            .cloned()
+            .unwrap_or_else(|| Arc::clone(&before));
         if let Some(entry) = self.automap.maps.get_mut(&asset) {
             entry.last_run = Some(LastRun {
                 rules,
                 area,
                 seed,
                 before,
+                after,
                 report,
             });
         }

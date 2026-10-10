@@ -1,6 +1,8 @@
 //! A transaction: one undoable change, possibly to several assets at once, with the selection
 //! before and after.
 
+use bt_automap::layers::Setup;
+
 use crate::document::{DocumentId, Selection};
 use crate::store::{AssetId, Root};
 
@@ -33,6 +35,13 @@ pub struct SelectionChange {
     pub(crate) after: Selection,
 }
 
+/// The document's AutoMap layers before and after a transaction.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AutoMapChange {
+    pub(crate) before: Option<Setup>,
+    pub(crate) after: Option<Setup>,
+}
+
 /// One undoable change.
 #[derive(Clone, Debug)]
 pub struct Transaction {
@@ -40,6 +49,7 @@ pub struct Transaction {
     pub(crate) merge_key: Option<MergeKey>,
     pub(crate) document: DocumentId,
     pub(crate) selection: SelectionChange,
+    pub(crate) automap: AutoMapChange,
     pub(crate) changes: Vec<AssetChange>,
 }
 

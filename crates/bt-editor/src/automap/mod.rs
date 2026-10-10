@@ -4,9 +4,11 @@
 
 mod command;
 mod job;
+mod live;
 mod reading;
 mod rules;
 
 pub use job::{RulesJob, RulesLoaded};
+pub use live::LiveEdit;
 pub(crate) use rules::AutoMapState;
 pub use rules::{AutoMapRules, LastRun};

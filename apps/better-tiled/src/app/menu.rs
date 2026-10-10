@@ -66,6 +66,7 @@ const MENUS: [Menu; 7] = [
             Separator,
             Action(ActionId::ShowGrid),
             Action(ActionId::HighlightCurrentLayer),
+            Action(ActionId::ShowPainted),
             Submenu(
                 "Snapping",
                 &[
@@ -93,6 +94,7 @@ const MENUS: [Menu; 7] = [
             Action(ActionId::AddExternalTileset),
             Separator,
             Action(ActionId::AutoMap),
+            Action(ActionId::LiveAutoMap),
             Separator,
             Action(ActionId::MapProperties),
         ],

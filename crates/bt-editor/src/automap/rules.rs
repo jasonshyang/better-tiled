@@ -9,6 +9,8 @@ use std::sync::Arc;
 use bt_automap::{Area, Report, RuleSet};
 use bt_core::{Map, Project};
 
+use super::live::LiveResult;
+use crate::document::DocumentId;
 use crate::store::AssetId;
 use crate::watch::Found;
 
@@ -26,6 +28,8 @@ pub(crate) struct AutoMapState {
     pub(crate) next_read: u64,
     /// The project whose custom types the rules were last checked against.
     pub(crate) types_seen: Option<Arc<Project>>,
+    /// AutoMap layers' result of each document they are on in.
+    pub(crate) live: HashMap<DocumentId, LiveResult>,
 }
 
 impl Default for AutoMapState {
@@ -35,6 +39,7 @@ impl Default for AutoMapState {
             seed: FIRST_SEED,
             next_read: 1,
             types_seen: None,
+            live: HashMap::new(),
         }
     }
 }
@@ -54,6 +59,9 @@ pub struct AutoMapRules {
     pub(crate) files: Vec<ReadFile>,
     /// A run asked for while the rules were being read: it runs when they arrive.
     pub(crate) waiting: Option<Area>,
+    /// AutoMap layers asked to start while the rules were being read: they start when the
+    /// rules arrive.
+    pub(crate) waiting_start: bool,
     /// The last run.
     pub(crate) last_run: Option<LastRun>,
 }
@@ -97,6 +105,8 @@ pub struct LastRun {
     pub seed: u64,
     /// The map before the run.
     pub before: Arc<Map>,
+    /// The map right after it.
+    pub after: Arc<Map>,
     /// What the run did.
     pub report: Report,
 }

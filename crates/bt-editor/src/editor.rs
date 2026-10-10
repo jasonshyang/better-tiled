@@ -329,6 +329,7 @@ impl Editor {
             Intent::Recoverable(orphans) => self.offer_recovery(orphans),
             Intent::Observed(observations) => self.observe(observations),
             Intent::RulesLoaded(loaded) => self.finish_reading_rules(*loaded),
+            Intent::EditLive { doc, edit } => self.edit_live(doc, edit),
             Intent::ChangeSettings(settings) => self.change_settings(*settings),
             Intent::Tick { now_ms } => self.tick(now_ms),
         };
@@ -337,6 +338,7 @@ impl Editor {
         {
             self.follow_document(doc);
         }
+        self.sync_live();
         effects
     }
 
@@ -603,6 +605,7 @@ impl Editor {
             view: ViewToggles::default(),
             tileset,
             inspecting: Inspecting::default(),
+            automap: None,
         });
         id
     }
