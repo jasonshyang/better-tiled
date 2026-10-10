@@ -126,6 +126,17 @@ fn the_panel_follows_what_was_chosen_last() {
     );
     editor.apply(Intent::StopEditingTileset { doc });
     assert_eq!(editor.inspected(doc), Some(Inspected::Objects(Vec::new())));
+
+    // Select All and Invert Selection show the objects they select, as Tiled's
+    // `MapDocument::setSelectedObjects` makes one of them current.
+    editor.apply(Intent::Run(ActionId::MapProperties));
+    editor.apply(Intent::Run(ActionId::SelectAll));
+    let all = vec![ObjectId(1), ObjectId(2), ObjectId(3)];
+    assert_eq!(editor.inspected(doc), Some(Inspected::Objects(all.clone())));
+    editor.apply(Intent::Run(ActionId::InvertSelection));
+    editor.apply(Intent::Run(ActionId::MapProperties));
+    editor.apply(Intent::Run(ActionId::InvertSelection));
+    assert_eq!(editor.inspected(doc), Some(Inspected::Objects(all)));
 }
 
 #[test]

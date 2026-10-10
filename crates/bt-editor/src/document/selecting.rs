@@ -182,11 +182,16 @@ impl Editor {
     }
 
     /// Changes a document's selection outside any transaction; carried tiles are let go when
-    /// the selected cells are no longer theirs.
+    /// the selected cells are no longer theirs, and objects newly selected become what the
+    /// Properties panel inspects, as a transaction's do.
     fn change_selection(&mut self, doc: DocumentId, change: impl FnOnce(&mut Selection)) {
         if let Some(document) = self.documents.get_mut(doc) {
+            let objects_before = document.selection.objects.clone();
             change(&mut document.selection);
             document.selection.drop_stale_carry();
+            if document.selection.objects != objects_before {
+                document.inspect_selected_objects();
+            }
         }
     }
 
