@@ -37,7 +37,7 @@ use anchor::{
     Anchor, AnchorIndex, MatchArea, ScanKey, anchor_candidates, anchored_positions, choose_anchors,
 };
 use apply::{OverlapState, Pending};
-use bind::TilesetBinding;
+pub(crate) use bind::{TilesetBinding, find_layer, is_tiles};
 use matching::{Border, BoundSet, Reader};
 use objects::PlacedGroup;
 use targets::{Targets, refused_bindings};

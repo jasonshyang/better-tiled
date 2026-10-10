@@ -4,10 +4,10 @@
 
 mod report;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_core::{CustomTypes, Map};
+use bt_core::{CustomTypes, Map, TilesetRef};
 
 use crate::problem::Problem;
 use crate::rulemap::{CompileContext, MatchTypeCache, RuleMap, TilesetTable, compile_rule_map};
@@ -22,6 +22,7 @@ pub struct RuleSet {
     pub(crate) match_types: MatchTypeCache,
     pub(crate) types: Arc<CustomTypes>,
     problems: Vec<Problem>,
+    rules_file: Option<PathBuf>,
 }
 
 impl RuleSet {
@@ -50,6 +51,17 @@ impl RuleSet {
     pub fn custom_types(&self) -> &Arc<CustomTypes> {
         &self.types
     }
+
+    /// The rules file the set was loaded from, if it was.
+    pub fn rules_file(&self) -> Option<&Path> {
+        self.rules_file.as_deref()
+    }
+
+    /// The tileset the rules number `index` ([`TableTile::tileset`](crate::TableTile)), as the
+    /// first rule map using it refers to it.
+    pub fn tileset(&self, index: usize) -> Option<&TilesetRef> {
+        self.table.get(index).map(|entry| &entry.reference)
+    }
 }
 
 /// A rule map to compile, with the problems found reading it.
@@ -67,6 +79,7 @@ pub struct RuleSetBuilder {
     types: Arc<CustomTypes>,
     entries: Vec<Entry>,
     problems: Vec<Problem>,
+    rules_file: Option<PathBuf>,
 }
 
 impl RuleSetBuilder {
@@ -93,6 +106,12 @@ impl RuleSetBuilder {
             map,
             problems,
         });
+        self
+    }
+
+    /// The rules file the rule maps were listed in.
+    pub(crate) fn rules_file(mut self, path: PathBuf) -> RuleSetBuilder {
+        self.rules_file = Some(path);
         self
     }
 
@@ -125,6 +144,7 @@ impl RuleSetBuilder {
             match_types,
             types: self.types,
             problems: self.problems,
+            rules_file: self.rules_file,
         }
     }
 }

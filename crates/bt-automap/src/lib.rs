@@ -8,22 +8,29 @@
 //! Tiled's contributors, licensed under the GNU GPL version 2 or later and used here under
 //! version 3 or later. `docs/design/08-automap.md` is the design; its "As built" section lists
 //! every way the crate departs from Tiled and why.
+//!
+//! Compiling and running work on maps in memory ([`RuleSet::builder`], [`RuleSet::run`]); the
+//! [`files`] module is the only one that reads files.
 
+mod analysis;
 mod bx;
 mod cell_set;
 mod engine;
+mod error;
+pub mod files;
 mod object_cells;
 mod observer;
 mod problem;
 mod rng;
 mod rule_ref;
 mod rulemap;
-#[expect(dead_code, reason = "the files, which come next, use the problems")]
 mod rules;
 
+pub use analysis::{MissingLayer, TilesetCopy};
 pub use engine::{
     Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
 };
+pub use error::Error;
 pub use observer::{Attempt, Check, Condition, NoObserver, Observer, Outcome, Write, Writer};
 pub use problem::{Problem, ProblemKind, Severity};
 pub use rule_ref::RuleRef;

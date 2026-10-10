@@ -28,7 +28,7 @@ use crate::problem::{Problem, ProblemKind};
 
 pub(crate) use inputs::InputSet;
 pub use inputs::MatchCell;
-pub(crate) use match_type::MatchTypeCache;
+pub(crate) use match_type::{MatchTypeCache, resolve_match_type};
 pub(crate) use options::{MapOptions, RuleOptions};
 pub(crate) use outputs::OutputSet;
 pub(crate) use rule::{Alternative, Rule};
