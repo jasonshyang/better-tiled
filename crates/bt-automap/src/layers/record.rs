@@ -8,12 +8,15 @@
 //! back.
 
 use std::collections::{BTreeMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bt_core::{Cell, Layer, LayerId, LayerKind, Map, ObjectId, PlacedCell, TileLayer, TilesetSlot};
 use bt_project::paths::tileset_key;
-use bt_project::{AutoMapRecord, BindingRecord, PaintedRecord, RowCell, RunRecord, checksum, rows};
+use bt_project::{
+    AutoMapRecord, BindingRecord, PaintedRecord, ProjectFile, RowCell, RunRecord, checksum, paths,
+    rows,
+};
 use glam::IVec2;
 
 use super::auto_layers::AutoLayers;
@@ -85,6 +88,26 @@ pub fn painted_record(setup: &Setup, rules: String, layers: &AutoLayers) -> Auto
             .then_some(painted.next_object_id),
         unknown: BTreeMap::new(),
     }
+}
+
+/// The AutoMap layers the project file keeps for the map at `map_path` (absolute), rebuilt on
+/// `saved`, the map as its file holds it; `None` when no project file keeps any for it. The
+/// project file is found upward from the map, stopping below `home` (`09-project-file.md`, §3).
+pub fn read_from_project(
+    map_path: &Path,
+    home: Option<&Path>,
+    saved: &Map,
+) -> Result<Option<Restored>, bt_project::Error> {
+    let Some(file) = ProjectFile::find(map_path, home)? else {
+        return Ok(None);
+    };
+    let document = ProjectFile::load(&file)?;
+    let key = paths::key(&file, map_path)?;
+    let Some(record) = document.automap(&key) else {
+        return Ok(None);
+    };
+    let rules = paths::resolve(&file, &record.rules);
+    Ok(Some(restore(record, rules, saved)))
 }
 
 /// The painted map rebuilt from `saved` (the map as its file holds it: the rules' result) and

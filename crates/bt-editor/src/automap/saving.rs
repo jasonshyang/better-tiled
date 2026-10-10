@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use bt_automap::layers::{AutoLayers, Restored, painted_record, restore};
+use bt_automap::layers::{AutoLayers, Restored, painted_record};
 use bt_core::Map;
 use bt_project::{AutoMapRecord, EntryPlace, ProjectFile, paths};
 
@@ -184,14 +184,5 @@ pub(crate) fn read_layers(
     home: Option<&Path>,
     saved: &Map,
 ) -> Result<Option<Restored>, String> {
-    let Some(file) = ProjectFile::find(map_path, home).map_err(|e| e.to_string())? else {
-        return Ok(None);
-    };
-    let document = ProjectFile::load(&file).map_err(|e| e.to_string())?;
-    let key = paths::key(&file, map_path).map_err(|e| e.to_string())?;
-    let Some(record) = document.automap(&key) else {
-        return Ok(None);
-    };
-    let rules = paths::resolve(&file, &record.rules);
-    Ok(Some(restore(record, rules, saved)))
+    bt_automap::layers::read_from_project(map_path, home, saved).map_err(|e| e.to_string())
 }

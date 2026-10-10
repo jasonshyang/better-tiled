@@ -15,6 +15,6 @@ mod setup;
 
 pub use auto_layers::AutoLayers;
 pub use change::MapChange;
-pub use record::{Restored, painted_record, restore};
+pub use record::{Restored, painted_record, read_from_project, restore};
 pub use rule_layers::RuleLayers;
 pub use setup::Setup;

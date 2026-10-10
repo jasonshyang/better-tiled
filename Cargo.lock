@@ -558,12 +558,14 @@ name = "bt"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bt-automap",
  "bt-core",
  "bt-script",
  "bt-test-data",
  "bt-tmx",
  "bt-utils",
  "clap",
+ "glam",
  "serde_json",
 ]
 

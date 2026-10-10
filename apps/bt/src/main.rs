@@ -8,6 +8,7 @@ mod cli;
 mod exit;
 #[cfg(test)]
 mod guide_tests;
+mod load;
 mod run;
 
 use std::io::Write;

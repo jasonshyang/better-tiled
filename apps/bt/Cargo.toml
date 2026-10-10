@@ -14,11 +14,14 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+# A map's AutoMap layers, read back from its project file when it is loaded.
+bt-automap.workspace = true
 bt-core.workspace = true
 bt-script.workspace = true
 bt-tmx.workspace = true
 bt-utils.workspace = true
 clap = { workspace = true, features = ["derive"] }
+glam.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
