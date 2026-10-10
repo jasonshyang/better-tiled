@@ -5,13 +5,13 @@
 
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use bt_core::{Color, Map};
+use bt_core::{Color, LayerId, Map};
 use bt_image::ImageStore;
 use glam::{DVec2, UVec2};
 
 use crate::compositor::OFFSCREEN;
 use crate::error::RenderError;
-use crate::input::{Camera, FrameInput, ObjectStyle};
+use crate::input::{Camera, FrameInput, LayerVisibility, ObjectStyle, PreviewTile};
 use crate::renderer::MapRenderer;
 use crate::supply::ImageSupply;
 use crate::vector::VectorItem;
@@ -116,7 +116,25 @@ pub struct Render {
     background: Option<Color>,
     vectors: Arc<[VectorItem]>,
     objects: ObjectStyle,
+    layers: LayerVisibility,
+    previews: Option<Previews>,
+    parallax: bool,
+    view: Option<View>,
     band_side: Option<u32>,
+}
+
+/// Preview tiles and the layer they are drawn above.
+#[derive(Clone, Debug)]
+struct Previews {
+    layer: LayerId,
+    tiles: Arc<[PreviewTile]>,
+}
+
+/// A picture of part of the world rather than the whole map.
+#[derive(Copy, Clone, Debug)]
+struct View {
+    origin: DVec2,
+    size: UVec2,
 }
 
 impl Render {
@@ -129,8 +147,41 @@ impl Render {
             background: None,
             vectors: Arc::from(Vec::new()),
             objects: ObjectStyle::default(),
+            layers: LayerVisibility::default(),
+            previews: None,
+            parallax: false,
+            view: None,
             band_side: None,
         }
+    }
+
+    /// A picture of `size` pixels with the world point `origin` at its top-left, rather than of
+    /// the map's bounding rectangle.
+    pub fn view(mut self, origin: DVec2, size: UVec2) -> Render {
+        self.view = Some(View {
+            origin,
+            size: size.max(UVec2::ONE),
+        });
+        self
+    }
+
+    /// The view switches over the layers (highlight, layers hidden in the view).
+    pub fn layers(mut self, layers: LayerVisibility) -> Render {
+        self.layers = layers;
+        self
+    }
+
+    /// Preview tiles drawn above `layer`.
+    pub fn previews(mut self, layer: LayerId, tiles: Arc<[PreviewTile]>) -> Render {
+        self.previews = Some(Previews { layer, tiles });
+        self
+    }
+
+    /// Whether parallax factors move layers with the view (off by default, as in Tiled's Export
+    /// as Image).
+    pub fn parallax(mut self, on: bool) -> Render {
+        self.parallax = on;
+        self
     }
 
     /// Picture pixels per world pixel.
@@ -171,6 +222,9 @@ impl Render {
 
     /// The picture's size.
     pub fn size(&self) -> UVec2 {
+        if let Some(view) = self.view {
+            return view.size;
+        }
         let bounds = self.map.bounding_rect();
         (DVec2::new(f64::from(bounds.w), f64::from(bounds.h)) * self.scale)
             .round()
@@ -180,6 +234,9 @@ impl Render {
 
     /// The world point at the picture's top-left: pixel `p` shows `origin + p / scale`.
     pub fn origin(&self) -> DVec2 {
+        if let Some(view) = self.view {
+            return view.origin;
+        }
         let scale = self.scale.max(1e-9);
         (self.map.bounding_rect().min().as_dvec2() * scale).round() / scale
     }
@@ -252,11 +309,16 @@ impl Render {
         camera: Camera,
         size: UVec2,
     ) -> Result<Vec<u8>, RenderError> {
-        let input = FrameInput::new(Arc::clone(&self.map), camera, size)
+        let mut input = FrameInput::new(Arc::clone(&self.map), camera, size)
             .time_ms(self.time_ms)
             .vectors(Arc::clone(&self.vectors))
             .objects(self.objects.clone())
+            .layers(self.layers.clone())
+            .parallax(self.parallax)
             .background(self.background);
+        if let Some(previews) = &self.previews {
+            input = input.previews(previews.layer, Arc::clone(&previews.tiles));
+        }
         // Everything the frame needs is asked for, waited for, then drawn.
         renderer.prepare(images, std::slice::from_ref(&input))?;
         renderer.wait_for_images(images);

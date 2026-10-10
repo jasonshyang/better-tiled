@@ -95,37 +95,47 @@ pub(crate) fn drawn_anchor(geometry: &MapGeometry, at: IVec2) -> DVec2 {
     }
 }
 
-/// The size an image is drawn at in a box, and where in the box: stretched to it, or scaled to
-/// fit and centred.
-struct Fitted {
-    size: DVec2,
-    inset: DVec2,
-    scale: DVec2,
+/// Where Tiled's `CellRenderer` draws a tile image in a target box: scaled to the box (uniformly
+/// for `PreserveAspectFit`) about the box's centre, moved by the tile offset scaled the same way,
+/// and on square grids turned a quarter for `D` about a centre moved by half the difference of
+/// the box's sides, so the image stays anchored at the box's bottom-left. The result is the
+/// quad's rectangle as the shader draws it (its sides swapped for `D`), with the flags and the
+/// hexagonal turn.
+struct Placed {
+    dst: DRect,
+    transform: CellTransform,
 }
 
-fn fitted(image: DVec2, target: DVec2, fill_mode: FillMode) -> Fitted {
-    let scale = target / image.max(DVec2::ONE);
-    match fill_mode {
-        FillMode::Stretch => Fitted {
-            size: target,
-            inset: DVec2::ZERO,
-            scale,
-        },
-        FillMode::PreserveAspectFit => {
-            let uniform = scale.x.min(scale.y);
-            let size = image.max(DVec2::ONE) * uniform;
-            Fitted {
-                size,
-                inset: (target - size) * 0.5,
-                scale: DVec2::splat(uniform),
-            }
-        }
+fn placed(target: DRect, tileset: &Tileset, cell: Cell, orientation: Orientation) -> Placed {
+    let image = tileset
+        .tile_pixel_size(cell.tile())
+        .as_dvec2()
+        .max(DVec2::ONE);
+    let size = target.size();
+    let mut scale = size / image;
+    if tileset.fill_mode == FillMode::PreserveAspectFit {
+        scale = DVec2::splat(scale.x.min(scale.y));
+    }
+    let drawn = image * scale;
+    let mut center = (target.min + target.max) * 0.5 + tileset.tile_offset.as_dvec2() * scale;
+    let transform = cell_transform(cell.flip(), orientation);
+    let quad = if transform.swap {
+        let half_difference = (size.y - size.x) * 0.5;
+        center += DVec2::splat(half_difference);
+        DVec2::new(drawn.y, drawn.x)
+    } else {
+        drawn
+    };
+    Placed {
+        dst: DRect::from_min_size(center - quad * 0.5, quad),
+        transform,
     }
 }
 
-/// A cell on a tile layer (or a preview): the image's bottom-left at the cell's anchor, at the
-/// tileset's render size and fill mode, moved by its tile offset. `sprite` is `None` when the
-/// tile cannot be drawn: Tiled's marker, the size of a map cell, takes its place.
+/// A cell on a tile layer (or a preview): Tiled's `CellRenderer` with the target box at the
+/// cell's anchor, the map's cell for the `Grid` render size or the tile's own size otherwise.
+/// `sprite` is `None` when the tile cannot be drawn: Tiled's marker, the size of a map cell,
+/// takes its place.
 pub(crate) fn cell_instance(
     geometry: &MapGeometry,
     tileset: Option<&Tileset>,
@@ -150,39 +160,29 @@ pub(crate) fn cell_instance(
     let Some(sprite) = sprite else {
         return missing();
     };
-    let image = tileset
-        .tile_pixel_size(cell.tile())
-        .as_dvec2()
-        .max(DVec2::ONE);
-    let target = match tileset.tile_render_size {
-        TileRenderSize::Tile => image,
+    let size = match tileset.tile_render_size {
+        TileRenderSize::Tile => tileset
+            .tile_pixel_size(cell.tile())
+            .as_dvec2()
+            .max(DVec2::ONE),
         TileRenderSize::Grid => grid,
     };
-    let fit = fitted(image, target, tileset.fill_mode);
-    let transform = cell_transform(cell.flip(), geometry.orientation);
-    let quad = if transform.swap {
-        DVec2::new(fit.size.y, fit.size.x)
-    } else {
-        fit.size
-    };
-    let offset = tileset.tile_offset.as_dvec2() * fit.scale;
-    let min = DVec2::new(
-        anchor.x + offset.x + fit.inset.x,
-        anchor.y - quad.y + offset.y - fit.inset.y,
-    );
+    let target = DRect::from_min_size(DVec2::new(anchor.x, anchor.y - size.y), size);
+    let placed = placed(target, tileset, cell, geometry.orientation);
     Instance {
-        dst: rect_array(DRect::from_min_size(min, quad)),
-        pivot_rot: [0.0, 0.0, 0.0, transform.spin],
+        dst: rect_array(placed.dst),
+        pivot_rot: [0.0, 0.0, 0.0, placed.transform.spin],
         sprite,
-        flags: transform.flags,
+        flags: placed.transform.flags,
         color: OPAQUE,
         pad: 0,
     }
 }
 
-/// A tile object: drawn upright at its projected position with its size in world pixels, the
-/// image at the bottom-left of its box as on tile layers, turned clockwise about its alignment
-/// origin. `sprite` is `None` when the tile cannot be drawn: the marker covers the object's box.
+/// A tile object: drawn upright at its projected position, its box (its size, or the tile's
+/// when it has none) placed by its alignment, the image drawn in the box as on tile layers, and
+/// the whole turned clockwise about the alignment origin. `sprite` is `None` when the tile cannot
+/// be drawn: the marker covers the object's box.
 pub(crate) fn object_instance(
     geometry: &MapGeometry,
     tileset: Option<&Tileset>,
@@ -196,8 +196,9 @@ pub(crate) fn object_instance(
     let rotation = object.rotation.to_radians() as f32;
     let fallback = Tileset::default();
     let alignment = geometry.object_alignment(Some(tileset.unwrap_or(&fallback)));
+    let sized = object.size.x > 0.0 && object.size.y > 0.0;
     let missing = || {
-        let size = if object.size.x > 0.0 && object.size.y > 0.0 {
+        let size = if sized {
             object.size
         } else {
             DVec2::new(
@@ -216,30 +217,26 @@ pub(crate) fn object_instance(
     let Some(sprite) = sprite else {
         return missing();
     };
-    let image = tileset
-        .tile_pixel_size(cell.tile())
-        .as_dvec2()
-        .max(DVec2::ONE);
-    let size = if object.size.x > 0.0 && object.size.y > 0.0 {
+    let size = if sized {
         object.size
     } else {
-        image
+        tileset
+            .tile_pixel_size(cell.tile())
+            .as_dvec2()
+            .max(DVec2::ONE)
     };
-    let fit = fitted(image, size, tileset.fill_mode);
-    let transform = cell_transform(cell.flip(), geometry.orientation);
-    let quad = if transform.swap {
-        DVec2::new(fit.size.y, fit.size.x)
-    } else {
-        fit.size
-    };
-    let min = origin - alignment.origin_fraction() * size
-        + tileset.tile_offset.as_dvec2() * fit.scale
-        + DVec2::new(fit.inset.x, size.y - fit.inset.y - quad.y);
+    let target = DRect::from_min_size(origin - alignment.origin_fraction() * size, size);
+    let placed = placed(target, tileset, cell, geometry.orientation);
     Instance {
-        dst: rect_array(DRect::from_min_size(min, quad)),
-        pivot_rot: [origin.x as f32, origin.y as f32, rotation, transform.spin],
+        dst: rect_array(placed.dst),
+        pivot_rot: [
+            origin.x as f32,
+            origin.y as f32,
+            rotation,
+            placed.transform.spin,
+        ],
         sprite,
-        flags: transform.flags,
+        flags: placed.transform.flags,
         color,
         pad: 0,
     }
@@ -339,6 +336,9 @@ mod tests {
         wide.fill_mode = FillMode::PreserveAspectFit;
         let i = cell_instance(&g, Some(&wide), cell(Flip::empty()), IVec2::ZERO, Some(1));
         assert_eq!(i.dst, [0.0, 16.0 - 8.0 - 4.0, 16.0, 8.0]);
+        // Fitted and transposed: Tiled turns the fitted image about the cell's centre.
+        let i = cell_instance(&g, Some(&wide), cell(Flip::D), IVec2::ZERO, Some(1));
+        assert_eq!(i.dst, [4.0, 0.0, 8.0, 16.0]);
         // No sprite: the marker over the cell.
         let i = cell_instance(&g, Some(&tall), cell(Flip::empty()), IVec2::new(1, 0), None);
         assert_eq!((i.dst, i.flags), ([16.0, 0.0, 16.0, 16.0], MARKER));
