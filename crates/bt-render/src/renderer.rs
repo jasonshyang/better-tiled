@@ -131,7 +131,7 @@ impl MapRenderer {
         self.frame += 1;
         let frame = self.frame;
         self.data.clear();
-        self.impostors.begin_frame();
+        self.impostors.begin_frame(started);
         for view in views {
             for tileset in &view.map.tilesets {
                 self.sprites

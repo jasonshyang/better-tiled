@@ -134,11 +134,14 @@ stays inside the budget. Below 8 device pixels a cell, and below 16 when a view 
   (normal blending, one parallax factor): anything else drawn (an object or image layer, a
   preview, a vector item on a layer, the highlight fade, a blend group) ends the run first, so
   the order of everything stays Tiled's.
-- An impostor is a picture of a **world-aligned square** of a run, 256 texels a side, holding
-  every layer of the run with its offset, opacity and tint, drawn from the chunks' own instances
-  in Tiled's order and clipped to the square. Squares meet exactly, and an oversized tile stacks
-  across a square's edge as Tiled stacks it: the square above holds the part that reaches into
-  it, under that square's upper layers.
+- An impostor is a picture of a **world-aligned square** of a run, holding every layer of the
+  run with its offset, opacity and tint, drawn from the chunks' own instances in Tiled's order
+  and clipped to the square. Squares meet exactly, and an oversized tile stacks across a
+  square's edge as Tiled stacks it: the square above holds the part that reaches into it, under
+  that square's upper layers. A square is at most 128 texels and 64 cells a side, and holds at
+  most about 41,000 cells times layers (64 by 64 cells of ten layers; fewer cells for more
+  layers, never fewer than 8 a side), so drawing one takes a few milliseconds at any zoom, tile
+  size and depth.
 - The resolution is the power of two (device pixels per world pixel) that meets the screen's, so
   an impostor is never blurrier than a direct draw would be, unless the impostor pages cannot
   hold the squares in view, when it steps down. The squares a view needs are bounded by the
@@ -146,15 +149,15 @@ stays inside the budget. Below 8 device pixels a cell, and below 16 when a view 
 - A square is kept while its run's chunks, attributes and tilesets are the ones it was drawn
   from; the run's chunks are held, so an address is never reused while it is compared. An edit
   in a run redraws its squares in view.
-- Squares are drawn, nearest the view's centre first, until 100,000 instances a frame have gone
-  into them (the last square drawn may pass that). A square not drawn yet shows its last
-  picture, or nothing, and the frame reports it pending (`RenderStats::pending_impostors`), so
-  the window asks for another frame and a headless render prepares again until none is left.
+- Squares are drawn, nearest the view's centre first, for 3 ms a frame and at least one. A
+  square not drawn yet shows its last picture, or nothing, and the frame reports it pending
+  (`RenderStats::pending_impostors`), so the window asks for another frame and a headless render
+  prepares again until none is left.
 - Impostors are drawn at the time they were drawn: animations stand still far out.
 
-Squares live in fixed slots of 2048×2048 impostor pages (an array texture the sprite shader
-samples through impostor sprites); a slot is cleared by a sprite pipeline that replaces rather
-than blends. The minimap is a view at impostor zoom.
+Squares live in fixed 128-texel slots of 2048×2048 impostor pages (an array texture the sprite
+shader samples through impostor sprites); a slot is cleared by a sprite pipeline that replaces
+rather than blends. The minimap is a view at impostor zoom.
 
 ### 5.4 Sampling
 
@@ -270,10 +273,19 @@ times and the renderer's stats; it runs on the development machine, not in CI.
 `scripts/budget-map.py` writes the budget map (`target/budget/budget.tmx`): 1000×1000 cells,
 the first of ten layers full and the others half full, from Tiled's desert tileset.
 
-As built, the renderer alone (prepare, encode, paint and the GPU's work, on an M4 Pro at
-2880×1800 device pixels, panning a view width a second) takes at the 95th percentile 6.9 ms at
-1/32, 5.7 ms at 1/16, 4.6 ms at 1/8, 6.6 ms at 1/4 and under 2.7 ms from 1/2 to 64; far out the
-median is under 1 ms, the cost being the squares that come into view.
+As built, measured on an M4 Pro whose display refreshes at 120 Hz, panning a view width a
+second:
+
+- **In the window** (`--bench`, a 904×817-point canvas at 2×), the median time between frames is
+  8.3 ms at every zoom from 1/32 to 64, on the Ancient Ruins pack's example map and on the
+  budget map; the 95th percentile is under 9 ms at most zooms and 9.6 ms at worst. About 0.4 %
+  of frames take two or three refreshes; on nearly all of them the window's own work was under
+  2.5 ms and the renderer's preparation under 2 ms, so the time went outside the app's per-frame
+  work. The window's own work is 0.2 to 2 ms a frame.
+- **The renderer alone** at 2880×1800 device pixels (prepare, encode, paint and the GPU's work)
+  takes at the 95th percentile 8.0 ms at 1/32, 8.7 ms at 1/16, 6.6 ms at 1/8, 6.5 ms at 1/4 and
+  under 2.6 ms from 1/2 to 64; far out the cost is drawing the squares that come into view,
+  spread over the frames at 3 ms each.
 
 ## 12. Tests
 

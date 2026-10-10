@@ -366,7 +366,8 @@ not ready or its picture never came (a locked screen or a hidden window presents
 1/32 to 64, 15 frames to settle and 240 measured at each, a view width a second, and prints
 per zoom the interval between frames (median, 95th percentile, worst), the window's own work,
 the renderer's prepare time and its counts, then the display's rate and how many frames took
-over half again the median; frames faster than any display are reported as not presented. The
+over half again the median; frames faster than any display are reported as not presented, and
+with debug logging each slow frame is logged with the window's own work and the renderer's. The
 `BT_SCREENSHOT_*` hooks come with the tools.
 
 ## 14. Module layout

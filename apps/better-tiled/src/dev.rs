@@ -22,6 +22,8 @@ const WARMUP_FRAMES: usize = 15;
 const MEASURED_FRAMES: usize = 240;
 /// How many frames it takes the bench to pan one view width.
 const FRAMES_PER_VIEW: f64 = 60.0;
+/// A frame slower than this is logged (at debug level) with what it did.
+const SLOW_FRAME: Duration = Duration::from_millis(12);
 /// Frames closer together than this (a 500 Hz display) were not presented.
 const UNPRESENTED_INTERVAL_MS: f64 = 2.0;
 
@@ -235,8 +237,21 @@ impl BenchRun {
         if let Some(last) = self.last_frame
             && self.frame > WARMUP_FRAMES
         {
+            let interval = now - last;
+            if interval > SLOW_FRAME {
+                log::debug!(
+                    "slow frame at zoom {}: {:.2} ms between frames, ours {:.2} ms, last prepare {:.2} ms, {} instances, {} uploaded bytes, {} squares pending",
+                    zoom_label(self.zooms.get(self.level).copied().unwrap_or(1.0)),
+                    millis(interval),
+                    millis(frame.cpu),
+                    millis(frame.stats.prepare_time),
+                    frame.stats.instances,
+                    frame.stats.uploaded_bytes,
+                    frame.stats.pending_impostors
+                );
+            }
             self.samples.push(Sample {
-                interval: now - last,
+                interval,
                 cpu: frame.cpu,
                 stats: frame.stats,
             });

@@ -791,7 +791,8 @@ doc and `13-testing.md` are as built.
 M1 was built on 2026-10-10; `03-rendering.md` and the M1 parts of `05-editor-core.md`,
 `06-application.md` (their §1.1) and `13-testing.md` are as built. Building it changed two
 designs, recorded in `decisions.md`: far zoom draws squares of layer runs instead of a picture
-per chunk, and the macOS quit guard, reviewed, is the workspace's one `unsafe` code.
+per chunk, and the macOS quit guard, reviewed, is the workspace's one `unsafe` code. The window
+keeps 120 Hz at every zoom on a pack's map and on the budget map (`03-rendering.md`, §11).
 
 ## 18. Glossary
 

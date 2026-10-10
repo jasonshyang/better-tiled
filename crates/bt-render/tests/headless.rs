@@ -282,9 +282,9 @@ fn far_out_tile_layers_are_drawn_as_impostors_that_match_the_tiles() {
         .prepare(&mut store, std::slice::from_ref(&frame))
         .unwrap();
     let stats = renderer.prepare(&mut store, &[frame]).unwrap();
-    // The map is 1024 world pixels a side: one square of 256 texels at a quarter.
-    assert_eq!(stats.impostors, 1, "one per square");
-    assert_eq!(stats.instances, 1);
+    // The map is 1024 world pixels a side: four squares of 128 texels at a quarter.
+    assert_eq!(stats.impostors, 4, "one per square");
+    assert_eq!(stats.instances, 4);
     assert_eq!(stats.pending_impostors, 0);
 }
 
@@ -298,11 +298,11 @@ fn far_out_squares_stack_oversized_tiles_across_their_edges_as_tiled_does() {
         .grid(4, 2)
         .build_embedded()
         .unwrap();
-    // At a quarter, a square is 1024 world pixels: 64 cells. A tall tile of the lower layer in
+    // At a quarter, a square is 512 world pixels: 32 cells. A tall tile of the lower layer in
     // the first row of the second square reaches up into the first square, where a tile of the
     // upper layer must stay on top of it.
     let grid = |row: usize, cell: &str| -> String {
-        (0..70)
+        (0..40)
             .map(|y| {
                 if y == row {
                     format!(". {cell} . .")
@@ -313,21 +313,21 @@ fn far_out_squares_stack_oversized_tiles_across_their_edges_as_tiled_does() {
             .collect::<Vec<_>>()
             .join("\n")
     };
-    let map = MapBuilder::new(UVec2::new(16, 16), UVec2::new(4, 70))
+    let map = MapBuilder::new(UVec2::new(16, 16), UVec2::new(4, 40))
         .tileset(ground.tileset.clone())
         .tileset(tall.tileset.clone())
-        .tile_layer("low", &grid(64, "5@1"))
-        .tile_layer("high", &grid(63, "1"))
+        .tile_layer("low", &grid(32, "5@1"))
+        .tile_layer("high", &grid(31, "1"))
         .build()
         .unwrap();
     let picture = Render::of(Arc::new(map)).scale(0.25).run(device).unwrap();
     let high = Atlas::tile_color(bt_core::TileId(1));
     let low = Atlas::tile_color(bt_core::TileId(5));
-    // Row 63 is pixels 252..256, row 64 is 256..260; column 1 is pixels 4..8.
+    // Row 31 is pixels 124..128, row 32 is 128..132; column 1 is pixels 4..8.
     assert_eq!(
-        picture.pixel(6, 254),
+        picture.pixel(6, 126),
         Some(high),
         "the upper layer stays on top"
     );
-    assert_eq!(picture.pixel(6, 258), Some(low), "the tall tile's own cell");
+    assert_eq!(picture.pixel(6, 130), Some(low), "the tall tile's own cell");
 }

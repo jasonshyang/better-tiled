@@ -437,18 +437,20 @@ unchanged must not show up as a change in version control.
 ## 2026-10-10 — Far zoom draws squares of layer runs
 
 **Decided:** far out, a run of tile layers (normal blending, one parallax factor, nothing drawn
-between them) is drawn from pictures of world-aligned squares, 256 texels a side, each holding
-every layer of the run and clipped to its square; a square is kept while its run's chunks,
-attributes and tilesets are the ones it was drawn from; squares are drawn until 100,000
-instances a frame have gone into them; a view of more than 100,000 cells goes far below 16
-device pixels a cell (else below 8).
+between them) is drawn from pictures of world-aligned squares, each holding every layer of the
+run and clipped to its square, at most 128 texels and 64 cells a side and about 41,000 cells
+times layers; a square is kept while its run's chunks, attributes and tilesets are the ones it
+was drawn from; squares are drawn for 3 ms a frame and at least one; a view of more than
+100,000 cells goes far below 16 device pixels a cell (else below 8).
 **Instead of:** a picture per chunk of each layer (`03-rendering.md` as first designed).
 **Why:** on the budget map at a Retina view, pictures per chunk and layer need a screen of
 texture per layer (about 210 MB at 1/16 for ten layers, against 128 MB) and a walk over every
 chunk picture each frame (39,000 at 1/32): 11 to 12 ms a frame. Squares are bounded by the
-screen, not the map: the median far out is under 1 ms and the 95th percentile 6.9 ms at worst.
-Clipping each square to itself, with the parts of oversized tiles that reach into it, keeps
-Tiled's stacking across square edges, which pictures of whole chunk stacks would not.
+screen, not the map, and drawing one by its cells and layers, so the window keeps 120 Hz far
+out. Squares of 256 texels and a budget of 100,000 instances were tried first: one square of
+128 by 128 cells took 8 ms and the window missed frames while panning. Clipping each square to
+itself, with the parts of oversized tiles that reach into it, keeps Tiled's stacking across
+square edges, which pictures of whole chunk stacks would not.
 
 ## 2026-10-10 — The macOS quit guard is the one unsafe code
 

@@ -9,17 +9,19 @@
 //! The resolution is the power of two (device pixels per world pixel) that meets the screen's,
 //! so an impostor is never blurrier than drawing the tiles would be, unless the pages cannot hold
 //! the squares in view, when it steps down. The squares a view shows are bounded by the screen's
-//! area, not the map's. An impostor is valid while its run's chunks, attributes and tilesets are
-//! the ones it was drawn from: the run's chunks are held, so an address is never reused while
-//! it is compared. Squares are drawn, nearest the view's centre first, until [`DRAW_BUDGET`]
-//! instances a frame have gone into them (the last may pass it); until a square is drawn it
-//! shows its last picture, or nothing, and the frame reports it pending.
+//! area, not the map's, and a square's cells and layers together by [`SQUARE_WORK`], so drawing
+//! one takes a bounded time at any zoom, tile size and number of layers.
+//! An impostor is valid while its run's chunks, attributes and tilesets are the ones it was drawn
+//! from: the run's chunks are held, so an address is never reused while it is compared. Squares
+//! are drawn, nearest the view's centre first, for [`DRAW_TIME`] a frame and at least one; until
+//! a square is drawn it shows its last picture, or nothing, and the frame reports it pending.
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use bt_core::{Chunk, LayerId, TileLayer};
 use bt_utils::DRect;
@@ -34,8 +36,18 @@ use crate::sprites::Sprites;
 /// Cells smaller than this on screen (device pixels) are drawn through impostors.
 pub(crate) const IMPOSTOR_CELL_PX: f64 = 8.0;
 
-/// The side of an impostor, in texels.
-pub(crate) const SQUARE_TEXELS: u32 = 256;
+/// The most texels an impostor's side has (a slot's side).
+pub(crate) const SQUARE_TEXELS: u32 = 128;
+
+/// The most cells times layers a square holds: about what one square costs to draw (a few
+/// milliseconds for ten layers of 64 by 64 cells).
+const SQUARE_WORK: f64 = 64.0 * 64.0 * 10.0;
+
+/// The most cells along a square's side.
+const MAX_SQUARE_CELLS: f64 = 64.0;
+
+/// The fewest cells along a square's side, however many layers its run has.
+const MIN_SQUARE_CELLS: f64 = 8.0;
 
 /// The side of an impostor page.
 const PAGE_SIDE: u32 = 2048;
@@ -43,8 +55,8 @@ const PAGE_SIDE: u32 = 2048;
 /// Impostors a page side holds.
 const SQUARES_PER_SIDE: u32 = PAGE_SIDE / SQUARE_TEXELS;
 
-/// The instances a frame draws into impostors before it leaves the rest for the next frame.
-pub(crate) const DRAW_BUDGET: usize = 100_000;
+/// How long a frame spends drawing squares (it draws at least one).
+const DRAW_TIME: Duration = Duration::from_millis(3);
 
 /// The coarsest resolution a run steps down to: 2^-16 device pixels per world pixel.
 const COARSEST_LEVEL: i32 = -16;
@@ -95,16 +107,36 @@ struct Slot {
 }
 
 impl Slot {
-    fn region(self) -> Region {
+    /// The part of the slot a square of `texels` a side takes.
+    fn region(self, texels: u32) -> Region {
         Region {
             page: self.page,
             origin: UVec2::new(
                 (self.index % SQUARES_PER_SIDE) * SQUARE_TEXELS,
                 (self.index / SQUARES_PER_SIDE) * SQUARE_TEXELS,
             ),
-            size: UVec2::splat(SQUARE_TEXELS),
+            size: UVec2::splat(texels.min(SQUARE_TEXELS)),
         }
     }
+
+    /// The slot's number across all pages.
+    fn number(self) -> u32 {
+        self.page * SQUARES_PER_SIDE * SQUARES_PER_SIDE + self.index
+    }
+}
+
+/// How big a run's squares are at a resolution: their side in texels and in world pixels.
+#[derive(Copy, Clone, Debug, PartialEq)]
+struct SquareSize {
+    texels: u32,
+    side: f64,
+}
+
+/// The sprite showing a slot's square of a size.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct SlotSprite {
+    slot: u32,
+    texels: u32,
 }
 
 /// An impostor drawn (or being drawn this frame).
@@ -146,14 +178,14 @@ pub(crate) struct JobLayer {
 pub(crate) struct Impostors {
     array_view: wgpu::TextureView,
     layer_views: Vec<wgpu::TextureView>,
-    slot_sprites: HashMap<u32, u32>,
+    slot_sprites: HashMap<SlotSprite, u32>,
     free: Vec<Slot>,
     entries: HashMap<ImpostorKey, Impostor>,
     runs: HashMap<u64, RunRecord>,
     jobs: Vec<ImpostorJob>,
     job_keys: Vec<ImpostorKey>,
     instances: Vec<Instance>,
-    budget_left: usize,
+    deadline: Instant,
     used_this_frame: usize,
     pending: usize,
 }
@@ -165,11 +197,12 @@ pub(crate) struct RunSources<'s, 'c> {
     pub(crate) frame: u64,
 }
 
-/// A square shown this frame and the slot its picture is in.
+/// A square shown this frame and where its picture is.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct PlacedSquare {
     rect: DRect,
     slot: Slot,
+    texels: u32,
 }
 
 /// What a square already has.
@@ -230,7 +263,7 @@ impl Impostors {
             jobs: Vec::new(),
             job_keys: Vec::new(),
             instances: Vec::new(),
-            budget_left: DRAW_BUDGET,
+            deadline: Instant::now(),
             used_this_frame: 0,
             pending: 0,
         }
@@ -244,9 +277,10 @@ impl Impostors {
         self.layer_views.get(page as usize)
     }
 
-    /// Starts a frame: a fresh drawing budget and no squares used yet.
-    pub(crate) fn begin_frame(&mut self) {
-        self.budget_left = DRAW_BUDGET;
+    /// Starts a frame that began at `started`: squares are drawn until a while after it, and none
+    /// is used yet.
+    pub(crate) fn begin_frame(&mut self, started: Instant) {
+        self.deadline = started + DRAW_TIME;
         self.used_this_frame = 0;
         self.pending = 0;
         self.jobs.clear();
@@ -262,8 +296,14 @@ impl Impostors {
     ) -> Vec<PlacedSquare> {
         let run_key = run_key(run.layers, sources.cx);
         let content = self.record_run(run_key, run.layers, sources);
-        let level = self.level_for(run.view_rect, run.zoom_px);
-        let side = square_side(level);
+        let map = sources.cx.map;
+        let cell_side = (f64::from(map.tile_width) * f64::from(map.tile_height))
+            .sqrt()
+            .max(1.0);
+        let layers = run.layers.len();
+        let level = self.level_for(run.view_rect, run.zoom_px, cell_side, layers);
+        let size = square_size(level, cell_side, layers);
+        let side = size.side;
         let mut squares = squares_in(run.view_rect, side);
         let center = (run.view_rect.min + run.view_rect.max) * 0.5;
         squares.sort_by(|a, b| {
@@ -285,9 +325,11 @@ impl Impostors {
                 slot: entry.slot,
                 valid: entry.content == content && entry.complete,
             });
+            let may_draw = self.jobs.is_empty() || Instant::now() < self.deadline;
             let slot = match existing {
                 Some(existing) if existing.valid => Some(existing.slot),
-                _ if self.budget_left > 0 => self.plan(&key, rect, content, run, sources),
+                // No slot this frame (more squares in view than slots): nothing to wait for.
+                _ if may_draw => self.plan(&key, rect, size.texels, content, run, sources),
                 _ => {
                     self.pending += 1;
                     // A stale picture until the square is drawn again; nothing when there is none.
@@ -295,14 +337,17 @@ impl Impostors {
                 }
             };
             let Some(slot) = slot else {
-                self.pending += 1;
                 continue;
             };
             if let Some(entry) = self.entries.get_mut(&key) {
                 entry.last_used = sources.frame;
             }
             self.used_this_frame += 1;
-            placed.push(PlacedSquare { rect, slot });
+            placed.push(PlacedSquare {
+                rect,
+                slot,
+                texels: size.texels,
+            });
         }
         placed
     }
@@ -315,7 +360,10 @@ impl Impostors {
     ) -> Vec<Instance> {
         placed
             .iter()
-            .map(|square| plain(square.rect, self.sprite_of(square.slot, sprites), [255; 4]))
+            .map(|square| {
+                let sprite = self.sprite_of(square.slot, square.texels, sprites);
+                plain(square.rect, sprite, [255; 4])
+            })
             .collect()
     }
 
@@ -324,6 +372,7 @@ impl Impostors {
         &mut self,
         key: &ImpostorKey,
         rect: DRect,
+        texels: u32,
         content: u64,
         run: &RunView<'_, '_>,
         sources: &mut RunSources<'_, '_>,
@@ -332,7 +381,7 @@ impl Impostors {
             Some(entry) => entry.slot,
             None => self.allocate(sources.frame)?,
         };
-        let scale = f64::from(SQUARE_TEXELS) / (rect.max.x - rect.min.x);
+        let scale = f64::from(texels) / (rect.max.x - rect.min.x);
         let mut layers = Vec::with_capacity(run.layers.len());
         for layer in run.layers {
             let cells = tiles_for_view(&sources.cx.geometry, sources.cx.map, rect, layer.offset());
@@ -351,10 +400,9 @@ impl Impostors {
                     instances: start..end,
                 });
             }
-            self.budget_left = self.budget_left.saturating_sub((end - start) as usize);
         }
         self.jobs.push(ImpostorJob {
-            region: slot.region(),
+            region: slot.region(texels),
             square: rect,
             scale,
             layers,
@@ -388,11 +436,15 @@ impl Impostors {
 
     /// The resolution for a run over `view_rect`: the power of two meeting `zoom_px`, coarser while
     /// its squares would not fit the slots this frame has left.
-    fn level_for(&self, view_rect: DRect, zoom_px: f64) -> i32 {
+    /// A run's squares are as small as their work bound allows, so a coarser resolution helps only
+    /// while it makes them fewer.
+    fn level_for(&self, view_rect: DRect, zoom_px: f64, cell_side: f64, layers: usize) -> i32 {
         let mut level = zoom_px.max(f64::MIN_POSITIVE).log2().ceil() as i32;
         let total = self.free.len() + self.entries.len();
         let left = total.saturating_sub(self.used_this_frame) as u64;
-        while level > COARSEST_LEVEL && square_count(view_rect, square_side(level)) > left {
+        let count =
+            |level: i32| square_count(view_rect, square_size(level, cell_side, layers).side);
+        while level > COARSEST_LEVEL && count(level) > left && count(level - 1) < count(level) {
             level -= 1;
         }
         level
@@ -437,12 +489,15 @@ impl Impostors {
         content
     }
 
-    fn sprite_of(&mut self, slot: Slot, sprites: &mut Sprites) -> u32 {
-        let id = slot.page * SQUARES_PER_SIDE * SQUARES_PER_SIDE + slot.index;
+    fn sprite_of(&mut self, slot: Slot, texels: u32, sprites: &mut Sprites) -> u32 {
+        let key = SlotSprite {
+            slot: slot.number(),
+            texels,
+        };
         *self
             .slot_sprites
-            .entry(id)
-            .or_insert_with(|| sprites.impostor_sprite(slot.region()))
+            .entry(key)
+            .or_insert_with(|| sprites.impostor_sprite(slot.region(texels)))
     }
 
     /// The pictures to draw this frame, with their instances.
@@ -509,9 +564,19 @@ fn hash_params(params: &LayerParams, hasher: &mut DefaultHasher) {
     }
 }
 
-/// The world side of a square at `level` (2^level device pixels per world pixel).
-fn square_side(level: i32) -> f64 {
-    f64::from(SQUARE_TEXELS) / 2f64.powi(level)
+/// The size of a run's squares at `level` (2^level device pixels per world pixel), for cells of
+/// `cell_side` world pixels and `layers` layers: as many cells as [`SQUARE_WORK`] allows, within
+/// a slot, and a whole number of texels a side so the picture's scale is the resolution's.
+fn square_size(level: i32, cell_side: f64, layers: usize) -> SquareSize {
+    let scale = 2f64.powi(level);
+    let cells = (SQUARE_WORK / layers.max(1) as f64)
+        .sqrt()
+        .clamp(MIN_SQUARE_CELLS, MAX_SQUARE_CELLS);
+    let texels = ((cells * cell_side * scale).floor() as u32).clamp(1, SQUARE_TEXELS);
+    SquareSize {
+        texels,
+        side: f64::from(texels) / scale,
+    }
 }
 
 fn square_rect(square: IVec2, side: f64) -> DRect {
@@ -546,8 +611,16 @@ mod tests {
 
     #[test]
     fn squares_tile_the_view_at_the_resolution() {
-        assert_eq!(square_side(0), 256.0);
-        assert_eq!(square_side(-2), 1024.0);
+        // Few layers of large cells: a whole slot at the resolution.
+        let full = square_size(-2, 32.0, 2);
+        assert_eq!((full.texels, full.side), (128, 512.0));
+        // Ten layers of 16-pixel cells far out: 64 cells a side, in fewer texels.
+        let far = square_size(-5, 16.0, 10);
+        assert_eq!((far.texels, far.side), (32, 1024.0));
+        assert_eq!(far.side / 16.0, 64.0);
+        // Many layers: fewer cells, never below the floor.
+        let deep = square_size(-5, 16.0, 1000);
+        assert_eq!(deep.side / 16.0, 8.0);
         let view = DRect::from_min_size(DVec2::new(-10.0, 0.0), DVec2::new(300.0, 256.0));
         let squares = squares_in(view, 256.0);
         assert_eq!(square_count(view, 256.0), 3);
@@ -559,7 +632,9 @@ mod tests {
             square_rect(IVec2::new(-1, 2), 256.0).min,
             DVec2::new(-256.0, 512.0)
         );
-        let slot = Slot { page: 1, index: 9 };
-        assert_eq!(slot.region().origin, UVec2::new(256, 256));
+        let slot = Slot { page: 1, index: 17 };
+        assert_eq!(slot.region(64).origin, UVec2::new(128, 128));
+        assert_eq!(slot.region(64).size, UVec2::splat(64));
+        assert_eq!(slot.number(), 256 + 17);
     }
 }
