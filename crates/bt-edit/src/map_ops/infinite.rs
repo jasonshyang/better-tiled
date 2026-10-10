@@ -52,7 +52,8 @@ pub fn make_finite(map: &mut Map) -> Result<ResizeReport, EditError> {
     }
     let area = used_bounds(map).unwrap_or_else(|| cells_rect(map_size(map).max(UVec2::ONE)));
     let size = area.size().max(IVec2::ONE).as_uvec2();
-    let report = resize_with(map, size, -area.min(), Vec::new(), TileBounds::Finite)?;
+    let offset = IVec2::ZERO.saturating_sub(area.min());
+    let report = resize_with(map, size, offset, Vec::new(), TileBounds::Finite)?;
     map.infinite = false;
     Ok(report)
 }

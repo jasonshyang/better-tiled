@@ -30,7 +30,7 @@ pub fn resize_map(
     offset: IVec2,
     remove_objects_outside: bool,
 ) -> Result<ResizeReport, EditError> {
-    let area = IRect::from_min_size(-offset, cells_rect(size).size());
+    let area = IRect::from_min_size(IVec2::ZERO.saturating_sub(offset), cells_rect(size).size());
     let removed = if remove_objects_outside {
         objects_outside(map, area)
     } else {
@@ -48,7 +48,8 @@ pub fn crop_to(map: &mut Map, rect: IRect) -> Result<ResizeReport, EditError> {
     if rect.is_empty() {
         return Ok(ResizeReport::default());
     }
-    resize_map(map, rect.size().as_uvec2(), -rect.min(), true)
+    let offset = IVec2::ZERO.saturating_sub(rect.min());
+    resize_map(map, rect.size().as_uvec2(), offset, true)
 }
 
 /// Autocrop over every tile layer: the map is cropped to the cells holding tiles on any of them,

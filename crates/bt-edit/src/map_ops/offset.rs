@@ -12,6 +12,7 @@ use glam::{DVec2, IVec2};
 
 use crate::error::EditError;
 use crate::layer_ops::tree::{check_layers, distinct, holds_or_is, is_group};
+use crate::region::TileRegion;
 use crate::report::LayersReport;
 use crate::tile_layers::{cells_rect, map_size};
 
@@ -144,7 +145,8 @@ fn pixel_rect(geometry: &MapGeometry, rect: IRect) -> DRect {
 
 /// `tiles` with its cells shifted, or `None` when nothing changes. Within `bounds` each cell
 /// takes the cell `offset` before it, wrapped into `bounds` on the axes that wrap, or the empty
-/// cell from outside; cells outside `bounds` stay. Without bounds every cell moves.
+/// cell from outside (Tiled's `offsetTiles`); cells outside `bounds` stay. Without bounds every
+/// cell moves.
 fn offset_tiles(
     tiles: &TileLayer,
     offset: IVec2,
@@ -158,19 +160,24 @@ fn offset_tiles(
         }
         return Ok((tiles.cells().next().is_some()).then_some(moved));
     };
+    let shift = Shift {
+        offset,
+        bounds,
+        wrap,
+    };
+    // Tiled visits every cell of the area; only those holding a tile or receiving one change.
+    let mut visits = Vec::new();
+    for placed in tiles.cells().filter(|placed| bounds.contains(placed.at)) {
+        visits.push(placed.at);
+        visits.push(shift.destination(placed.at));
+    }
     let mut moved = tiles.clone();
     let mut changed = false;
-    for to in bounds.points() {
-        if !moved.contains(to) {
+    for to in TileRegion::from_cells(visits).iter() {
+        if !bounds.contains(to) || !moved.contains(to) {
             continue;
         }
-        let mut from = to.saturating_sub(offset);
-        if wrap.x {
-            from.x = wrapped(from.x, bounds.x, bounds.w);
-        }
-        if wrap.y {
-            from.y = wrapped(from.y, bounds.y, bounds.h);
-        }
+        let from = shift.source(to);
         let cell = if bounds.contains(from) {
             tiles.cell(from)
         } else {
@@ -182,10 +189,43 @@ fn offset_tiles(
     Ok(changed.then_some(moved))
 }
 
+/// How cells shift within an area.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct Shift {
+    offset: IVec2,
+    bounds: IRect,
+    wrap: Wrap,
+}
+
+impl Shift {
+    /// The cell whose tile lands at `to`: `offset` before it, wrapped into the area on the axes
+    /// that wrap.
+    fn source(self, to: IVec2) -> IVec2 {
+        self.wrapped(to.saturating_sub(self.offset))
+    }
+
+    /// Where the tile at `from` lands: `offset` after it, wrapped into the area on the axes that
+    /// wrap.
+    fn destination(self, from: IVec2) -> IVec2 {
+        self.wrapped(from.saturating_add(self.offset))
+    }
+
+    fn wrapped(self, mut p: IVec2) -> IVec2 {
+        if self.wrap.x {
+            p.x = wrapped(p.x, self.bounds.x, self.bounds.w);
+        }
+        if self.wrap.y {
+            p.y = wrapped(p.y, self.bounds.y, self.bounds.h);
+        }
+        p
+    }
+}
+
 /// `value` wrapped into `start..start + length` (Tiled's `clampWrap`).
 fn wrapped(value: i32, start: i32, length: i32) -> i32 {
     let length = i64::from(length.max(1));
     let inside = (i64::from(value) - i64::from(start)).rem_euclid(length) + i64::from(start);
+    // Inside the area, which lies in `i32`.
     i32::try_from(inside).unwrap_or(value)
 }
 
@@ -281,6 +321,85 @@ mod tests {
             .unwrap()
             .objects;
         objects.iter().map(|o| o.pos).collect()
+    }
+
+    /// Tiled's `clampWrap`, with C++'s truncating remainder.
+    fn clamp_wrap(value: i32, min: i32, max: i32) -> i32 {
+        let v = value - min;
+        let d = max - min;
+        (if v < 0 { (v + 1) % d + d - 1 } else { v % d }) + min
+    }
+
+    /// Tiled's `offsetTiles` loop: every cell of the area pulls the cell `offset` before it.
+    fn tileds_offset(tiles: &TileLayer, offset: IVec2, bounds: IRect, wrap: Wrap) -> TileLayer {
+        let mut moved = tiles.clone();
+        for to in bounds.points() {
+            if !moved.contains(to) {
+                continue;
+            }
+            let mut from = to - offset;
+            if wrap.x {
+                from.x = clamp_wrap(from.x, bounds.x, bounds.x + bounds.w);
+            }
+            if wrap.y {
+                from.y = clamp_wrap(from.y, bounds.y, bounds.y + bounds.h);
+            }
+            let cell = if bounds.contains(from) {
+                tiles.cell(from)
+            } else {
+                Cell::EMPTY
+            };
+            moved.set_cell(to, cell).unwrap();
+        }
+        moved.prune_empty_chunks();
+        moved
+    }
+
+    #[test]
+    fn shifting_only_the_tiles_that_move_equals_tileds_loop() {
+        let fuzz = bt_test_data::Fuzz::from_env(0x0FF5_E7ED, 400);
+        for case in 0..fuzz.cases {
+            let mut rng = bt_utils::rng::Rng::new(fuzz.case_seed(case));
+            let mut between = |low: i32, high: i32| {
+                low + i32::try_from(rng.below((high - low) as u64).unwrap_or(0)).unwrap_or(0)
+            };
+            let size = UVec2::new(8, 6);
+            let mut tiles = if between(0, 3) == 0 {
+                TileLayer::infinite(size)
+            } else {
+                TileLayer::finite(size)
+            };
+            for _ in 0..between(0, 30) {
+                let at = IVec2::new(between(-4, 12), between(-4, 10));
+                if tiles.contains(at) {
+                    let cell = bt_core::Cell::new(
+                        TilesetSlot::new(0).unwrap(),
+                        TileId(1 + between(0, 5) as u32),
+                    );
+                    tiles.set_cell(at, cell).unwrap();
+                }
+            }
+            let bounds = IRect {
+                x: between(-2, 6),
+                y: between(-2, 5),
+                w: between(1, 9),
+                h: between(1, 7),
+            };
+            let offset = IVec2::new(between(-9, 10), between(-9, 10));
+            let wrap = Wrap {
+                x: between(0, 2) == 0,
+                y: between(0, 2) == 0,
+            };
+            let ours = offset_tiles(&tiles, offset, Some(bounds), wrap)
+                .unwrap()
+                .unwrap_or_else(|| tiles.clone());
+            assert_eq!(
+                ours,
+                tileds_offset(&tiles, offset, bounds, wrap),
+                "case {case} ({}): {bounds:?} by {offset}, {wrap:?}",
+                fuzz.reproduce()
+            );
+        }
     }
 
     #[test]
