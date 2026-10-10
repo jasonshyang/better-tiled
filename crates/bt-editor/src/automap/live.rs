@@ -266,8 +266,17 @@ impl Editor {
         self.automap.saved.retain(|doc, _| on.contains(doc));
         let mut effects = Vec::new();
         for derivation in stale {
-            let layers =
-                AutoLayers::derive(derivation.painted, &derivation.setup, &derivation.rules);
+            let previous = self
+                .automap
+                .live
+                .get(&derivation.doc)
+                .map(|live| &live.layers);
+            let layers = AutoLayers::update(
+                previous,
+                derivation.painted,
+                &derivation.setup,
+                &derivation.rules,
+            );
             if let Some(saved) = self.automap.saved.remove(&derivation.doc)
                 && **layers.result() != *saved
             {

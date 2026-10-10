@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use bt_core::Map;
 
+use super::object_ids::keep_object_ids;
 use super::setup::Setup;
 use crate::engine::RunRequest;
 use crate::problem::Problem;
@@ -41,6 +42,26 @@ impl AutoLayers {
             after,
             reports,
         }
+    }
+
+    /// The result again after a change, from `previous` when there is one: the objects the
+    /// rules place keep the ids they had there when they are the same objects.
+    pub fn update(
+        previous: Option<&AutoLayers>,
+        painted: Arc<Map>,
+        setup: &Setup,
+        rules: &RuleSet,
+    ) -> AutoLayers {
+        let mut layers = AutoLayers::derive(painted, setup, rules);
+        if let (Some(previous), Some(result)) = (previous, layers.after.last_mut()) {
+            keep_object_ids(
+                Arc::make_mut(result),
+                &layers.painted,
+                previous.result(),
+                previous.painted(),
+            );
+        }
+        layers
     }
 
     /// The painted map with no run made: its result is what was painted (rules that could not

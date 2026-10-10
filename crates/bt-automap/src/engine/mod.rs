@@ -40,6 +40,7 @@ use apply::{OverlapState, Pending};
 pub(crate) use bind::{TilesetBinding, find_layer, is_tiles};
 use matching::{Border, BoundSet, Reader};
 use objects::PlacedGroup;
+pub(crate) use objects::rewire;
 use targets::{Targets, refused_bindings};
 
 pub use request::{

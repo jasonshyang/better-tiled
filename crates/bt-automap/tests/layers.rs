@@ -242,3 +242,73 @@ fn objects_the_rules_placed_are_kept_out_of_what_was_painted() {
     assert_eq!(count(&restored.painted), 1);
     assert_eq!(restored.painted.next_object_id, 2);
 }
+
+#[test]
+fn objects_the_rules_place_keep_their_ids_from_one_result_to_the_next() {
+    let atlas = atlas();
+    let marker = |id: u32| MapObject {
+        id: ObjectId(id),
+        name: "spawn".into(),
+        pos: DVec2::new(4.0, 4.0),
+        size: DVec2::new(8.0, 8.0),
+        ..MapObject::default()
+    };
+    let rules = rules_of(vec![
+        common::rule_map(&atlas, UVec2::new(1, 1))
+            .tile_layer("input_set", "1")
+            .object_layer("output_spawns", vec![marker(1)])
+            .build()
+            .unwrap(),
+    ]);
+    let mut painted = target_map(&atlas, UVec2::new(2, 1))
+        .tile_layer("set", "1 1")
+        .object_layer("spawns", vec![])
+        .build()
+        .unwrap();
+    painted.next_object_id = 1;
+    let setup = setup(vec![LayerNames::found_in(&painted, &rules.rule_layers())]);
+    let first = AutoLayers::update(None, Arc::new(painted.clone()), &setup, &rules);
+    let spawns = layer_named(first.result(), "spawns");
+    let ids = |layers: &AutoLayers| -> Vec<(u32, f64)> {
+        let mut ids: Vec<(u32, f64)> = layers
+            .result()
+            .layer(spawns)
+            .unwrap()
+            .as_object_layer()
+            .unwrap()
+            .objects
+            .iter()
+            .map(|o| (o.id.0, o.pos.x))
+            .collect();
+        ids.sort_by(|a, b| a.1.total_cmp(&b.1));
+        ids
+    };
+    assert_eq!(ids(&first), [(1, 4.0), (2, 20.0)]);
+
+    // A painted object came and went: the next id moved, the placed objects keep theirs.
+    let mut moved_on = painted.clone();
+    moved_on.next_object_id = 5;
+    let second = AutoLayers::update(Some(&first), Arc::new(moved_on), &setup, &rules);
+    assert_eq!(ids(&second), [(1, 4.0), (2, 20.0)]);
+
+    // A painted object took id 2: the object that had it moves past every id in use, the other
+    // keeps its id.
+    let mut taken = painted.clone();
+    if let Some(bt_core::LayerKind::Object(objects)) =
+        taken.layer_mut(spawns).map(|layer| &mut layer.kind)
+    {
+        let mut drawn = marker(2);
+        drawn.name = "drawn".into();
+        drawn.pos = DVec2::new(100.0, 100.0);
+        Arc::make_mut(&mut objects.objects).push(drawn);
+    }
+    taken.next_object_id = 3;
+    let third = AutoLayers::update(Some(&first), Arc::new(taken), &setup, &rules);
+    let placed: Vec<(u32, f64)> = ids(&third)
+        .into_iter()
+        .filter(|(_, x)| *x < 100.0)
+        .collect();
+    assert_eq!(placed[0], (1, 4.0));
+    assert!(placed[1].0 > 2, "{placed:?}");
+    assert!(third.result().next_object_id > placed[1].0);
+}

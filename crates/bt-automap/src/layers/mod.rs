@@ -8,6 +8,7 @@
 
 mod auto_layers;
 mod change;
+mod object_ids;
 mod record;
 mod rule_layers;
 mod setup;

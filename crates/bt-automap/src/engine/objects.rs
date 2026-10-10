@@ -53,7 +53,7 @@ pub(crate) fn assign_ids(group: &mut PlacedGroup, next_object_id: &mut u32) -> V
 }
 
 /// Points object references in `properties` (in class values and lists too) at their new ids.
-fn rewire(properties: &mut Properties, renamed: &HashMap<ObjectId, ObjectId>) {
+pub(crate) fn rewire(properties: &mut Properties, renamed: &HashMap<ObjectId, ObjectId>) {
     for property in properties.values_mut() {
         rewire_value(property, renamed);
     }
