@@ -156,6 +156,28 @@ M3 brought the rules into the window. What it added:
   mixed), Rename, Duplicate and Remove, and the chosen set's terrains with Add, a colour button,
   a weight, Rename, Move Up, Move Down and Remove. The Tiles and Terrain modes share one tile
   grid (`draw_tiles`).
+- **The Terrain mode's helpers**, buttons below the sets; one is open at a time and takes the
+  tiles' clicks while it is. **Layout…** (`tileset_editor/layouts.rs`), a panel beside the sets:
+  the blocks found in the tileset's image (looked for on a worker when it opens, and on Look
+  again) listed and outlined on the tiles; the layouts, each with a picture of its tiles' lanes;
+  a block chosen by a click on a block found, or on the tile where the chosen layout's block
+  starts, outlined boldly; the set it goes into (the sets of the layout's kind, the one labelled
+  with first, or a new one) and its two terrains, guessed from its looks or chosen (the set's, a
+  new one, nothing under); Apply and Label All. **Auto-label…**: the next tile clicked is the one
+  all of the terrain labelled with; the status bar says how many tiles it was found on.
+  **Patterns** (`tileset_editor/patterns.rs`), a panel beside the sets: what the chosen set
+  needs, each pattern drawn as a tile of its lanes and framed in red when no tile has it (Only
+  the missing ones lists those alone), worked out again only when the tileset changes; a click
+  chooses one and each tile clicked then takes it, one step a click; a set needing more than can
+  be listed says how many.
+- **New Tileset** offers RPG Maker autotiles as a third source: the sheet, one tile size
+  (guessed from the sheet's shape), how many autotiles it holds and the image they are written
+  to, and the sheet warning when it applies; after OK the sheet is put together on a worker.
+- The effects `ReadTilesetImage` and `ExpandAutotiles` run on workers. Tests
+  (`app/terrain_helpers_tests.rs`): each helper's flow as a person clicks it on tilesets drawn
+  lane by lane, Layout…'s Apply, a block chosen by hand and Label All, Auto-label…, Patterns
+  (and a set too large to list), and New Tileset from an RPG Maker sheet, checked on the
+  editor's state.
 
 ## 2. Startup
 

@@ -122,11 +122,23 @@ M3 brought the rules into the editor. What it added, module by module:
 | `terrain_sets.rs` | the tileset editor's Terrain mode: `LabelTerrain`, the set and terrain labelling paints; `LabelStroke` (`Begin`, `Paint { marks }`, `End`, `Cancel`), lanes labelled or cleared, each drag one step, a label left with no terrain removed; `TerrainSetEdit`, one step per change of the sets: new set of each kind (Tiled's "Unnamed Set" with one terrain), remove, duplicate, rename; terrains added (Tiled's colours in turn, named "Terrain N"), removed and moved with the labels following, renamed, recoloured, weighted; the labelling choice follows every edit |
 | `document/` | `TilesetMode::Terrain`; `TilesetEditing` keeps the terrain labelling paints |
 | `inspect/`, `properties/` | `Inspected::TerrainSet` and `Inspected::Terrain`: in the Terrain mode the Properties panel shows the terrain labelled with, or its set for no terrain; a set's name, class and type (`Attribute::TerrainType`), a terrain's name, class, colour and probability, and custom properties of either under their classes' members (`ClassUsage::WANG_SET`, `WANG_COLOR`) |
+| `terrain_helpers/` | the Terrain mode's helpers over `bt-terrain`'s labelling helpers. `TilesetImageJob`: the edited tileset's image decoded and read on a worker for Layout… or Auto-label, its `TilesetImageRead` brought back (a collection of images is refused: it has no one image). Layout…: per document, a `LayoutSearch` (`Searching`, `Found(FoundLayouts)` with `detect`'s fits and the samples, `Failed`), shown only while the tileset and its image's cut are the ones searched; `layout_guess(doc, into, fit)`, a block's terrains by its looks (`KnownTerrains::guess`); `label_all_blocks(doc, into)`, `label_all` over the fits of the set's kind; `LayoutTarget::{Set, NewSet(kind)}`; Apply ("Apply Layout": one block) and Label All ("Label All Layouts") each one step that makes a new set ("Unnamed Set") when asked, adds the terrains past the set's that the blocks use, named and coloured as new terrains are, takes a block's labels exactly (a tile the layout leaves unlabelled loses its label), gives a terrain, and the set, without a tile one of the block's tiles that is all of it, and makes the set the one labelled with; a block of the wrong kind, past the tileset, or with one terrain on both sides is refused with the reason. Auto-label: the terrain labelled with, from one tile (`label_with(Method::Auto, …)` on the worker), applied with `Proposal::apply_to` as one step ("Auto-label Terrain"), and a notice of how many tiles it was found on and how it was told apart. Patterns: `needed_patterns(doc, set)` (`patterns::needed` on the prepared set); a tile labelled with a whole pattern of the set labelled with, one step a click ("Label Terrain Pattern"), lanes of other kinds left out |
+| `files/` | New Tileset's third source, `NewTilesetSource::RpgMakerAutotiles { sheet, sheet_size }` (square tiles of an even size, a whole autotile at least, else `problem`); `NewTileset::warning`, the sheet warning; `NewTileset::tileset` is `None` for it. `AutotilesJob` puts the sheet together on a worker (`rpg_maker::expand`, which writes `<stem> blob.png` beside it, then `rpg_maker::tileset`) and its `ExpandedAutotiles` adds the tileset to the map embedded, as one step ("New Tileset"), with a notice of what was written; undoing the step leaves the image |
 
 The intents added: `ChooseTerrain`, `TerrainStroke`, `CaptureTerrain`, `SetTerrainFill`,
 `ChooseLabelTerrain`, `LabelStroke`, `EditTerrainSets`. A document that becomes current by any
 means (opened, loaded, switched to, next in line when another closes) brings the tools of what
 it edits: one rule, in `Editor::apply`.
+
+For the terrain helpers: the intents `FindLayouts`, `ApplyLayout`, `LabelAllLayouts`,
+`AutoLabel`, `LabelPattern`, and the workers' `TilesetImageRead` and `AutotilesExpanded`; the
+effects `ReadTilesetImage(TilesetImageJob)` and `ExpandAutotiles(AutotilesJob)`, which the
+window runs on workers; the queries `layout_search`, `layout_guess`, `label_all_blocks` and
+`needed_patterns`. Tests: `tests/terrain_helpers.rs` (each step on tilesets drawn lane by lane,
+its labels what `bt-terrain` computes, undone at once; refusals; a search of another tileset)
+and `tests/autotiles.rs` (a sheet drawn in a scratch folder through the job and its result, the
+tileset `bt-terrain` makes, one step; a sheet that cannot be put together). The crate now
+depends on `bt-image` too, which the jobs decode tilesets' images with.
 
 The crate now depends on `bt-terrain` (`decisions.md`, 2026-10-10): §1's first version kept the
 terrain to three ids and left the solver to the window, which could not make the transaction
