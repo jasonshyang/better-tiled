@@ -204,7 +204,9 @@ pub fn paste(
         let bounds = match target {
             PasteTarget::Layer(id) => {
                 if map.effective_layer(id).is_some_and(|layer| layer.locked) {
-                    report.skipped_locked.push(id);
+                    if !report.skipped_locked.contains(&id) {
+                        report.skipped_locked.push(id);
+                    }
                     continue;
                 }
                 map.layer(id)
@@ -587,6 +589,13 @@ mod tests {
             assert!(report.changed.is_empty());
             assert_eq!(map, before);
         }
+        let twice = TileClip {
+            layers: vec![clip.layers[0].clone(), clip.layers[0].clone()],
+            ..clip.clone()
+        };
+        let targets = [PasteTarget::Layer(LayerId(1)); 2];
+        let report = paste(&mut map, &twice, IVec2::ZERO, &targets, &TileRegion::new()).unwrap();
+        assert_eq!(report.skipped_locked, [LayerId(1)], "listed once");
     }
 
     /// An atlas of 16 tiles in `columns` columns: atlases of other shapes have other images, so
