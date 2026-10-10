@@ -428,3 +428,66 @@ suites of §14 (fuzz, explain and layers wait for their phases), and a randomise
 run equals one trying every rule at every position; the Highlands rules give back the sample
 scene's platforms, each tile the scene's or another variation of the same tile, and exactly its
 base tiles without the variation rule maps.
+
+## 16. As built at M3 (region runs, explain, analysis)
+
+Region runs, explanations, the post-run analysis and the files to watch; what §15 left for
+later but `layers`.
+
+| Module | As built |
+|---|---|
+| `region/` | `condition` (what a condition accepts; whether a write can change a condition), `locality` (per rule map its dependency box, per rule the cells its decision depends on and those it changes, why it is not local, what ties it to an infinite map's region), `plan` (the area written back and each rule map's window, or the fallback problem) |
+| `engine/window` | a rule map run inside its window; `RuleSet::{supports_incremental, margin, affected_area}` |
+| `explain/` | the `Tracer` observer; `explain_cell(_with)` → `Explanation`, `explain_rule(_with)` → `RuleMatches`; `RuleAttempt`, `AttemptOutcome` and `ConditionCheck`, owned forms of the observer's types; `rule_summaries`, `rule_picture`, `with_layer_names` |
+| `analysis/idle` | `idle_rule_maps(map, request, report)` → `IdleRuleMap`, whose `problems()` are typed |
+| `files` | `RuleSet::watched_files`; `files::listed_files` for after a failed load; include cycles as notes |
+
+**Region runs.** A rule's decision depends on the cells its conditions read and, with
+`MatchInOrder`, on what the earlier rules' and its own earlier matches decided where they wrote
+a cell it reads, counted only when the write can change the condition (the writer's own
+conditions there bound what the cell held). A rule map's dependency box is (0, 0) and every
+rule's decision box less the cells it changes (writes and object footprints); the influence is
+every box mirrored, summed; the area written back is the edit grown by it, within a finite map;
+windows go backward and are not clipped (cells outside a finite map read as empty or clamp onto
+the window's own). A rule is tried where a full run tries it, its decision box inside the window
+and its output reaching it, in the full run's order, so every match tried decides as in the full
+run. Grids copy the first window only, anchors index each window, `DeleteTiles` erases inside
+it, write-back keeps the area. The invariant is fuzzed with an edit's locality (`tests/region.rs`;
+a weakened analysis fails it). Highlands: the margin is rows −24 to 32 of the edited column; a
+region run after a three-cell stroke on the 480×480 map takes 0.65 ms (bound 5 ms) where a full
+run takes 17 ms; explaining a cell of the sample scene takes 3 ms.
+
+Where the build differs from §7–§11:
+
+- On an infinite map a region run also falls back for a first rule map whose rules match on
+  empty cells (an edit can move the chunk bounds that are its region), a `MatchInOrder` rule map,
+  a negative `AutomappingRadius`, and a later rule map two of whose matches can write different
+  tiles into one cell (the band order of the grown region decides then); on a finite map, for
+  `OverflowBorder` with a tile layer not the map's size.
+- Tilesets a run may unify (similar, one embedded in a rule map) make the analysis cautious:
+  their writes always count.
+- A region run places the objects of the matches whose object footprint meets the area, removes
+  those meeting cells `DeleteTiles` erases there, merges output layers' properties when a match
+  applies in its windows, creates a layer when it holds a tile in the area; its report counts the
+  matches of its windows. `Area::Edit` is one rectangle and names no touched layers: skipping a
+  rule map is exact only on a map already holding the rules' result, which a region run does not
+  assume (the layers know their stages).
+- Explanations own their data (`RuleAttempt::holds_a_tile` is §8's `Attempt::holds_a_tile`) and
+  carry a refused run's problems; `explain_cell_with` and `explain_rule_with` take a request for
+  layer names; `with_layer_names` takes the names and the map. The attempts at a cell are the
+  rules' whose tile writes cover it (with `WrapBorder`, from every position the write wraps
+  from). An observed run also checks positions its `Probability` skips (`matched` says whether it
+  would have matched) and input sets a missing layer makes impossible, and reports `OffLattice`
+  and `OutsideMap` for asked positions it cannot try; `Disabled` and `CanNeverMatch` are explain's.
+  `RuleSummary::inactive` is the reason as text.
+- `idle_rule_maps` takes the map the run started from and its request; a layer is empty only
+  when sure (empty on the map, written by no earlier rule map that applied), else the reason is
+  that no rule matched.
+- `bt-tmx`'s `parse_rules_file` returns the lists read and the include cycles skipped
+  (`RulesFile`), and `read_rules_file` keeps what was read before a list that cannot be.
+
+Tests: `tests/region.rs` (the fuzzed invariant, objects), `tests/explain.rs` (writes, attempts,
+checks at the right moment in both modes, untried positions, skipped matches, near misses,
+overwritten matches, unnamed tiles, layer names, summaries and pictures, and the fuzzed agreement
+of explanations with runs), and in the pack and files suites the exact timed region run, an
+explanation and the idle rule maps on Highlands, the files watched, cycles and failed loads.

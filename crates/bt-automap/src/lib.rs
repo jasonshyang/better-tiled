@@ -9,8 +9,10 @@
 //! version 3 or later. `docs/design/08-automap.md` is the design; its "As built" section lists
 //! every way the crate departs from Tiled and why.
 //!
-//! Compiling and running work on maps in memory ([`RuleSet::builder`], [`RuleSet::run`]); the
-//! [`files`] module is the only one that reads files.
+//! Compiling and running work on maps in memory ([`RuleSet::builder`], [`RuleSet::run`]): a run
+//! around an edit recomputes exactly what a full run gives there ([`RuleSet::affected_area`]),
+//! and explanations say what the rules do at a cell ([`RuleSet::explain_cell`]) and where a rule
+//! matches ([`RuleSet::explain_rule`]). The [`files`] module is the only one that reads files.
 
 mod analysis;
 mod bx;

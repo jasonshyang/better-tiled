@@ -51,8 +51,9 @@ impl RuleSet {
     /// Whether a region run ([`RuleSet::apply`] with a rectangle, [`Area::Edit`]) can recompute
     /// exactly what a full run gives around an edit: no rule map is non-local (a rule matching
     /// in order that can feed its own later matches, or `NoOverlappingOutput` on a rule whose
-    /// matches can overlap) or wraps around the map (`WrapBorder`). Infinite maps ask more of
-    /// the rules: [`RuleSet::affected_area`] answers for a given map.
+    /// matches can overlap) or wraps around the map (`WrapBorder`). Some maps ask more of the
+    /// rules (infinite ones, and with `OverflowBorder` those with a tile layer of another size
+    /// than the map's): [`RuleSet::affected_area`] answers for a given map.
     ///
     /// [`Area::Edit`]: crate::Area::Edit
     pub fn supports_incremental(&self) -> bool {
@@ -66,7 +67,8 @@ impl RuleSet {
 
     /// How far an edit reaches: the offsets from an edited cell to the cells whose result a
     /// full run can change, as a rectangle around (0, 0). An edit of the rectangle `r` can
-    /// change the result only inside `r` grown by these offsets.
+    /// change the result only inside `r` grown by these offsets, when the rules support region
+    /// runs ([`RuleSet::supports_incremental`]); otherwise an edit can reach any cell.
     pub fn margin(&self) -> IRect {
         self.locality.influence().rect()
     }
