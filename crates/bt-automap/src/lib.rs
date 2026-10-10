@@ -8,3 +8,28 @@
 //! Tiled's contributors, licensed under the GNU GPL version 2 or later and used here under
 //! version 3 or later. `docs/design/08-automap.md` is the design; its "As built" section lists
 //! every way the crate departs from Tiled and why.
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the engine, which comes next, uses the boxes")
+)]
+mod bx;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the engine, which comes next, uses the sets of cells"
+    )
+)]
+mod cell_set;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the engine, which comes next, draws its random numbers here"
+    )
+)]
+mod rng;
+mod rule_ref;
+
+pub use rule_ref::RuleRef;
