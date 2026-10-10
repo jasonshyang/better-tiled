@@ -129,6 +129,7 @@ impl Editor {
                 }
                 Vec::new()
             }
+            ActionId::CustomTypesEditor => vec![Effect::Show(Dialog::CustomTypes)],
             ActionId::SnapNone => self.set_snapping(Snapping::None),
             ActionId::SnapToGrid => self.set_snapping(Snapping::Grid),
             ActionId::SnapToFineGrid => self.set_snapping(Snapping::FineGrid),

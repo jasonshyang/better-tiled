@@ -289,6 +289,9 @@ impl Editor {
                 value,
                 merge,
             } => self.set_attribute(doc, &inspected, attribute, &value, merge),
+            Intent::EditCustomTypes { doc, edit, merge } => {
+                self.edit_custom_types(doc, &edit, merge)
+            }
             Intent::SetCamera { doc, view } => {
                 if let Some(document) = self.documents.get_mut(doc) {
                     document.camera = Some(view);

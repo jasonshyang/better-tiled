@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
 
 use super::choose_layer::ChooseLayerDialog;
+use super::custom_types::CustomTypesDialog;
 use super::new_map::NewMapDialog;
 use super::new_tileset::{DialogRequest, NewTilesetDialog};
 use super::offset_map::OffsetMapDialog;
@@ -36,6 +37,8 @@ pub(crate) enum Modal {
     ResizeMap(ResizeMapDialog),
     /// Offset Map.
     OffsetMap(OffsetMapDialog),
+    /// The Custom Types editor.
+    CustomTypes(Box<CustomTypesDialog>),
 }
 
 /// The open modals; the last is shown.
@@ -103,6 +106,7 @@ impl Modals {
             Modal::ChooseLayer(dialog) => dialog.show(ctx, editor, out),
             Modal::ResizeMap(dialog) => dialog.show(ctx, out),
             Modal::OffsetMap(dialog) => dialog.show(ctx, out),
+            Modal::CustomTypes(dialog) => dialog.show(ctx, editor, out),
         };
         if closed {
             self.stack.pop();

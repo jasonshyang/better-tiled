@@ -40,7 +40,7 @@ impl<V> Edited<V> {
 }
 
 /// The text typed in the field that has the keyboard.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Typing {
     id: egui::Id,
     text: String,
@@ -50,14 +50,14 @@ struct Typing {
 }
 
 /// A colour being dragged in its picker.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct ColorRun {
     id: egui::Id,
     run: u64,
 }
 
 /// The fields' own state: what is being typed, and the runs handed out.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Fields {
     typing: Option<Typing>,
     color: Option<ColorRun>,
@@ -245,7 +245,7 @@ impl Fields {
             }
             if can_clear
                 && current.is_some()
-                && ui.small_button("✕").on_hover_text("No color").clicked()
+                && ui.small_button("×").on_hover_text("No color").clicked()
             {
                 edited = Some(Edited::at_once(None));
             }

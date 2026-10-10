@@ -337,6 +337,9 @@ action_table! {
         .on(Document)
         .keys(&[plain('h')])
         .toggle(),
+    /// The project's classes and enums.
+    CustomTypesEditor => ActionSpec::new(ActionId::CustomTypesEditor, "custom_types_editor", "Custom Types Editor", "classes enums project property types")
+        .on(Document),
     /// Objects go where they are put.
     SnapNone => ActionSpec::new(ActionId::SnapNone, "snap_none", "No Snapping", "snapping free")
         .on(Map)

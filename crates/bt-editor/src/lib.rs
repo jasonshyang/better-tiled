@@ -25,6 +25,7 @@ mod settings;
 mod store;
 mod tileset_commands;
 mod tools;
+mod type_commands;
 mod watch;
 
 pub use actions::{
@@ -53,8 +54,8 @@ pub use objects::{
 pub use offset_map::{LayerChoice, MapOffset};
 pub use properties::{
     Attribute, AttributeRow, AttributeValue, Change, ListEdit, Op, Origin, PropertyError,
-    PropertySet, Shown, Step, Target, TargetId, ValueType, conversions, convert, layer_attributes,
-    map_attributes, object_attributes, set_layer_attribute, set_map_attribute,
+    PropertySet, Shown, Step, Target, TargetId, TypeEdit, ValueType, conversions, convert,
+    layer_attributes, map_attributes, object_attributes, set_layer_attribute, set_map_attribute,
     set_object_attribute, set_tile_attribute, set_tileset_attribute, tile_attributes,
     tileset_attributes, value_types,
 };

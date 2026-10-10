@@ -1,5 +1,6 @@
 //! Saving: a map's unsaved external tilesets first (a tileset that cannot be written keeps its
-//! changes and the map is saved anyway), then the map; Save As moves the map's file properties
+//! changes and the map is saved anyway), then the map, then the open project when its custom
+//! types changed; Save As moves the map's file properties
 //! to the new folder as a transaction first. Writes are atomic unless safe writing is off, and
 //! the bytes written are hashed so the watcher can tell our writes from others'.
 
@@ -17,8 +18,35 @@ use crate::notice::Notice;
 use crate::store::{AssetId, Root};
 
 impl Editor {
-    /// Saves a document: its asset's file, or a file to pick when it has none.
+    /// Saves a document (its asset's file, or a file to pick when it has none) and the open
+    /// project's file when its custom types changed.
     pub(crate) fn save(&mut self, doc: DocumentId) -> Vec<Effect> {
+        let mut effects = self.save_document(doc);
+        effects.extend(self.save_project());
+        effects
+    }
+
+    /// Writes the open project's file when it has one and its custom types changed.
+    fn save_project(&mut self) -> Vec<Effect> {
+        let Some(project) = self.project_file() else {
+            return Vec::new();
+        };
+        if !self
+            .store
+            .get(project)
+            .is_some_and(|asset| asset.is_dirty())
+        {
+            return Vec::new();
+        }
+        self.write_project(project)
+            .err()
+            .map(Effect::Notify)
+            .into_iter()
+            .collect()
+    }
+
+    /// Saves a document: its asset's file, or a file to pick when it has none.
+    fn save_document(&mut self, doc: DocumentId) -> Vec<Effect> {
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return Vec::new();
         };
@@ -141,7 +169,7 @@ impl Editor {
             let written = match asset.root() {
                 Root::Map(_) => self.write_map(id, &path),
                 Root::Tileset(_) => self.write_tileset(id),
-                Root::Project(_) => continue,
+                Root::Project(_) => self.write_project(id),
             };
             match written {
                 Ok(()) => {
@@ -195,6 +223,27 @@ impl Editor {
         self.write_bytes(&path, text.as_bytes())?;
         self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
         self.recovery.forget(asset);
+        Ok(())
+    }
+
+    /// Writes a project asset to its file and marks it saved.
+    fn write_project(&mut self, asset: AssetId) -> Result<(), Notice> {
+        let project = self
+            .store
+            .project(asset)
+            .cloned()
+            .ok_or_else(|| Notice::error(format!("{asset} is not a project")))?;
+        let path = self
+            .store
+            .get(asset)
+            .and_then(|a| a.path().map(Path::to_path_buf))
+            .ok_or_else(|| Notice::error(format!("{asset} has no file")))?;
+        let text = WriteRequest::for_project(&project, &path)
+            .render()
+            .map_err(|error| cannot_save(&path, &error.to_string()))?
+            .text;
+        self.write_bytes(&path, text.as_bytes())?;
+        self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
         Ok(())
     }
 

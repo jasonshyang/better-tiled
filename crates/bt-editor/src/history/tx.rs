@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use bt_core::{Map, Tileset};
+use bt_core::{Map, Project, Tileset};
 
 use crate::document::Selection;
 use crate::error::EditError;
@@ -93,6 +93,18 @@ impl<'s> Tx<'s> {
             _ => Err(EditError::WrongKind {
                 asset,
                 expected: AssetKind::Tileset,
+            }),
+        }
+    }
+
+    /// A project to change.
+    pub fn project_mut(&mut self, asset: AssetId) -> Result<&mut Project, EditError> {
+        self.take(asset, AssetKind::Project)?;
+        match self.working.get_mut(&asset) {
+            Some(Root::Project(project)) => Ok(Arc::make_mut(project)),
+            _ => Err(EditError::WrongKind {
+                asset,
+                expected: AssetKind::Project,
             }),
         }
     }

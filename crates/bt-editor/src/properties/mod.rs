@@ -12,6 +12,10 @@
 //! tiles, and one [`Attribute`] set to an [`AttributeValue`] on each target that has it,
 //! refusing values out of range.
 //!
+//! Custom types: a [`TypeEdit`] changes the project's classes and enums as Tiled's Custom
+//! Types editor does, a class's members through the same [`Change`]s as custom properties
+//! ([`Target::members`]).
+//!
 //! The rules follow Tiled's Properties panel (`reference/tiled/src/tiled/propertieswidget.cpp`,
 //! `variantmapproperty.cpp`, `changeproperties.cpp`, `changemapobject.cpp`), on top of
 //! `bt_core`'s custom types, which already resolve what is inherited.
@@ -34,6 +38,7 @@ mod target;
 mod target_id;
 mod tile_attributes;
 mod tileset_attributes;
+mod type_edit;
 mod value_type;
 
 #[cfg(test)]
@@ -55,4 +60,5 @@ pub use target::{Origin, Target};
 pub use target_id::TargetId;
 pub use tile_attributes::{set_tile_attribute, tile_attributes};
 pub use tileset_attributes::{set_tileset_attribute, tileset_attributes};
+pub use type_edit::TypeEdit;
 pub use value_type::{ValueType, value_types};

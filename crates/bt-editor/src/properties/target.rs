@@ -6,12 +6,12 @@
 use std::fmt;
 
 use bt_core::{
-    ClassUsage, CustomTypes, LayerId, Map, ObjectId, ObjectTemplate, Properties, Property, TileId,
-    Tileset,
+    ClassUsage, CustomTypeId, CustomTypes, LayerId, Map, ObjectId, ObjectTemplate, Properties,
+    Property, TileId, Tileset,
 };
 
 use super::error::PropertyError;
-use super::lookup::NO_PROPERTIES;
+use super::lookup::{NO_PROPERTIES, class_members};
 use super::target_id::TargetId;
 
 /// Where an inherited value comes from.
@@ -168,6 +168,16 @@ impl<'a> Target<'a> {
             ClassUsage::TILE,
             types,
         ))
+    }
+
+    /// The members of the project's class `id`, with their defaults (the Custom Types editor's
+    /// class); they inherit nothing.
+    pub fn members(types: &'a CustomTypes, id: CustomTypeId) -> Result<Target<'a>, PropertyError> {
+        Ok(Target {
+            id: TargetId::Members(id),
+            stored: class_members(types, id)?,
+            inherited: Vec::new(),
+        })
     }
 
     /// Which thing it is.

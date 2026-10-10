@@ -2,10 +2,11 @@
 
 use std::fmt;
 
-use bt_core::{LayerId, ObjectId, TileId};
+use bt_core::{CustomTypeId, LayerId, ObjectId, TileId};
 
 /// Which thing a target is, and so where its own properties are kept: in a map (the map, a
-/// layer, an object) or in a tileset (the tileset, a tile).
+/// layer, an object), in a tileset (the tileset, a tile) or in the project's custom types (a
+/// class's members).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TargetId {
     /// The map.
@@ -18,6 +19,8 @@ pub enum TargetId {
     Tileset,
     /// A tile of the tileset.
     Tile(TileId),
+    /// The members of a class of the project, with their defaults.
+    Members(CustomTypeId),
 }
 
 impl fmt::Display for TargetId {
@@ -28,6 +31,7 @@ impl fmt::Display for TargetId {
             TargetId::Object(id) => write!(f, "object {id}"),
             TargetId::Tileset => f.write_str("the tileset"),
             TargetId::Tile(id) => write!(f, "tile {id}"),
+            TargetId::Members(id) => write!(f, "the members of type {id}"),
         }
     }
 }

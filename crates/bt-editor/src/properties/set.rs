@@ -5,7 +5,8 @@ use bt_core::{CustomTypes, Map, Properties, Tileset};
 use super::change::{Change, Plan};
 use super::error::PropertyError;
 use super::lookup::{
-    map_properties, map_properties_mut, tileset_properties, tileset_properties_mut,
+    class_members, class_members_mut, map_properties, map_properties_mut, tileset_properties,
+    tileset_properties_mut,
 };
 use super::shown::{Shown, rows};
 use super::target::Target;
@@ -97,6 +98,37 @@ impl<'a> PropertySet<'a> {
         let changed = !updates.is_empty();
         for update in updates {
             *tileset_properties_mut(tileset, update.target)? = update.properties;
+        }
+        Ok(changed)
+    }
+
+    /// Applies `change` to the targets in `types` (classes' members), a copy of the types the
+    /// targets were read from. Returns whether any changed; nothing changes when the change is
+    /// refused.
+    pub fn apply_to_types(
+        &self,
+        types: &mut CustomTypes,
+        change: &Change,
+    ) -> Result<bool, PropertyError> {
+        let plan = Plan::new(change, &self.targets, self.types)?;
+        let mut updates = Vec::new();
+        for target in &self.targets {
+            let TargetId::Members(class) = target.id() else {
+                return Err(PropertyError::NotInTypes(target.id()));
+            };
+            let stored = class_members(types, class)?;
+            if let Some(properties) = plan.applied_to(target, stored) {
+                updates.push(Update {
+                    target: target.id(),
+                    properties,
+                });
+            }
+        }
+        let changed = !updates.is_empty();
+        for update in updates {
+            if let TargetId::Members(class) = update.target {
+                *class_members_mut(types, class)? = update.properties;
+            }
         }
         Ok(changed)
     }

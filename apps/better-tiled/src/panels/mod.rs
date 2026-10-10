@@ -10,9 +10,11 @@ mod tile_images;
 mod tiles;
 mod value_fields;
 
+pub(crate) use custom_rows::{CustomEdit, CustomRows, RowsSetup};
 pub(crate) use layers::LayersPanel;
 pub(crate) use objects::ObjectsPanel;
 pub(crate) use properties::PropertiesPanel;
 pub(crate) use tile_grid::{ShownTiles, TileGrid, TileSource, cell_size, paint_tile};
 pub(crate) use tile_images::TileImages;
 pub(crate) use tiles::TilesPanel;
+pub(crate) use value_fields::{Field, Fields};

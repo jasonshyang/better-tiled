@@ -76,6 +76,8 @@ const MENUS: [Menu; 7] = [
                 ],
             ),
             Separator,
+            Action(ActionId::CustomTypesEditor),
+            Separator,
             Action(ActionId::NextDocument),
             Action(ActionId::PreviousDocument),
         ],

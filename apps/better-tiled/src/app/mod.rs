@@ -1,6 +1,8 @@
 //! The application: the window's state, its frame, and the chrome around the canvas (menu bar,
 //! tab strip, status bar).
 
+#[cfg(test)]
+mod custom_types_tests;
 mod effects;
 mod frame;
 mod menu;

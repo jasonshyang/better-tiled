@@ -57,6 +57,8 @@ pub enum Dialog {
     ResizeMap(DocumentId),
     /// Offset Map, for the map of a document.
     OffsetMap(DocumentId),
+    /// The Custom Types editor.
+    CustomTypes,
 }
 
 /// A file to ask for.

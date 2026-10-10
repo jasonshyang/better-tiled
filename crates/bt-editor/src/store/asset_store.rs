@@ -107,11 +107,13 @@ impl AssetStore {
     }
 
     /// The assets with changes their files lack, whatever their kind: what Save All saves and
-    /// what quitting asks about.
+    /// what quitting asks about. An untitled project (custom types made with no project open)
+    /// lives for the run, as Tiled's does, and is never unsaved.
     pub fn unsaved(&self) -> Vec<AssetId> {
         self.assets
             .values()
             .filter(|asset| asset.is_dirty())
+            .filter(|asset| asset.kind() != AssetKind::Project || asset.path.is_some())
             .map(|asset| asset.id)
             .collect()
     }

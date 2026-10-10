@@ -15,7 +15,7 @@ use crate::files::{Loaded, NewMap, NewTileset};
 use crate::inspect::Inspected;
 use crate::objects::ObjectStroke;
 use crate::offset_map::MapOffset;
-use crate::properties::{Attribute, AttributeValue, Change};
+use crate::properties::{Attribute, AttributeValue, Change, TypeEdit};
 use crate::recovery::Orphan;
 use crate::settings::Settings;
 use crate::tools::Stroke;
@@ -343,6 +343,16 @@ pub enum Intent {
         attribute: Attribute,
         /// Its new value.
         value: AttributeValue,
+        /// The run the edit is part of, if any.
+        merge: Option<u64>,
+    },
+    /// Change the project's custom types (the Custom Types editor), as one step in a document;
+    /// the edits of one run share `merge` and fold into one step.
+    EditCustomTypes {
+        /// The document whose history holds the step.
+        doc: DocumentId,
+        /// The change.
+        edit: TypeEdit,
         /// The run the edit is part of, if any.
         merge: Option<u64>,
     },

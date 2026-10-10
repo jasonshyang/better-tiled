@@ -136,16 +136,26 @@ impl Change {
     /// What the change is called in the History panel and the Edit menu, as Tiled's commands
     /// call it.
     pub fn label(&self) -> String {
+        self.label_naming("Property", "Properties")
+    }
+
+    /// What the change is called when it changes a class's members.
+    pub(crate) fn member_label(&self) -> String {
+        self.label_naming("Member", "Members")
+    }
+
+    /// The label, calling what is changed `one` or, several, `many`.
+    fn label_naming(&self, one: &str, many: &str) -> String {
         let path = path_text(&self.path);
         match &self.op {
-            Op::Set(_) | Op::List(_) => format!("Set Property '{path}'"),
-            Op::Reset => format!("Reset Property '{path}'"),
-            Op::Add(_) => format!("Add Property '{path}'"),
-            Op::Remove => format!("Remove Property '{path}'"),
-            Op::Rename(_) => "Rename Property".to_owned(),
-            Op::Convert(_) => "Convert Property".to_owned(),
-            Op::Paste(properties) if properties.len() == 1 => "Paste Property".to_owned(),
-            Op::Paste(_) => "Paste Properties".to_owned(),
+            Op::Set(_) | Op::List(_) => format!("Set {one} '{path}'"),
+            Op::Reset => format!("Reset {one} '{path}'"),
+            Op::Add(_) => format!("Add {one} '{path}'"),
+            Op::Remove => format!("Remove {one} '{path}'"),
+            Op::Rename(_) => format!("Rename {one}"),
+            Op::Convert(_) => format!("Convert {one}"),
+            Op::Paste(properties) if properties.len() == 1 => format!("Paste {one}"),
+            Op::Paste(_) => format!("Paste {many}"),
         }
     }
 

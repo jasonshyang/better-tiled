@@ -46,7 +46,7 @@ pub(crate) struct RowsSetup<'a> {
 }
 
 /// A property being renamed in place.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Renaming {
     name: String,
     text: String,
@@ -54,7 +54,7 @@ struct Renaming {
 }
 
 /// The Add form: the new property's name and type.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Adding {
     name: String,
     value_type: ValueType,
@@ -62,7 +62,7 @@ struct Adding {
 }
 
 /// The rows' own state: a rename under way, the Add form, the properties copied.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct CustomRows {
     renaming: Option<Renaming>,
     adding: Option<Adding>,
@@ -213,17 +213,24 @@ impl CustomRows {
             mixed: row.mixed,
             enabled: true,
         };
-        if let Some(edit) = value_field(ui, fields, field, row, setup) {
-            out.push(edit);
-        }
-        if row.resettable
-            && ui
-                .small_button("⟲")
-                .on_hover_text(format!("Reset {name}"))
-                .clicked()
-        {
-            out.push(change(Change::reset(row.path.clone())));
-        }
+        // The reset button at the right end, the field filling the space before it.
+        let right_to_left = egui::Layout::right_to_left(egui::Align::Center);
+        ui.with_layout(right_to_left, |ui| {
+            if row.resettable
+                && ui
+                    .small_button("Reset")
+                    .on_hover_text(format!("Reset {name}"))
+                    .clicked()
+            {
+                out.push(change(Change::reset(row.path.clone())));
+            }
+            let left_to_right = egui::Layout::left_to_right(egui::Align::Center);
+            ui.with_layout(left_to_right, |ui| {
+                if let Some(edit) = value_field(ui, fields, field, row, setup) {
+                    out.push(edit);
+                }
+            });
+        });
     }
 
     /// The menu of a property: Copy, Paste, Rename, Convert To, Reset, Remove.

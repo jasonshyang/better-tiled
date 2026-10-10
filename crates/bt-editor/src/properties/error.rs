@@ -1,6 +1,6 @@
 //! Why a change of custom properties or of a built-in attribute was refused.
 
-use bt_core::{LayerId, ObjectId, TileId};
+use bt_core::{CircularMember, CustomTypeId, LayerId, ObjectId, TileId};
 
 use super::attribute::Attribute;
 use super::attribute_value::AttributeValue;
@@ -25,6 +25,39 @@ pub enum PropertyError {
     /// A target of a map was given a tileset to change.
     #[error("{0} is not part of a tileset")]
     NotInTileset(TargetId),
+    /// A target that is not a class's members was given custom types to change.
+    #[error("{0} is not part of the custom types")]
+    NotInTypes(TargetId),
+    /// The project has no custom type with this id.
+    #[error("the project has no type {0}")]
+    NoSuchType(CustomTypeId),
+    /// The type is not a class.
+    #[error("“{0}” is not a class")]
+    NotAClass(String),
+    /// The type is not an enum.
+    #[error("“{0}” is not an enum")]
+    NotAnEnum(String),
+    /// A custom type needs a name.
+    #[error("a type needs a name")]
+    EmptyTypeName,
+    /// Another custom type has the name (Tiled's message).
+    #[error("the name “{0}” is already in use")]
+    TypeNameTaken(String),
+    /// An enum's value needs a name.
+    #[error("an enum value needs a name")]
+    EmptyValueName,
+    /// The enum has the value already.
+    #[error("the enum has a value “{0}” already")]
+    ValueNameTaken(String),
+    /// The enum has no value at this index.
+    #[error("the enum has no value {0}")]
+    NoSuchValue(usize),
+    /// An enum of flags holds at most 31 values, one bit each.
+    #[error("an enum of flags holds at most 31 values")]
+    TooManyFlags,
+    /// A member would make its class contain itself.
+    #[error("class “{}” would contain itself through its member “{}”", .0.class, .0.member)]
+    Circular(CircularMember),
     /// A property needs a name.
     #[error("a property needs a name")]
     EmptyName,
