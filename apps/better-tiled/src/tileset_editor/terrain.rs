@@ -61,6 +61,7 @@ impl TerrainLabeller {
             .show(ui, |ui| self.show_sets(ui, tileset, editing, doc, out));
         let label = editing.label_terrain();
         let set = label.and_then(|l| tileset.wang_sets.get(l.set));
+        let diamond = diamond_ratio(tileset);
         let drawn = draw_tiles(
             ui,
             tileset,
@@ -69,7 +70,7 @@ impl TerrainLabeller {
             Sense::click_and_drag(),
             |ui, id, rect| {
                 if let Some(set) = set {
-                    draw_labels(ui.painter(), set, id, rect);
+                    draw_labels(ui.painter(), set, id, TileFrame::of(rect, diamond));
                 }
             },
         )?;
@@ -83,15 +84,15 @@ impl TerrainLabeller {
         let hovered = response.hover_pos().and_then(|at| {
             let index = shown.grid.index_at(at)?;
             let tile = shown.ids.get(index).copied()?;
-            let rect = shown.grid.rect(index);
-            let local = (at - rect.min) / rect.size();
+            let frame = TileFrame::of(shown.grid.rect(index), diamond);
+            let local = frame.local(at);
             let lane = lane_at(set.kind, local.x, local.y)?;
-            Some(HoveredLane { tile, lane, rect })
+            Some(HoveredLane { tile, lane, frame })
         });
         if let Some(hovered) = hovered {
             let stroke = Stroke::new(2.0, ui.visuals().strong_text_color());
             ui.painter().add(Shape::closed_line(
-                lane_region(set.kind, hovered.lane, hovered.rect),
+                hovered.frame.region(set.kind, hovered.lane),
                 stroke,
             ));
         }
@@ -360,7 +361,77 @@ impl TerrainLabeller {
 struct HoveredLane {
     tile: TileId,
     lane: usize,
+    frame: TileFrame,
+}
+
+/// Where a tile's lanes are drawn and found: its rectangle, or on an isometric tileset the
+/// diamond Tiled's tileset view maps it to (`setupTilesetGridTransform`: the square around the
+/// tile's middle turned 45° and flattened by the grid's height over its width), whose top point
+/// is the tile's top-left corner.
+#[derive(Copy, Clone, Debug)]
+struct TileFrame {
+    /// The square, or the rectangle, the lanes are laid out in before the turn.
     rect: Rect,
+    /// The grid's height over its width, for an isometric tileset.
+    diamond: Option<f32>,
+}
+
+impl TileFrame {
+    fn of(rect: Rect, diamond: Option<f32>) -> TileFrame {
+        let rect = match diamond {
+            Some(_) => {
+                Rect::from_center_size(rect.center(), egui::vec2(rect.width(), rect.width()))
+            }
+            None => rect,
+        };
+        TileFrame { rect, diamond }
+    }
+
+    /// Where a point of the laid-out square is drawn.
+    fn to_screen(self, p: Pos2) -> Pos2 {
+        let Some(ratio) = self.diamond else {
+            return p;
+        };
+        let c = self.rect.center();
+        let d = p - c;
+        let half = std::f32::consts::FRAC_1_SQRT_2;
+        // Turned 45°, then scaled by 1/√2 across and ratio/√2 down.
+        let turned = egui::vec2(d.x * half - d.y * half, d.x * half + d.y * half);
+        c + egui::vec2(turned.x * half, turned.y * half * ratio)
+    }
+
+    /// Where a drawn point is in the laid-out square, from 0 to 1 across and down.
+    fn local(self, at: Pos2) -> egui::Vec2 {
+        let p = match self.diamond {
+            Some(ratio) if ratio > 0.0 => {
+                let c = self.rect.center();
+                let half = std::f32::consts::FRAC_1_SQRT_2;
+                let scaled = egui::vec2((at.x - c.x) / half, (at.y - c.y) / (half * ratio));
+                // Turned back 45°.
+                c + egui::vec2(
+                    scaled.x * half + scaled.y * half,
+                    -scaled.x * half + scaled.y * half,
+                )
+            }
+            _ => at,
+        };
+        (p - self.rect.min) / self.rect.size()
+    }
+
+    /// The region of a lane, as drawn.
+    fn region(self, kind: WangSetType, lane: usize) -> Vec<Pos2> {
+        lane_region(kind, lane, self.rect)
+            .into_iter()
+            .map(|p| self.to_screen(p))
+            .collect()
+    }
+}
+
+/// The grid's height over its width when the tileset's grid is isometric.
+fn diamond_ratio(tileset: &Tileset) -> Option<f32> {
+    let grid = tileset.grid?;
+    (grid.orientation == bt_core::GridOrientation::Isometric && grid.size.x > 0)
+        .then(|| grid.size.y as f32 / grid.size.x as f32)
 }
 
 /// The lane at `x`, `y` (0 to 1 across the tile) for a set of `kind`, as Tiled's tileset view
@@ -448,7 +519,7 @@ fn lane_region(kind: WangSetType, lane: usize, rect: Rect) -> Vec<Pos2> {
 }
 
 /// Draws a tile's labels of `set`: each lane's region in its terrain's colour.
-fn draw_labels(painter: &egui::Painter, set: &WangSet, id: TileId, rect: Rect) {
+fn draw_labels(painter: &egui::Painter, set: &WangSet, id: TileId, frame: TileFrame) {
     let Some(label) = set.tiles.get(&id) else {
         return;
     };
@@ -461,7 +532,7 @@ fn draw_labels(painter: &egui::Painter, set: &WangSet, id: TileId, rect: Rect) {
         };
         let [r, g, b, _] = terrain.color.to_array();
         painter.add(Shape::convex_polygon(
-            lane_region(set.kind, lane, rect),
+            frame.region(set.kind, lane),
             Color32::from_rgba_unmultiplied(r, g, b, 110),
             Stroke::new(1.0, Color32::from_rgb(r, g, b)),
         ));
@@ -483,5 +554,27 @@ mod tests {
         assert_eq!(lane_at(WangSetType::Edge, 0.5, 0.95), Some(4));
         assert_eq!(lane_at(WangSetType::Edge, 0.05, 0.5), Some(6));
         assert_eq!(lane_at(WangSetType::Edge, 0.5, 0.05), Some(0));
+    }
+
+    #[test]
+    fn an_isometric_tileset_labels_on_its_diamond() {
+        let rect = Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(64.0, 64.0));
+        // A 2:1 grid: the diamond is 64 wide and 32 high around the tile's middle.
+        let frame = TileFrame::of(rect, Some(0.5));
+        let top = frame.to_screen(frame.rect.min);
+        assert!(
+            (top - pos2(32.0, 16.0)).length() < 1e-3,
+            "the top-left corner is the top point: {top:?}"
+        );
+        let right = frame.to_screen(pos2(64.0, 0.0));
+        assert!((right - pos2(64.0, 32.0)).length() < 1e-3, "{right:?}");
+        // Just below the top point is the top-left corner's lane of a corner set.
+        let local = frame.local(pos2(32.0, 20.0));
+        assert_eq!(lane_at(WangSetType::Corner, local.x, local.y), Some(7));
+        let back = frame.to_screen(frame.rect.min + frame.rect.size() * local);
+        assert!(
+            (back - pos2(32.0, 20.0)).length() < 1e-3,
+            "round trip: {back:?}"
+        );
     }
 }
