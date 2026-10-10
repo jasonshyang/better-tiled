@@ -990,6 +990,123 @@ fn selection(window: &TestWindow) -> bt_editor::Selection {
     window.editor().document(doc).unwrap().selection().clone()
 }
 
+/// A map written in `scratch` with two object layers: “trees”, drawn in list order, with an
+/// oak (1), a pine of class Tree (2) and an unnamed ellipse (3), and “spawns” above it with the
+/// point “start” (4).
+fn objects_map(scratch: &Scratch) -> PathBuf {
+    use bt_core::{DrawOrder, LayerKind, MapObject, Shape};
+    use bt_test_data::fixtures::MapBuilder;
+    use glam::{DVec2, UVec2};
+
+    let object = |name: &str, class: &str, pos: DVec2, size: DVec2| MapObject {
+        name: name.to_owned(),
+        class: class.to_owned(),
+        pos,
+        size,
+        ..MapObject::default()
+    };
+    let v = DVec2::new;
+    let mut map = MapBuilder::new(UVec2::splat(16), UVec2::new(10, 8))
+        .object_layer(
+            "trees",
+            vec![
+                object("oak", "", v(16.0, 16.0), v(32.0, 16.0)),
+                object("pine", "Tree", v(64.0, 16.0), v(16.0, 16.0)),
+                MapObject {
+                    shape: Shape::Ellipse,
+                    ..object("", "", v(96.0, 48.0), v(16.0, 16.0))
+                },
+            ],
+        )
+        .object_layer(
+            "spawns",
+            vec![MapObject {
+                shape: Shape::Point,
+                ..object("start", "", v(8.0, 80.0), DVec2::ZERO)
+            }],
+        )
+        .build()
+        .unwrap();
+    if let LayerKind::Object(objects) = &mut map.layers[0].kind {
+        objects.draw_order = DrawOrder::Index;
+    }
+    let path = scratch.join("objects.tmx");
+    bt_tmx::WriteRequest::for_map(&map, &path).write().unwrap();
+    path
+}
+
+#[test]
+fn the_objects_panel_selects_centres_hides_reorders_and_filters_objects() {
+    use bt_core::ObjectId;
+    use egui::{Key, Modifiers};
+
+    let scratch = Scratch::new("window-objects-panel").unwrap();
+    let path = objects_map(&scratch);
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    window.click_last("Objects");
+    let objects = |ids: &[u32]| ids.iter().map(|id| ObjectId(*id)).collect::<Vec<_>>();
+    let list = |window: &TestWindow, layer: u32| -> Vec<u32> {
+        let map = window.editor().map_of(doc).unwrap();
+        let layer = map
+            .layer(LayerId(layer))
+            .unwrap()
+            .as_object_layer()
+            .unwrap();
+        layer.objects.iter().map(|o| o.id.0).collect()
+    };
+
+    // A click selects an object and makes its layer current; ⌘ adds one, Shift takes the rows
+    // from the last other click.
+    window.click_holding("oak", Modifiers::NONE);
+    assert_eq!(selection(&window).objects, objects(&[1]));
+    assert_eq!(selection(&window).current_layer, Some(LayerId(1)));
+    window.click_holding("pine", Modifiers::COMMAND);
+    assert_eq!(selection(&window).objects, objects(&[1, 2]));
+    window.click_holding("(ellipse 3)", Modifiers::SHIFT);
+    assert_eq!(selection(&window).objects, objects(&[3, 2]));
+
+    // A double-click centres the view on the object (after a pause: two clicks soon after
+    // another would make a triple click).
+    window.pause(1.0);
+    window.double_click("oak");
+    let camera = window.editor().camera_of(doc).unwrap();
+    assert_eq!(camera.center, glam::DVec2::new(32.0, 24.0));
+
+    // The eye hides an object, as one step.
+    window.click("Hide oak");
+    let visible = |window: &TestWindow| {
+        window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .object(ObjectId(1))
+            .unwrap()
+            .visible
+    };
+    assert!(!visible(&window));
+    window.press(command(), Key::Z);
+    assert!(visible(&window));
+
+    // Dropped on the lower half of the oak, the pine goes below it in the list; dropped on
+    // another layer's row, an object goes on top of its objects.
+    window.click_holding("pine", Modifiers::NONE);
+    window.drag_onto("pine", "oak", 0.9);
+    assert_eq!(list(&window, 1), [2, 1, 3]);
+    window.drag_onto("start", "trees", 0.5);
+    assert_eq!(
+        (list(&window, 1), list(&window, 2)),
+        (vec![2, 1, 3, 4], vec![])
+    );
+
+    // The filter keeps the objects whose name, class, kind or id holds it.
+    window.focus("Filter");
+    window.type_text("tree");
+    assert!(window.shows("pine"));
+    assert!(!window.shows("oak"));
+}
+
 /// What kind the current map's layer is, in words.
 fn kind_of(window: &TestWindow, layer: LayerId) -> Option<&'static str> {
     let doc = window.editor().current().unwrap();

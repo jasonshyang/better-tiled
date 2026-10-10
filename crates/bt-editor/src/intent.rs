@@ -129,7 +129,8 @@ pub enum Intent {
     },
     /// A step of the brush's or the eraser's stroke.
     Stroke(Stroke),
-    /// Select objects: `ids` combined with the selected ones as `mode` says.
+    /// Select objects: `ids` combined with the selected ones as `mode` says. When the selected
+    /// objects all lie on one object layer, it becomes current, as in Tiled.
     SelectObjects {
         /// The document.
         doc: DocumentId,
@@ -137,6 +138,34 @@ pub enum Intent {
         ids: Vec<ObjectId>,
         /// How they combine with the selection.
         mode: SelectionMode,
+    },
+    /// Show or hide an object (the Objects panel's eye), as one step.
+    SetObjectVisible {
+        /// The document.
+        doc: DocumentId,
+        /// The object.
+        object: ObjectId,
+        /// Shown or hidden.
+        visible: bool,
+    },
+    /// Centre the view on an object (a double-click in the Objects panel).
+    CenterOnObject {
+        /// The document.
+        doc: DocumentId,
+        /// The object.
+        object: ObjectId,
+    },
+    /// Move objects to a place in an object layer's list, from theirs or other layers (the
+    /// Objects panel's drag and drop), as one step.
+    ReorderObjects {
+        /// The document.
+        doc: DocumentId,
+        /// The objects.
+        objects: Vec<ObjectId>,
+        /// The object layer they go to.
+        layer: LayerId,
+        /// Their place in its list before the move, counted from the bottom.
+        index: usize,
     },
     /// Insert an object into the current object layer (its id is given then).
     InsertObject {

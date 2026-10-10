@@ -342,6 +342,10 @@ impl Canvas {
                 self.camera.center = (box_.min + box_.max) / 2.0;
                 self.framed = true;
             }
+            ViewRequest::CenterOn(point) => {
+                self.camera.center = point;
+                self.framed = true;
+            }
         }
     }
 

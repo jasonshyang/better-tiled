@@ -1,16 +1,18 @@
-//! The object commands: selecting objects, inserting one, and the Objects menu with Delete,
-//! Cut, Copy and Paste on objects, on a map's object layers or on a tile's collision shapes
-//! (`host`). Each change is one step; objects on locked layers are left where they are and the
-//! locks are named.
+//! The object commands: selecting objects, inserting one, the Objects menu with Delete, Cut,
+//! Copy and Paste on objects, and the Objects panel's eye, centring and drag and drop, on a
+//! map's object layers or (most of them) on a tile's collision shapes (`host`). Each change is
+//! one step; objects on locked layers are left where they are and the locks are named.
 
-use bt_core::{DrawOrder, LayerId, MapObject, ObjectId, ObjectLayer};
+use std::collections::HashSet;
+
+use bt_core::{DrawOrder, LayerId, Map, MapObject, ObjectId, ObjectLayer, ObjectOverrides};
 use bt_edit::{
     Axis, NewIds, ObjectClip, ObjectSpace, Pivot, SelectionMode, add_object, add_object_in,
     copy_objects, copy_objects_in, cut_objects, cut_objects_in, duplicate_objects,
     duplicate_objects_in, flip_objects, flip_objects_in, flip_origin, flip_origin_in,
     lower_objects, lower_objects_in, lower_objects_to_bottom, lower_objects_to_bottom_in,
-    move_objects_to_layer, paste_objects, paste_objects_in, paste_offset, raise_objects,
-    raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, remove_objects,
+    move_objects_to_layer, object_mut, paste_objects, paste_objects_in, paste_offset,
+    raise_objects, raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, remove_objects,
     remove_objects_in, rotate_objects, rotate_objects_in,
 };
 use glam::DVec2;
@@ -20,9 +22,29 @@ use super::snapping::SnapToggle;
 use super::stroke::unlocked_objects;
 use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
-use crate::effect::Effect;
+use crate::effect::{Effect, ViewRequest};
 use crate::error::EditError;
 use crate::notice::Notice;
+
+/// Why the objects of a layer drawn top-down cannot be ordered by hand.
+const TOP_DOWN_ORDER: &str = "The objects of this layer are drawn top-down: set its draw order to Manual to order them by hand";
+
+/// The object layer holding every one of `ids`, when one does.
+fn single_layer_of(map: &Map, ids: &[ObjectId]) -> Option<LayerId> {
+    let wanted: HashSet<ObjectId> = ids.iter().copied().collect();
+    let mut holders = Vec::new();
+    map.for_each_layer(|layer, _| {
+        if let Some(objects) = layer.as_object_layer()
+            && objects.objects.iter().any(|o| wanted.contains(&o.id))
+        {
+            holders.push(layer.id);
+        }
+    });
+    match holders[..] {
+        [only] => Some(only),
+        _ => None,
+    }
+}
 
 /// Where Raise and Lower move objects.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -38,7 +60,9 @@ pub(crate) enum Restack {
 }
 
 impl Editor {
-    /// Changes the selected objects: `ids` combined with them as `mode` says.
+    /// Changes the selected objects: `ids` combined with them as `mode` says. When they all lie
+    /// on one object layer, it becomes current, and the only selected layer unless it was
+    /// selected (Tiled's `MapDocument::setSelectedObjects`).
     pub(crate) fn select_objects(
         &mut self,
         doc: DocumentId,
@@ -61,6 +85,130 @@ impl Editor {
             SelectionMode::Subtract => current.retain(|id| !ids.contains(id)),
             SelectionMode::Intersect => current.retain(|id| ids.contains(id)),
         }
+        let selected = document.selection.objects.clone();
+        // A map's objects all on one layer make it current; a tile's shapes have no layer.
+        if !matches!(self.object_host(doc), Some(ObjectHost::Map(_))) {
+            return;
+        }
+        let holder = self
+            .map_of(doc)
+            .and_then(|map| single_layer_of(map, &selected));
+        let Some(layer) = holder else {
+            return;
+        };
+        let Some(document) = self.documents.get_mut(doc) else {
+            return;
+        };
+        let selection = &document.selection;
+        if selection.current_layer == Some(layer) {
+            return;
+        }
+        document.selection = if selection.layers.contains(&layer) {
+            selection.with_layers(layer, &selection.layers)
+        } else {
+            selection.with_current_layer(layer)
+        };
+        let family = self.tool_family(doc);
+        self.tools.follow_layer(family);
+        self.session_changed();
+    }
+
+    /// Shows or hides an object as one step; a template instance keeps its visibility as its
+    /// own.
+    pub(crate) fn set_object_visible(
+        &mut self,
+        doc: DocumentId,
+        object: ObjectId,
+        visible: bool,
+    ) -> Vec<Effect> {
+        let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
+            return Vec::new();
+        };
+        let label = if visible {
+            "Show Object"
+        } else {
+            "Hide Object"
+        };
+        let result = self.transact(doc, label, |tx| {
+            let found = object_mut(tx.map_mut(asset)?, object)?;
+            if found.visible != visible {
+                found.visible = visible;
+                if found.template.is_some() {
+                    found.overrides |= ObjectOverrides::VISIBLE;
+                }
+            }
+            Ok::<_, EditError>(())
+        });
+        result.err().map(warn).into_iter().collect()
+    }
+
+    /// Asks the window to centre the view on an object: on the middle of what it covers.
+    pub(crate) fn center_on_object(&self, doc: DocumentId, object: ObjectId) -> Vec<Effect> {
+        match self.objects_screen_bounds(doc, &[object]) {
+            Some(bounds) => vec![Effect::View(ViewRequest::CenterOn(
+                (bounds.min + bounds.max) / 2.0,
+            ))],
+            None => vec![warn(bt_edit::EditError::NoSuchObject(object).into())],
+        }
+    }
+
+    /// The Objects panel's drag: moves objects to the place `index` of the object layer
+    /// `layer`'s list as one step, "Reorder Objects" within their layer and "Move Objects to
+    /// Layer" from others. Objects on locked layers stay and their layers are named; a locked
+    /// layer takes none; a layer drawn top-down is not reordered, since its list order draws
+    /// nothing.
+    pub(crate) fn reorder_objects(
+        &mut self,
+        doc: DocumentId,
+        ids: &[ObjectId],
+        layer: LayerId,
+        index: usize,
+    ) -> Vec<Effect> {
+        let (Some(asset), Some(map)) = (
+            self.documents.get(doc).map(|d| d.asset()),
+            self.map_of(doc).cloned(),
+        ) else {
+            return Vec::new();
+        };
+        let Some(target) = map.layer(layer) else {
+            return vec![warn(EditError::NoSuchLayer(layer))];
+        };
+        let Some(objects) = target.as_object_layer() else {
+            return vec![warn(bt_edit::EditError::NotAnObjectLayer(layer).into())];
+        };
+        if map.effective_layer(layer).is_some_and(|l| l.locked) {
+            return self
+                .locked_objects_notice(doc, &[layer])
+                .into_iter()
+                .collect();
+        }
+        let split = unlocked_objects(&map, ids);
+        let mut effects: Vec<Effect> = self
+            .locked_objects_notice(doc, &split.locked_layers)
+            .into_iter()
+            .collect();
+        if split.unlocked.is_empty() {
+            return effects;
+        }
+        let within = split
+            .unlocked
+            .iter()
+            .all(|id| map.object_layer_of(*id) == Some(layer));
+        if within && objects.draw_order == DrawOrder::TopDown {
+            effects.push(Effect::Notify(Notice::info(TOP_DOWN_ORDER)));
+            return effects;
+        }
+        let label = if within {
+            "Reorder Objects"
+        } else {
+            "Move Objects to Layer"
+        };
+        let result = self.transact(doc, label, |tx| {
+            bt_edit::reorder_objects(tx.map_mut(asset)?, &split.unlocked, layer, index)
+                .map_err(EditError::from)
+        });
+        effects.extend(result.err().map(warn));
+        effects
     }
 
     /// Inserts an object into the current object layer, or among the current tile's collision
@@ -462,10 +610,7 @@ impl Editor {
                 map.layer(layer)?.as_object_layer()?.draw_order
             }
         };
-        (draw_order == DrawOrder::TopDown).then(|| {
-            "The objects of this layer are drawn top-down: set its draw order to Manual to order them by hand"
-                .to_owned()
-        })
+        (draw_order == DrawOrder::TopDown).then(|| TOP_DOWN_ORDER.to_owned())
     }
 
     /// What to say about locked layers whose objects an edit left alone.

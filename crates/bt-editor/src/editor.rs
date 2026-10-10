@@ -201,6 +201,18 @@ impl Editor {
                 self.select_objects(doc, &ids, mode);
                 Vec::new()
             }
+            Intent::SetObjectVisible {
+                doc,
+                object,
+                visible,
+            } => self.set_object_visible(doc, object, visible),
+            Intent::CenterOnObject { doc, object } => self.center_on_object(doc, object),
+            Intent::ReorderObjects {
+                doc,
+                objects,
+                layer,
+                index,
+            } => self.reorder_objects(doc, &objects, layer, index),
             Intent::InsertObject { doc, object } => self.insert_object(doc, *object),
             Intent::ObjectStroke(step) => self.object_stroke(step),
             Intent::PasteObjects { doc, at } => self.paste_copied_objects(doc, at),

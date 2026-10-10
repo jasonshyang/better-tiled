@@ -6,8 +6,8 @@
 
 use bt_core::{DrawOrder, LayerId, MapObject, ObjectId};
 use bt_editor::{
-    ActionId, DocumentId, Editor, Effect, Enabled, Intent, ObjectStroke, ObjectStrokeKind,
-    SelectionMode, Settings, Snapping,
+    ActionId, DocumentId, Editor, Effect, Enabled, Intent, ObjectRow, ObjectStroke,
+    ObjectStrokeKind, SelectionMode, Settings, Snapping, ViewRequest,
 };
 use bt_test_data::fixtures::MapBuilder;
 use glam::{DVec2, UVec2};
@@ -169,4 +169,192 @@ fn the_objects_menu_and_clipboard_act_on_unlocked_objects() {
         layer: LayerId(2),
     });
     assert!(!effects.is_empty(), "a locked target says so");
+}
+
+#[test]
+fn objects_of_one_layer_make_it_current_when_selected() {
+    let (mut editor, doc) = editor();
+    let current = |editor: &Editor| editor.document(doc).unwrap().selection().clone();
+    select(&mut editor, doc, &[3]);
+    assert_eq!(current(&editor).current_layer, Some(LayerId(2)));
+    assert_eq!(current(&editor).layers, [LayerId(2)]);
+    select(&mut editor, doc, &[1, 3]);
+    assert_eq!(
+        current(&editor).current_layer,
+        Some(LayerId(2)),
+        "two layers: it stays"
+    );
+    // A layer among the selected ones becomes current and they stay selected.
+    editor.apply(Intent::SelectLayers {
+        doc,
+        current: LayerId(2),
+        layers: vec![LayerId(1), LayerId(2)],
+    });
+    select(&mut editor, doc, &[2]);
+    assert_eq!(current(&editor).current_layer, Some(LayerId(1)));
+    assert_eq!(current(&editor).layers, [LayerId(1), LayerId(2)]);
+}
+
+#[test]
+fn the_objects_panel_shows_hides_and_centres_on_objects() {
+    let (mut editor, doc) = editor();
+    editor.apply(Intent::SetObjectVisible {
+        doc,
+        object: ObjectId(2),
+        visible: false,
+    });
+    assert!(!object(&editor, doc, 2).visible);
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert!(object(&editor, doc, 2).visible, "one step");
+    let effects = editor.apply(Intent::CenterOnObject {
+        doc,
+        object: ObjectId(2),
+    });
+    assert!(
+        matches!(effects[..], [Effect::View(ViewRequest::CenterOn(at))] if at == DVec2::new(40.0, 8.0)),
+        "{effects:?}"
+    );
+    let effects = editor.apply(Intent::CenterOnObject {
+        doc,
+        object: ObjectId(9),
+    });
+    assert!(matches!(effects[..], [Effect::Notify(_)]), "{effects:?}");
+}
+
+/// “a” drawn in list order with objects 1 and 2, “b” drawn top-down with object 3.
+fn ordered_editor() -> (Editor, DocumentId) {
+    let mut map = MapBuilder::new(UVec2::splat(16), UVec2::splat(10))
+        .object_layer("a", vec![rect(0.0, 0.0), rect(32.0, 0.0)])
+        .object_layer("b", vec![rect(0.0, 32.0)])
+        .build()
+        .unwrap();
+    if let bt_core::LayerKind::Object(objects) = &mut map.layers[0].kind {
+        objects.draw_order = DrawOrder::Index;
+    }
+    let mut editor = Editor::new();
+    let doc = editor.open_new_map(map);
+    (editor, doc)
+}
+
+fn list(editor: &Editor, doc: DocumentId, layer: u32) -> Vec<u32> {
+    let map = editor.map_of(doc).unwrap();
+    let objects = map
+        .layer(LayerId(layer))
+        .unwrap()
+        .as_object_layer()
+        .unwrap();
+    objects.objects.iter().map(|o| o.id.0).collect()
+}
+
+#[test]
+fn objects_are_dragged_to_a_place_in_a_list_as_one_step() {
+    let (mut editor, doc) = ordered_editor();
+    let reorder = |editor: &mut Editor, objects: &[u32], layer: u32, index: usize| {
+        editor.apply(Intent::ReorderObjects {
+            doc,
+            objects: objects.iter().map(|id| ObjectId(*id)).collect(),
+            layer: LayerId(layer),
+            index,
+        })
+    };
+    reorder(&mut editor, &[1], 1, 2);
+    assert_eq!(list(&editor, doc, 1), [2, 1]);
+    reorder(&mut editor, &[3], 1, 0);
+    assert_eq!(
+        (list(&editor, doc, 1), list(&editor, doc, 2)),
+        (vec![3, 2, 1], vec![])
+    );
+    let labels: Vec<String> = editor
+        .document(doc)
+        .unwrap()
+        .history()
+        .entries()
+        .into_iter()
+        .map(|entry| entry.label)
+        .collect();
+    assert_eq!(labels, ["Reorder Objects", "Move Objects to Layer"]);
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(
+        (list(&editor, doc, 1), list(&editor, doc, 2)),
+        (vec![2, 1], vec![3])
+    );
+
+    // A layer drawn top-down is not reordered by hand, and a locked one takes nothing.
+    let effects = reorder(&mut editor, &[3], 2, 1);
+    assert!(matches!(&effects[..], [Effect::Notify(_)]), "{effects:?}");
+    editor.apply(Intent::SetLayerLocked {
+        doc,
+        layer: LayerId(1),
+        locked: true,
+    });
+    let effects = reorder(&mut editor, &[3], 1, 0);
+    assert!(matches!(&effects[..], [Effect::Notify(_)]), "{effects:?}");
+    assert_eq!(
+        (list(&editor, doc, 1), list(&editor, doc, 2)),
+        (vec![2, 1], vec![3])
+    );
+}
+
+#[test]
+fn the_objects_panel_lists_layers_and_objects_topmost_first_and_filters_them() {
+    use bt_core::{Layer, LayerKind, Shape};
+
+    let named = |name: &str, class: &str| MapObject {
+        name: name.to_owned(),
+        class: class.to_owned(),
+        ..rect(0.0, 0.0)
+    };
+    let mut inner = MapBuilder::new(UVec2::splat(16), UVec2::splat(10))
+        .object_layer("a", vec![named("oak", ""), named("pine", "Tree")])
+        .build()
+        .unwrap()
+        .layers;
+    inner[0].id = LayerId(0);
+    let mut map = MapBuilder::new(UVec2::splat(16), UVec2::splat(10))
+        .layer(Layer::new(LayerId(0), "g", LayerKind::Group(inner)))
+        .tile_layer("t", "")
+        .object_layer(
+            "b",
+            vec![
+                rect(0.0, 50.0),
+                MapObject {
+                    shape: Shape::Point,
+                    ..rect(0.0, 10.0)
+                },
+            ],
+        )
+        .build()
+        .unwrap();
+    if let LayerKind::Group(children) = &mut map.layers[0].kind
+        && let LayerKind::Object(objects) = &mut children[0].kind
+    {
+        objects.draw_order = DrawOrder::Index;
+    }
+    let mut editor = Editor::new();
+    let doc = editor.open_new_map(map);
+    let rows = |filter: &str| -> Vec<String> {
+        editor
+            .object_rows(doc, filter)
+            .iter()
+            .map(|row| match row {
+                ObjectRow::Layer { layer, depth } => format!("{depth}:{}", layer.name),
+                ObjectRow::Object {
+                    object,
+                    index,
+                    depth,
+                    ..
+                } => format!("{depth}:#{}@{index}", object.id.0),
+            })
+            .collect()
+    };
+    // “b” draws top-down: the point higher up is drawn first, so it is listed last.
+    assert_eq!(
+        rows(""),
+        ["0:b", "1:#3@0", "1:#4@1", "0:g", "1:a", "2:#2@1", "2:#1@0"]
+    );
+    assert_eq!(rows("TREE"), ["0:g", "1:a", "2:#2@1"], "by class");
+    assert_eq!(rows("point"), ["0:b", "1:#4@1"], "by kind");
+    assert_eq!(rows("oak"), ["0:g", "1:a", "2:#1@0"], "by name");
+    assert_eq!(rows("3"), ["0:b", "1:#3@0"], "by id");
+    assert!(rows("zzz").is_empty());
 }

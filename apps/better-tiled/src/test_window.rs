@@ -265,6 +265,33 @@ impl TestWindow {
         self.settle();
     }
 
+    /// Clicks the last widget labelled `label`: a panel's, when the menu bar has one too.
+    pub(crate) fn click_last(&mut self, label: &str) {
+        let node = self.harness.get_all_by_label(label).last();
+        let Some(node) = node else {
+            panic!("no widget is labelled “{label}”");
+        };
+        node.click_accesskit();
+        self.settle();
+    }
+
+    /// Gives the keyboard to the first widget labelled `label` (a text field).
+    pub(crate) fn focus(&mut self, label: &str) {
+        self.node(label).focus();
+        self.settle();
+    }
+
+    /// Lets `seconds` of the window's time pass with no input.
+    pub(crate) fn pause(&mut self, seconds: f32) {
+        self.harness.run_steps((seconds * 60.0).ceil() as usize);
+        self.settle();
+    }
+
+    /// Whether a widget labelled `label` is shown.
+    pub(crate) fn shows(&self, label: &str) -> bool {
+        self.harness.query_all_by_label(label).next().is_some()
+    }
+
     /// Clicks the first widget labelled `label` with the pointer, holding `modifiers` (Shift
     /// and ⌘ clicks in a panel).
     pub(crate) fn click_holding(&mut self, label: &str, modifiers: egui::Modifiers) {

@@ -622,7 +622,7 @@ fn drop_allowed(map: &Map, layers: &[LayerId], to: LayerLocation) -> bool {
 }
 
 /// A layer's name, or what it is when it has none.
-fn display_name(layer: &Layer) -> String {
+pub(crate) fn display_name(layer: &Layer) -> String {
     if layer.name.is_empty() {
         format!("({})", layer.kind_name())
     } else {

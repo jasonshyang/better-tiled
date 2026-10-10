@@ -22,7 +22,7 @@ use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun
 use crate::dialogs::{DialogRequest, Modals};
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
-use crate::panels::{LayersPanel, TileImages, TilesPanel};
+use crate::panels::{LayersPanel, ObjectsPanel, TileImages, TilesPanel};
 use crate::platform::{QuitGuard, install_system_quit_guard};
 use crate::style::apply_theme;
 use crate::tileset_editor::{TilesetEditorView, TilesetFrame};
@@ -43,6 +43,9 @@ pub(crate) struct App {
     pub(super) editor: Editor,
     pub(super) canvases: HashMap<DocumentId, Canvas>,
     layers_panel: LayersPanel,
+    objects_panel: ObjectsPanel,
+    /// The panel the left group shows.
+    left_tab: LeftTab,
     /// The canvas's tools.
     toolbox: ToolBox,
     tiles_panel: TilesPanel,
@@ -75,6 +78,26 @@ pub(crate) struct App {
     started: Instant,
     frame_started: Instant,
     expects_document: bool,
+}
+
+/// The panels of the left group, shown one at a time as tabs.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+enum LeftTab {
+    /// The Layers panel.
+    #[default]
+    Layers,
+    /// The Objects panel.
+    Objects,
+}
+
+impl LeftTab {
+    /// The tab's title.
+    fn title(self) -> &'static str {
+        match self {
+            LeftTab::Layers => "Layers",
+            LeftTab::Objects => "Objects",
+        }
+    }
 }
 
 /// A notice in the status bar until a time.
@@ -234,6 +257,8 @@ impl App {
             editor,
             canvases: HashMap::new(),
             layers_panel: LayersPanel::default(),
+            objects_panel: ObjectsPanel::default(),
+            left_tab: LeftTab::default(),
             toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
             tileset_editor: TilesetEditorView::default(),
@@ -498,15 +523,33 @@ impl App {
             // A tileset's tab: the tileset editor is all there is.
             return;
         }
-        egui::Panel::left("layers")
-            .resizable(true)
-            .default_size(220.0)
-            .show(ui, |ui| {
-                ui.heading("Layers");
-                ui.separator();
-                self.layers_panel
-                    .show(ui, &self.editor, doc, &mut self.intents);
-            });
+        // While a map's tileset is edited in its place, the map's layers and objects wait.
+        if !self.shows_tileset_editor(doc) {
+            egui::Panel::left("left_panels")
+                .resizable(true)
+                .default_size(240.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        for tab in [LeftTab::Layers, LeftTab::Objects] {
+                            let title = egui::RichText::new(tab.title()).heading();
+                            if ui.selectable_label(self.left_tab == tab, title).clicked() {
+                                self.left_tab = tab;
+                            }
+                        }
+                    });
+                    ui.separator();
+                    match self.left_tab {
+                        LeftTab::Layers => {
+                            self.layers_panel
+                                .show(ui, &self.editor, doc, &mut self.intents);
+                        }
+                        LeftTab::Objects => {
+                            self.objects_panel
+                                .show(ui, &self.editor, doc, &mut self.intents);
+                        }
+                    }
+                });
+        }
         egui::Panel::right("tiles")
             .resizable(true)
             .default_size(300.0)

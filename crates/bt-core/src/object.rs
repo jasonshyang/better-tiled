@@ -65,6 +65,24 @@ impl Default for MapObject {
     }
 }
 
+impl MapObject {
+    /// What kind of object it is, in words: its shape, or "tile" for a tile object.
+    pub fn kind_name(&self) -> &'static str {
+        if self.tile.is_some() {
+            return "tile";
+        }
+        match self.shape {
+            Shape::Rectangle => "rectangle",
+            Shape::Ellipse => "ellipse",
+            Shape::Point => "point",
+            Shape::Capsule => "capsule",
+            Shape::Polygon(_) => "polygon",
+            Shape::Polyline(_) => "polyline",
+            Shape::Text(_) => "text",
+        }
+    }
+}
+
 /// The shape of an object.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {

@@ -70,7 +70,7 @@ pub enum FileRequest {
 }
 
 /// A camera move the window carries out.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ViewRequest {
     /// Zoom in a step.
     ZoomIn,
@@ -82,6 +82,8 @@ pub enum ViewRequest {
     Fit,
     /// Centre the view on a cell.
     CenterOnCell(glam::IVec2),
+    /// Centre the view on a point of the map's screen space (world pixels).
+    CenterOn(glam::DVec2),
 }
 
 /// A question's identity.
