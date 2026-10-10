@@ -384,11 +384,7 @@ fn label_blocks(
 
 /// The terrain on every lane of `kind` of a label, when one terrain is on all of them.
 fn all_of_one_terrain(label: WangId, kind: WangSetType) -> Option<TerrainColor> {
-    let mut lanes = Lane::ALL.iter().filter(|lane| match kind {
-        WangSetType::Corner => lane.is_corner(),
-        WangSetType::Edge => !lane.is_corner(),
-        WangSetType::Mixed => true,
-    });
+    let mut lanes = Lane::ALL.iter().filter(|&&lane| kind.uses(lane));
     let first = label.lane(*lanes.next()?);
     (first != 0 && lanes.all(|lane| label.lane(*lane) == first)).then_some(TerrainColor(first))
 }

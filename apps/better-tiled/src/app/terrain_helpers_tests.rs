@@ -1,6 +1,7 @@
 //! The tileset editor's terrain helpers in the window, on tilesets drawn lane by lane: Layout…
 //! finds a block in the image, Apply labels it and Label All labels every block found;
-//! Auto-label… labels the chosen terrain from the tile clicked; each one step.
+//! Auto-label… labels the chosen terrain from the tile clicked; Patterns shows what a set lacks
+//! and labels a tile with a pattern clicked; each one step.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -194,4 +195,59 @@ fn auto_label_labels_the_chosen_terrain_from_the_tile_clicked() {
     ];
     assert_eq!(labels, expected.into_iter().collect());
     assert_eq!(steps(&window, doc), ["Auto-label Terrain"]);
+}
+
+#[test]
+fn patterns_show_what_a_set_lacks_and_label_tiles_with_one() {
+    let scratch = Scratch::new("window-terrain-patterns").unwrap();
+    let atlas = Atlas::builder()
+        .name("ground")
+        .grid(4, 4)
+        .build_in(scratch.path())
+        .unwrap();
+    // Grass and dirt on the corners, every combination but all dirt.
+    let mut set = TerrainSetBuilder::new(WangSetType::Corner)
+        .terrains(&["Grass", "Dirt"])
+        .every_combination()
+        .build();
+    set.tiles.remove(&TileId(15));
+    let mut tileset = (*atlas.tileset).clone();
+    tileset.wang_sets.push(set);
+    let path = map_with(&scratch, Arc::new(tileset));
+    let (mut window, doc) = terrain_mode(&scratch, &path);
+
+    window.click("Ground");
+    window.click("Patterns");
+    assert!(window.shows("“Ground” needs 16 patterns: 15 present, 1 missing."));
+    let patterns = window.editor().needed_patterns(doc, 0).unwrap();
+    let missing = patterns.listed.iter().position(|p| p.tiles == 0).unwrap();
+    window.click(&format!("Pattern {}", missing + 1));
+    let last = window.tileset_tile(15);
+    window.click_on_screen(last, PointerButton::Primary, Modifiers::NONE);
+    let labels = edited(&window, doc).wang_sets[0].tiles.clone();
+    assert_eq!(labels[&TileId(15)], corners([2, 2, 2, 2]), "all dirt");
+    assert_eq!(steps(&window, doc), ["Label Terrain Pattern"]);
+    assert!(window.shows("“Ground” needs 16 patterns: 16 present, 0 missing."));
+}
+
+#[test]
+fn a_set_too_large_to_list_says_how_many_patterns_it_needs() {
+    let scratch = Scratch::new("window-terrain-many-patterns").unwrap();
+    let atlas = Atlas::builder()
+        .name("ground")
+        .grid(4, 4)
+        .build_in(scratch.path())
+        .unwrap();
+    // Five terrains seen together on a mixed set: 5⁸ combinations.
+    let tileset = TerrainSetBuilder::new(WangSetType::Mixed)
+        .terrains(&["A", "B", "C", "D", "E"])
+        .label(0, bt_core::WangId::from_lanes([1, 2, 3, 4, 5, 1, 1, 1]))
+        .added_to((*atlas.tileset).clone());
+    let path = map_with(&scratch, Arc::new(tileset));
+    let (mut window, _) = terrain_mode(&scratch, &path);
+
+    window.click("Ground");
+    window.click("Patterns");
+    assert!(window.shows("“Ground” needs 390625 patterns: too many to list."));
+    assert!(!window.shows("Pattern 1"));
 }

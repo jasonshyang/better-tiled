@@ -4,8 +4,8 @@
 //! labels the lanes it passes with the chosen terrain, the right button clears them, each drag
 //! one step. Beside the tiles, the tileset's terrain sets and the chosen set's terrains: choose
 //! one to label with, and the sets' and terrains' commands; and the helpers, which take the
-//! tiles' clicks while they are open: Layout… (`layouts.rs`), and Auto-label…, which labels the
-//! chosen terrain from the next tile clicked.
+//! tiles' clicks while they are open: Layout… (`layouts.rs`), Auto-label…, which labels the
+//! chosen terrain from the next tile clicked, and Patterns (`patterns.rs`).
 
 use bt_core::{Color, TileId, Tileset, WangSet, WangSetType};
 use bt_editor::{
@@ -16,6 +16,7 @@ use bt_terrain::TerrainColor;
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2};
 
 use super::layouts::LayoutsPanel;
+use super::patterns::PatternsPanel;
 use super::{DrawnTiles, draw_tiles};
 use crate::panels::{ShownTiles, TileSource};
 
@@ -40,6 +41,8 @@ enum Helper {
         /// The document.
         doc: DocumentId,
     },
+    /// Patterns: what the chosen set needs; a pattern labels the tiles clicked.
+    Patterns(PatternsPanel),
 }
 
 impl Helper {
@@ -48,6 +51,7 @@ impl Helper {
         match self {
             Helper::Layouts(panel) => panel.doc(),
             Helper::AutoLabel { doc } => *doc,
+            Helper::Patterns(panel) => panel.doc(),
         }
     }
 }
@@ -111,6 +115,18 @@ impl TerrainLabeller {
                 shown
             }
             Some(Helper::AutoLabel { .. }) => self.show_auto_label_tiles(ui, cx, zoom, source, out),
+            Some(Helper::Patterns(panel)) => {
+                let open = egui::Panel::right("terrain-patterns")
+                    .resizable(true)
+                    .default_size(260.0)
+                    .show(ui, |ui| panel.show(ui, cx))
+                    .inner;
+                let shown = panel.show_tiles(ui, cx, zoom, source, out);
+                if !open {
+                    self.helper = None;
+                }
+                shown
+            }
             None => self.show_label_tiles(ui, cx, zoom, source, out),
         }
     }
@@ -332,6 +348,20 @@ impl TerrainLabeller {
                 None
             } else {
                 Some(Helper::AutoLabel { doc: cx.doc })
+            };
+        }
+        let patterns_open = matches!(self.helper, Some(Helper::Patterns(_)));
+        let patterns = ui
+            .add(egui::Button::selectable(patterns_open, "Patterns"))
+            .on_hover_text(
+                "The patterns of terrains the chosen set needs, the missing ones in red: choose \
+                 one, then click tiles to label them with it",
+            );
+        if patterns.clicked() {
+            self.helper = if patterns_open {
+                None
+            } else {
+                Some(Helper::Patterns(PatternsPanel::new(cx.doc)))
             };
         }
     }

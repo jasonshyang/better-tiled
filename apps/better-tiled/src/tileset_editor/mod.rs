@@ -8,6 +8,7 @@
 mod animation;
 mod collision;
 mod layouts;
+mod patterns;
 mod terrain;
 
 use std::collections::HashMap;

@@ -357,6 +357,16 @@ pub enum Intent {
         /// The tile that is all of the terrain.
         tile: TileId,
     },
+    /// Patterns: label a tile with a whole pattern of the set the Terrain mode labels with
+    /// ([`crate::Editor::needed_patterns`]), as one step.
+    LabelPattern {
+        /// The document.
+        doc: DocumentId,
+        /// The pattern: a terrain on each lane of the set's kind.
+        pattern: bt_core::WangId,
+        /// The tile.
+        tile: TileId,
+    },
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

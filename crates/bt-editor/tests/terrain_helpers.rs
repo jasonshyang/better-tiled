@@ -1,6 +1,8 @@
 //! The tileset editor's terrain helpers through the editor, on tilesets drawn lane by lane:
 //! Layout… finds the blocks `bt-terrain` finds and labels them as its layouts and Label All
-//! do, each Apply and each Label All one step that undoes, a new set made in the same step.
+//! do, a new set made in the same step; Auto-label labels what `bt-terrain` proposes; Patterns
+//! are the ones `bt-terrain` says a set needs, and a tile takes a whole one. Each change is one
+//! step that undoes.
 
 #![cfg(test)]
 
@@ -514,4 +516,73 @@ fn auto_label_labels_a_terrain_from_one_tile_as_one_step() {
 
     editor.apply(Intent::Run(ActionId::Undo));
     assert_eq!(tileset(&editor, doc).wang_sets[0].tiles, before, "one step");
+}
+
+#[test]
+fn a_tile_takes_a_whole_pattern_the_set_needs_as_one_step() {
+    use bt_test_data::fixtures::{TerrainSetBuilder, corners};
+
+    // Grass and dirt on the corners, every combination but all dirt.
+    let atlas = Atlas::builder().grid(4, 4).build_embedded().unwrap();
+    let mut set = TerrainSetBuilder::new(WangSetType::Corner)
+        .terrains(&["Grass", "Dirt"])
+        .every_combination()
+        .build();
+    set.tiles.remove(&TileId(15));
+    let mut ground = (*atlas.tileset).clone();
+    ground.wang_sets.push(set);
+    let ground = Arc::new(ground);
+    let (mut editor, doc) = editor_with(ground.clone());
+    let patterns = editor.needed_patterns(doc, 0).unwrap();
+    let terrain = bt_terrain::Terrain::from_tileset(&ground, TilesetSlot::new(0).unwrap(), 0);
+    assert_eq!(
+        patterns,
+        bt_terrain::patterns::needed(&terrain.unwrap()),
+        "what bt-terrain says"
+    );
+    let missing: Vec<WangId> = patterns.missing().map(|p| p.pattern).collect();
+    assert_eq!(missing, [corners([2, 2, 2, 2])]);
+
+    editor.apply(Intent::ChooseLabelTerrain {
+        doc,
+        label: LabelTerrain {
+            set: 0,
+            color: TerrainColor(1),
+        },
+    });
+    let label = |editor: &mut Editor, pattern: WangId, tile: u32| {
+        editor.apply(Intent::LabelPattern {
+            doc,
+            pattern,
+            tile: TileId(tile),
+        })
+    };
+    assert!(label(&mut editor, missing[0], 15).is_empty());
+    assert_eq!(
+        tileset(&editor, doc).wang_sets[0].tiles[&TileId(15)],
+        corners([2, 2, 2, 2])
+    );
+    assert_eq!(editor.needed_patterns(doc, 0).unwrap().missing().count(), 0);
+    assert_eq!(steps(&editor, doc), ["Label Terrain Pattern"]);
+
+    // Lanes the set's kind does not have are left out; a terrain the set lacks is refused.
+    let with_edges = WangId::from_lanes([1, 1, 1, 1, 1, 1, 1, 1]);
+    assert!(label(&mut editor, with_edges, 14).is_empty());
+    assert_eq!(
+        tileset(&editor, doc).wang_sets[0].tiles[&TileId(14)],
+        corners([1, 1, 1, 1])
+    );
+    let effects = label(&mut editor, corners([3, 1, 1, 1]), 0);
+    let [Effect::Notify(notice)] = effects.as_slice() else {
+        panic!("{effects:?}");
+    };
+    assert_eq!(notice.text, "the terrain set has no terrain 3");
+
+    editor.apply(Intent::Run(ActionId::Undo));
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(
+        tileset(&editor, doc).wang_sets,
+        ground.wang_sets,
+        "a step each"
+    );
 }

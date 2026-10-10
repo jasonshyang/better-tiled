@@ -127,6 +127,18 @@ pub enum WangSetType {
     Mixed,
 }
 
+impl WangSetType {
+    /// Whether a set of this kind uses `lane`: a corner set its corners, an edge set its edges,
+    /// a mixed set all eight.
+    pub fn uses(self, lane: Lane) -> bool {
+        match self {
+            WangSetType::Corner => lane.is_corner(),
+            WangSetType::Edge => !lane.is_corner(),
+            WangSetType::Mixed => true,
+        }
+    }
+}
+
 /// One terrain of a set.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WangColor {
@@ -201,5 +213,15 @@ mod tests {
         assert_eq!((id.lane(Lane::TopLeft), id.lane(Lane::Top)), (3, 0));
         assert!(Lane::TopLeft.is_corner() && !Lane::Left.is_corner());
         assert!(WangId::default().is_empty() && !id.is_empty());
+    }
+
+    #[test]
+    fn each_kind_of_set_uses_its_lanes() {
+        let used = |kind: WangSetType| Lane::ALL.into_iter().filter(|&l| kind.uses(l)).count();
+        assert_eq!(used(WangSetType::Corner), 4);
+        assert_eq!(used(WangSetType::Edge), 4);
+        assert_eq!(used(WangSetType::Mixed), 8);
+        assert!(WangSetType::Corner.uses(Lane::TopLeft) && !WangSetType::Corner.uses(Lane::Top));
+        assert!(WangSetType::Edge.uses(Lane::Left));
     }
 }
