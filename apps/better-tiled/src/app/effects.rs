@@ -5,7 +5,9 @@
 use bt_editor::{Dialog, Effect, Intent, Notice};
 
 use super::frame::App;
-use crate::dialogs::{Modal, NewMapDialog, NewTilesetDialog, PaletteDialog, PreferencesDialog};
+use crate::dialogs::{
+    ChooseLayerDialog, Modal, NewMapDialog, NewTilesetDialog, PaletteDialog, PreferencesDialog,
+};
 use crate::style::apply_theme;
 
 impl App {
@@ -54,6 +56,17 @@ impl App {
                     .map_or(glam::UVec2::splat(32), |map| map.tile_size());
                 self.modals
                     .push(Modal::NewTileset(NewTilesetDialog::new(doc, tile_size)));
+            }
+            Effect::Show(Dialog::MoveObjectsToLayer(doc)) => self
+                .modals
+                .push(Modal::ChooseLayer(ChooseLayerDialog::new(doc))),
+            Effect::PasteAtPointer(doc) => {
+                let at = self
+                    .canvases
+                    .get(&doc)
+                    .and_then(crate::canvas::Canvas::hover)
+                    .map(|hover| hover.pixel);
+                self.intents.push(Intent::PasteObjects { doc, at });
             }
             Effect::Show(Dialog::Preferences) => {
                 self.modals

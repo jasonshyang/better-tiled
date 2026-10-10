@@ -16,9 +16,11 @@ const DRAG_DISTANCE: f32 = 3.0;
 pub(crate) struct Pointer {
     /// On screen, in points.
     pub(crate) screen: Pos2,
-    /// In the map's pixels (object coordinates).
+    /// In the map's screen space (world pixels), where objects are drawn.
+    pub(crate) world: DVec2,
+    /// In the current layer's pixels (object coordinates): the map's, less the layer's offset.
     pub(crate) pixel: DVec2,
-    /// The cell.
+    /// The current layer's cell under the pointer, the layer's offset taken off as Tiled does.
     pub(crate) cell: IVec2,
 }
 
@@ -67,6 +69,8 @@ pub(crate) enum Gesture {
     ModifiersChanged(Modifiers),
     /// Escape: whatever the tool was doing stops.
     Cancel,
+    /// Enter: whatever the tool is making is finished.
+    Confirm,
     /// The pointer left the map.
     Leave,
 }
@@ -102,6 +106,9 @@ pub(crate) struct ReadFrame<'a> {
     pub(crate) hovered: bool,
     /// Whether presses go to panning rather than the tool (Space held, typing).
     pub(crate) panning: bool,
+    /// Whether Escape and Enter are the tool's: no text field has the keyboard and no dialog
+    /// is open.
+    pub(crate) keys: bool,
     /// Where a screen point is in the map's terms.
     pub(crate) to_pointer: &'a dyn Fn(Pos2) -> Pointer,
 }
@@ -157,10 +164,15 @@ impl GestureReader {
                     key: egui::Key::Escape,
                     pressed: true,
                     ..
-                } => {
+                } if frame.keys => {
                     self.held = None;
                     gestures.push(Gesture::Cancel);
                 }
+                Event::Key {
+                    key: egui::Key::Enter,
+                    pressed: true,
+                    ..
+                } if frame.keys => gestures.push(Gesture::Confirm),
                 Event::PointerGone if self.held.is_none() && self.inside => {
                     self.inside = false;
                     gestures.push(Gesture::Leave);
@@ -240,6 +252,7 @@ mod tests {
     fn pointer(pos: Pos2) -> Pointer {
         Pointer {
             screen: pos,
+            world: DVec2::new(f64::from(pos.x), f64::from(pos.y)),
             pixel: DVec2::new(f64::from(pos.x), f64::from(pos.y)),
             cell: IVec2::new((pos.x / 10.0) as i32, (pos.y / 10.0) as i32),
         }
@@ -260,6 +273,7 @@ mod tests {
             rect: Rect::from_min_size(Pos2::ZERO, vec2(100.0, 100.0)),
             hovered: true,
             panning: false,
+            keys: true,
             to_pointer,
         }
     }
@@ -362,5 +376,23 @@ mod tests {
             &frame(&to),
         );
         assert_eq!(escape, [Gesture::Cancel]);
+        let enter = || {
+            input(vec![Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Modifiers::NONE,
+            }])
+        };
+        assert_eq!(reader.read(&enter(), &frame(&to)), [Gesture::Confirm]);
+        let elsewhere = ReadFrame {
+            keys: false,
+            ..frame(&to)
+        };
+        assert!(
+            reader.read(&enter(), &elsewhere).is_empty(),
+            "Enter in a text field or a dialog is theirs"
+        );
     }
 }

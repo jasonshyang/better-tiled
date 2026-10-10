@@ -111,12 +111,8 @@ impl Tool for RectSelect {
     fn overlay(&self, cx: &ToolContext<'_>, out: &mut Overlay) {
         if let Some(drag) = self.drag.filter(|d| d.selecting) {
             let color = cx.editor.settings().theme.selection_color.0;
-            out.vectors.extend(region_preview(
-                &cx.map.geometry(),
-                &drag.region(),
-                color,
-                1.0,
-            ));
+            out.vectors
+                .extend(region_preview(cx, &drag.region(), color, 1.0));
         }
     }
 

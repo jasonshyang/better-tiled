@@ -25,6 +25,9 @@ pub enum Effect {
     WriteSnapshot(Snapshot),
     /// Delete a recovery snapshot and its description.
     DeleteSnapshot(PathBuf),
+    /// Paste the copied objects where the pointer is: the window answers with
+    /// [`crate::Intent::PasteObjects`].
+    PasteAtPointer(DocumentId),
     /// Images changed on disk: decode them again.
     ReloadImages(Vec<PathBuf>),
     /// Write the preferences to `settings.toml`.
@@ -46,6 +49,8 @@ pub enum Dialog {
     Preferences,
     /// The command palette.
     SearchActions,
+    /// The object layers the selected objects can move to.
+    MoveObjectsToLayer(DocumentId),
 }
 
 /// A file to ask for.

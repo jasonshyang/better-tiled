@@ -10,7 +10,7 @@ mod storage;
 
 pub use migrate::MigrateError;
 pub use settings::{
-    Behaviour, General, Interface, MajorGrid, ObjectSelection, SETTINGS_VERSION, SettingColor,
-    Settings, Snapping, Theme,
+    Behaviour, General, Interface, MAX_FINE_GRID_DIVISIONS, MajorGrid, ObjectSelection,
+    SETTINGS_VERSION, SettingColor, Settings, Snapping, Theme,
 };
 pub use storage::{SettingsError, data_folder};

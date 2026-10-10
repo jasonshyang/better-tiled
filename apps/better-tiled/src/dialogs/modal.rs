@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
 
+use super::choose_layer::ChooseLayerDialog;
 use super::new_map::NewMapDialog;
 use super::new_tileset::{DialogRequest, NewTilesetDialog};
 use super::palette::PaletteDialog;
@@ -27,6 +28,8 @@ pub(crate) enum Modal {
     NewTileset(NewTilesetDialog),
     /// The preferences.
     Preferences(Box<PreferencesDialog>),
+    /// The layer the selected objects move to.
+    ChooseLayer(ChooseLayerDialog),
 }
 
 /// The open modals; the last is shown.
@@ -91,6 +94,7 @@ impl Modals {
             Modal::NewMap(dialog) => dialog.show(ctx, out),
             Modal::NewTileset(dialog) => dialog.show(ctx, out, requests),
             Modal::Preferences(dialog) => dialog.show(ctx, out),
+            Modal::ChooseLayer(dialog) => dialog.show(ctx, editor, out),
         };
         if closed {
             self.stack.pop();

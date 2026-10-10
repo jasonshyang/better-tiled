@@ -467,3 +467,169 @@ fn an_unanswered_exit_leaves_the_work_to_recover() {
     assert!(!ground_visible(&window));
     assert!(window.editor().has_unsaved());
 }
+
+/// Runs a command by its name through the palette.
+fn run_command(window: &mut TestWindow, name: &str) {
+    window.press(command() | egui::Modifiers::SHIFT, egui::Key::P);
+    window.type_text(name);
+    window.press(egui::Modifiers::NONE, egui::Key::Enter);
+}
+
+#[test]
+fn objects_are_drawn_selected_moved_and_removed_on_the_map() {
+    use bt_core::{MapObject, Shape};
+    use bt_editor::ToolKind;
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::DVec2;
+
+    let scratch = Scratch::new("window-objects").unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.press(command(), Key::N);
+    window.press(Modifiers::NONE, Key::Enter);
+    run_command(&mut window, "new object layer");
+    run_command(&mut window, "snap to grid");
+    let doc = window.editor().current().unwrap();
+    let objects = |window: &TestWindow| -> Vec<MapObject> {
+        let map = window.editor().map_of(doc).unwrap();
+        map.layers
+            .iter()
+            .filter_map(|layer| layer.as_object_layer())
+            .flat_map(|layer| layer.objects.iter().cloned())
+            .collect()
+    };
+    let selected = |window: &TestWindow| {
+        window
+            .editor()
+            .document(doc)
+            .unwrap()
+            .selection()
+            .objects
+            .clone()
+    };
+    let v = DVec2::new;
+    let click = |window: &mut TestWindow, at: DVec2| {
+        window.click_world(at, PointerButton::Primary, Modifiers::NONE);
+    };
+
+    // R draws a rectangle from corner to corner, on the grid; the new object is selected.
+    window.press(Modifiers::NONE, Key::R);
+    assert_eq!(window.editor().tools().tool(), ToolKind::InsertRectangle);
+    window.drag_world(v(70.0, 100.0), v(170.0, 200.0), Modifiers::NONE);
+    let [box_] = &objects(&window)[..] else {
+        panic!("one rectangle: {:?}", objects(&window));
+    };
+    assert_eq!((box_.pos, box_.size), (v(64.0, 96.0), v(96.0, 96.0)));
+    assert_eq!(selected(&window), [box_.id]);
+
+    // S: a click on empty space clears the selection, a click on the object selects it, and a
+    // drag moves it on the grid as one step.
+    window.press(Modifiers::NONE, Key::S);
+    click(&mut window, v(600.0, 500.0));
+    assert!(selected(&window).is_empty());
+    click(&mut window, v(100.0, 130.0));
+    assert_eq!(selected(&window), [box_.id]);
+    window.drag_world(v(100.0, 130.0), v(140.0, 130.0), Modifiers::NONE);
+    assert_eq!(objects(&window)[0].pos, v(96.0, 96.0));
+    window.press(command(), Key::Z);
+    assert_eq!(
+        objects(&window)[0].pos,
+        v(64.0, 96.0),
+        "the move is one step"
+    );
+
+    // A rubber band selects what it touches; Delete removes it, undoably.
+    click(&mut window, v(600.0, 500.0));
+    window.drag_world(v(10.0, 10.0), v(80.0, 110.0), Modifiers::NONE);
+    assert_eq!(selected(&window), [box_.id]);
+    window.press(Modifiers::NONE, Key::Delete);
+    assert!(objects(&window).is_empty());
+    window.press(command(), Key::Z);
+    assert_eq!(objects(&window).len(), 1);
+
+    // P: clicks add points, and clicking the first again closes a polygon...
+    window.press(Modifiers::NONE, Key::P);
+    for at in [
+        v(40.0, 40.0),
+        v(120.0, 40.0),
+        v(120.0, 120.0),
+        v(33.0, 33.0),
+    ] {
+        click(&mut window, at);
+    }
+    let polygon = objects(&window).last().cloned().unwrap();
+    assert_eq!(polygon.pos, v(32.0, 32.0));
+    assert_eq!(
+        polygon.shape,
+        Shape::Polygon(vec![DVec2::ZERO, v(96.0, 0.0), v(96.0, 96.0)])
+    );
+    // ...while Enter finishes a polyline.
+    for at in [v(200.0, 40.0), v(300.0, 40.0)] {
+        click(&mut window, at);
+    }
+    window.press(Modifiers::NONE, Key::Enter);
+    let line = objects(&window).last().cloned().unwrap();
+    assert_eq!(line.pos, v(192.0, 32.0));
+    assert_eq!(line.shape, Shape::Polyline(vec![DVec2::ZERO, v(96.0, 0.0)]));
+    assert_eq!(objects(&window).len(), 3);
+
+    // Escape with nothing under way goes back to Select Objects, as in Tiled.
+    window.press(Modifiers::NONE, Key::Escape);
+    assert_eq!(window.editor().tools().tool(), ToolKind::SelectObjects);
+}
+
+#[test]
+fn tools_measure_from_the_current_layers_offset() {
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use bt_tmx::WriteRequest;
+    use egui::{Key, Modifiers, PointerButton};
+    use glam::{DVec2, UVec2};
+
+    let scratch = Scratch::new("window-offset").unwrap();
+    let atlas = Atlas::builder()
+        .name("tiles")
+        .build_in(scratch.path())
+        .unwrap();
+    let empty_row = [". "; 8].concat();
+    let ground = format!("1 . . . . . . .\n{}", vec![empty_row; 5].join("\n"));
+    let mut map = MapBuilder::new(UVec2::splat(16), UVec2::new(8, 6))
+        .tileset(atlas.tileset.clone())
+        .tile_layer("ground", &ground)
+        .object_layer("things", Vec::new())
+        .build()
+        .unwrap();
+    map.layers[0].offset = DVec2::new(16.0, 16.0);
+    map.layers[1].offset = DVec2::new(8.0, 8.0);
+    let path = scratch.join("offset.tmx");
+    WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let primary = PointerButton::Primary;
+
+    // The object layer is current: a point placed at (40, 40) on screen is at (32, 32) in it.
+    window.press(Modifiers::NONE, Key::I);
+    window.click_world(DVec2::new(40.0, 40.0), primary, Modifiers::NONE);
+    let map = window.editor().map_of(doc).unwrap();
+    let things = map.layers[1].as_object_layer().unwrap();
+    assert_eq!(
+        things.objects.iter().map(|o| o.pos).collect::<Vec<_>>(),
+        [DVec2::new(32.0, 32.0)]
+    );
+
+    // On the ground, one cell off, the picker and the brush take the cell drawn under the
+    // pointer.
+    window.press(command(), Key::PageDown);
+    window.press(Modifiers::NONE, Key::I);
+    window.click_world(DVec2::new(24.0, 24.0), primary, Modifiers::NONE);
+    window.click_world(DVec2::new(56.0, 56.0), primary, Modifiers::NONE);
+    let map = window.editor().map_of(doc).unwrap();
+    let ground = map.layers[0].as_tile_layer().unwrap();
+    let first = ground.cell(IVec2::ZERO);
+    assert!(!first.is_empty());
+    assert_eq!(
+        ground.cell(IVec2::new(2, 2)),
+        first,
+        "painted where it shows"
+    );
+    assert!(ground.cell(IVec2::new(3, 3)).is_empty());
+}

@@ -109,7 +109,14 @@ impl Settings {
             path: path.to_path_buf(),
             message: error.to_string(),
         })?;
-        toml::from_str(&text).map_err(invalid)
+        let settings: Settings = toml::from_str(&text).map_err(invalid)?;
+        match settings.problem() {
+            Some(message) => Err(SettingsError::Invalid {
+                path: path.to_path_buf(),
+                message,
+            }),
+            None => Ok(settings),
+        }
     }
 
     /// Writes the settings to `path` atomically.
@@ -170,6 +177,8 @@ mod tests {
             "[interface]\ngrid_color = 'red'\n",
             "version = 7\n",
             "[[[",
+            "[interface]\nfine_grid_divisions = 0\n",
+            "[interface]\nfine_grid_divisions = 129\n",
         ] {
             assert!(Settings::parse(bad, &path).is_err(), "{bad}");
         }

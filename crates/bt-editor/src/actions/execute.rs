@@ -2,7 +2,7 @@
 //! the window. Nothing here opens a dialog or touches a file.
 
 use bt_core::{Map, MapGeometry};
-use bt_edit::{Brush, Axis, LayerType, RotateDirection};
+use bt_edit::{Axis, Brush, LayerType, RotateDirection};
 
 use super::enabled::Enabled;
 use super::table::{ActionId, ActionKind};
@@ -10,6 +10,7 @@ use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
 use crate::effect::{Dialog, Effect, FileRequest, ViewRequest};
 use crate::notice::Notice;
+use crate::objects::Restack;
 use crate::settings::Snapping;
 
 /// The commands whose operations are still being built in this milestone: disabled, and
@@ -22,12 +23,6 @@ pub(crate) fn pending(id: ActionId) -> bool {
             | ActionId::AddExternalTileset
             | ActionId::MapProperties
             | ActionId::LayerProperties
-            | ActionId::DuplicateObjects
-            | ActionId::RaiseObjects
-            | ActionId::LowerObjects
-            | ActionId::RaiseObjectsToTop
-            | ActionId::LowerObjectsToBottom
-            | ActionId::MoveObjectsToLayer
     )
 }
 
@@ -62,17 +57,23 @@ impl Editor {
             return Vec::new();
         }
         let current = self.documents.current();
-        let on_document = |editor: &mut Editor, f: fn(&mut Editor, DocumentId) -> Vec<Effect>| {
-            current.map(|doc| f(editor, doc)).unwrap_or_default()
-        };
+        let on_document =
+            |editor: &mut Editor, f: &dyn Fn(&mut Editor, DocumentId) -> Vec<Effect>| {
+                current.map(|doc| f(editor, doc)).unwrap_or_default()
+            };
+        // Whether the current layer holds objects, so the shared commands act on them.
+        let objects = self
+            .situation()
+            .layer
+            .is_some_and(|l| l.as_object_layer().is_some());
         match id {
             ActionId::NewMap => vec![Effect::Show(Dialog::NewMap)],
             ActionId::NewTileset => {
-                on_document(self, |_, doc| vec![Effect::Show(Dialog::NewTileset(doc))])
+                on_document(self, &|_, doc| vec![Effect::Show(Dialog::NewTileset(doc))])
             }
             ActionId::Open => vec![Effect::PickFile(FileRequest::Open)],
-            ActionId::Save => on_document(self, Editor::save),
-            ActionId::SaveAs => on_document(self, |editor, doc| vec![editor.save_as_request(doc)]),
+            ActionId::Save => on_document(self, &Editor::save),
+            ActionId::SaveAs => on_document(self, &|editor, doc| vec![editor.save_as_request(doc)]),
             ActionId::SaveAll => {
                 let mut effects = self.save_all();
                 let untitled = self
@@ -89,18 +90,18 @@ impl Editor {
                 }
                 effects
             }
-            ActionId::Close => on_document(self, Editor::close_document),
+            ActionId::Close => on_document(self, &Editor::close_document),
             ActionId::Preferences => vec![Effect::Show(Dialog::Preferences)],
             ActionId::Quit => self.quit(),
-            ActionId::Undo => on_document(self, |editor, doc| {
+            ActionId::Undo => on_document(self, &|editor, doc| {
                 editor.undo(doc).err().map(warn).into_iter().collect()
             }),
-            ActionId::Redo => on_document(self, |editor, doc| {
+            ActionId::Redo => on_document(self, &|editor, doc| {
                 editor.redo(doc).err().map(warn).into_iter().collect()
             }),
-            ActionId::SelectAll => on_document(self, Editor::select_all),
-            ActionId::SelectNone => on_document(self, Editor::select_none),
-            ActionId::InvertSelection => on_document(self, Editor::invert_selection),
+            ActionId::SelectAll => on_document(self, &Editor::select_all),
+            ActionId::SelectNone => on_document(self, &Editor::select_none),
+            ActionId::InvertSelection => on_document(self, &Editor::invert_selection),
             ActionId::SearchActions => vec![Effect::Show(Dialog::SearchActions)],
             ActionId::ZoomIn => vec![Effect::View(ViewRequest::ZoomIn)],
             ActionId::ZoomOut => vec![Effect::View(ViewRequest::ZoomOut)],
@@ -159,22 +160,43 @@ impl Editor {
             | ActionId::InsertTileTool
             | ActionId::InsertTextTool
             | ActionId::EditPolygonsTool => Vec::new(),
-            ActionId::Cut => on_document(self, Editor::cut_tiles),
-            ActionId::Copy => on_document(self, Editor::copy_tiles),
+            ActionId::Cut if objects => on_document(self, &Editor::cut_selected_objects),
+            ActionId::Cut => on_document(self, &Editor::cut_tiles),
+            ActionId::Copy if objects => on_document(self, &Editor::copy_selected_objects),
+            ActionId::Copy => on_document(self, &Editor::copy_tiles),
+            ActionId::Paste if objects => current
+                .map(|doc| vec![Effect::PasteAtPointer(doc)])
+                .unwrap_or_default(),
             ActionId::Paste => self.paste_tiles(),
-            ActionId::PasteInPlace => on_document(self, Editor::paste_tiles_in_place),
-            ActionId::Delete => on_document(self, Editor::delete_tiles),
+            ActionId::PasteInPlace if objects => {
+                on_document(self, &|editor, doc| editor.paste_copied_objects(doc, None))
+            }
+            ActionId::PasteInPlace => on_document(self, &Editor::paste_tiles_in_place),
+            ActionId::Delete if objects => on_document(self, &Editor::delete_objects),
+            ActionId::Delete => on_document(self, &Editor::delete_tiles),
             ActionId::FlipHorizontal | ActionId::FlipVertical => {
-                let direction = if id == ActionId::FlipHorizontal {
+                let axis = if id == ActionId::FlipHorizontal {
                     Axis::Horizontal
                 } else {
                     Axis::Vertical
                 };
-                self.transform_brush(|brush, geometry| brush.flipped(direction, geometry));
+                if objects {
+                    return on_document(self, &|editor, doc| {
+                        editor.flip_selected_objects(doc, axis)
+                    });
+                }
+                self.transform_brush(|brush, geometry| brush.flipped(axis, geometry));
                 Vec::new()
             }
             ActionId::RotateLeft | ActionId::RotateRight => {
-                let direction = if id == ActionId::RotateRight {
+                let clockwise = id == ActionId::RotateRight;
+                if objects {
+                    let degrees = if clockwise { 90.0 } else { -90.0 };
+                    return on_document(self, &|editor, doc| {
+                        editor.rotate_selected_objects(doc, degrees)
+                    });
+                }
+                let direction = if clockwise {
                     RotateDirection::Clockwise
                 } else {
                     RotateDirection::CounterClockwise
@@ -182,27 +204,45 @@ impl Editor {
                 self.transform_brush(|brush, geometry| brush.rotated(direction, geometry));
                 Vec::new()
             }
-            ActionId::CropToSelection => on_document(self, Editor::crop_to_selection),
-            ActionId::Autocrop => on_document(self, Editor::autocrop_map),
+            ActionId::DuplicateObjects => on_document(self, &Editor::duplicate_selected_objects),
+            ActionId::RaiseObjects => on_document(self, &|editor, doc| {
+                editor.restack_objects(doc, Restack::Raise)
+            }),
+            ActionId::LowerObjects => on_document(self, &|editor, doc| {
+                editor.restack_objects(doc, Restack::Lower)
+            }),
+            ActionId::RaiseObjectsToTop => on_document(self, &|editor, doc| {
+                editor.restack_objects(doc, Restack::ToTop)
+            }),
+            ActionId::LowerObjectsToBottom => on_document(self, &|editor, doc| {
+                editor.restack_objects(doc, Restack::ToBottom)
+            }),
+            ActionId::MoveObjectsToLayer => current
+                .map(|doc| vec![Effect::Show(Dialog::MoveObjectsToLayer(doc))])
+                .unwrap_or_default(),
+            ActionId::CropToSelection => on_document(self, &Editor::crop_to_selection),
+            ActionId::Autocrop => on_document(self, &Editor::autocrop_map),
             ActionId::NewTileLayer => {
-                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Tile))
+                on_document(self, &|editor, doc| editor.add_layer(doc, LayerType::Tile))
             }
-            ActionId::NewObjectLayer => {
-                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Object))
-            }
+            ActionId::NewObjectLayer => on_document(self, &|editor, doc| {
+                editor.add_layer(doc, LayerType::Object)
+            }),
             ActionId::NewImageLayer => {
-                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Image))
+                on_document(self, &|editor, doc| editor.add_layer(doc, LayerType::Image))
             }
             ActionId::NewGroupLayer => {
-                on_document(self, |editor, doc| editor.add_layer(doc, LayerType::Group))
+                on_document(self, &|editor, doc| editor.add_layer(doc, LayerType::Group))
             }
-            ActionId::LayerViaCopy => on_document(self, |editor, doc| editor.layer_via(doc, false)),
-            ActionId::LayerViaCut => on_document(self, |editor, doc| editor.layer_via(doc, true)),
-            ActionId::GroupLayers => on_document(self, Editor::group_selected_layers),
-            ActionId::UngroupLayers => on_document(self, Editor::ungroup_selected_layers),
-            ActionId::DuplicateLayers => on_document(self, Editor::duplicate_selected_layers),
-            ActionId::MergeLayerDown => on_document(self, Editor::merge_current_layer_down),
-            ActionId::RemoveLayers => on_document(self, Editor::remove_selected_layers),
+            ActionId::LayerViaCopy => {
+                on_document(self, &|editor, doc| editor.layer_via(doc, false))
+            }
+            ActionId::LayerViaCut => on_document(self, &|editor, doc| editor.layer_via(doc, true)),
+            ActionId::GroupLayers => on_document(self, &Editor::group_selected_layers),
+            ActionId::UngroupLayers => on_document(self, &Editor::ungroup_selected_layers),
+            ActionId::DuplicateLayers => on_document(self, &Editor::duplicate_selected_layers),
+            ActionId::MergeLayerDown => on_document(self, &Editor::merge_current_layer_down),
+            ActionId::RemoveLayers => on_document(self, &Editor::remove_selected_layers),
             ActionId::SelectPreviousLayer | ActionId::SelectNextLayer => {
                 if let Some(doc) = current {
                     self.select_neighbour_layer(doc, id == ActionId::SelectNextLayer);
@@ -216,34 +256,28 @@ impl Editor {
                 Vec::new()
             }
             ActionId::RaiseLayers => {
-                on_document(self, |editor, doc| editor.step_selected_layers(doc, true))
+                on_document(self, &|editor, doc| editor.step_selected_layers(doc, true))
             }
             ActionId::LowerLayers => {
-                on_document(self, |editor, doc| editor.step_selected_layers(doc, false))
+                on_document(self, &|editor, doc| editor.step_selected_layers(doc, false))
             }
-            ActionId::ToggleSelectedLayers => on_document(self, |editor, doc| {
+            ActionId::ToggleSelectedLayers => on_document(self, &|editor, doc| {
                 editor.toggle_selected_layers(doc, false)
             }),
-            ActionId::ToggleLockSelectedLayers => {
-                on_document(self, |editor, doc| editor.toggle_selected_layers(doc, true))
-            }
+            ActionId::ToggleLockSelectedLayers => on_document(self, &|editor, doc| {
+                editor.toggle_selected_layers(doc, true)
+            }),
             ActionId::ToggleOtherLayers => {
-                on_document(self, |editor, doc| editor.toggle_other_layers(doc, false))
+                on_document(self, &|editor, doc| editor.toggle_other_layers(doc, false))
             }
             ActionId::ToggleLockOtherLayers => {
-                on_document(self, |editor, doc| editor.toggle_other_layers(doc, true))
+                on_document(self, &|editor, doc| editor.toggle_other_layers(doc, true))
             }
             ActionId::ResizeMap
             | ActionId::OffsetMap
             | ActionId::AddExternalTileset
             | ActionId::MapProperties
-            | ActionId::LayerProperties
-            | ActionId::DuplicateObjects
-            | ActionId::RaiseObjects
-            | ActionId::LowerObjects
-            | ActionId::RaiseObjectsToTop
-            | ActionId::LowerObjectsToBottom
-            | ActionId::MoveObjectsToLayer => Vec::new(),
+            | ActionId::LayerProperties => Vec::new(),
         }
     }
 }

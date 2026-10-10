@@ -9,6 +9,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// The version of the settings this build writes.
 pub const SETTINGS_VERSION: u32 = 1;
 
+/// The most parts the fine grid may split a cell into (Tiled's limit).
+pub const MAX_FINE_GRID_DIVISIONS: u16 = 128;
+
 /// Every preference.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -25,6 +28,20 @@ pub struct Settings {
     pub theme: Theme,
     /// Key bindings that differ from the defaults: command name to chords.
     pub keymap: BTreeMap<String, Vec<String>>,
+}
+
+impl Settings {
+    /// What is wrong with a value that is of the right kind but out of range; `None` when
+    /// nothing is. Loading and changing settings refuse such values.
+    pub fn problem(&self) -> Option<String> {
+        let divisions = self.interface.fine_grid_divisions;
+        if !(1..=MAX_FINE_GRID_DIVISIONS).contains(&divisions) {
+            return Some(format!(
+                "interface.fine_grid_divisions must be from 1 to {MAX_FINE_GRID_DIVISIONS}, not {divisions}"
+            ));
+        }
+        None
+    }
 }
 
 impl Default for Settings {
@@ -90,8 +107,9 @@ pub struct Interface {
     pub fade_color: SettingColor,
     /// The width of object outlines in points.
     pub object_line_width: f32,
-    /// How many parts the fine grid splits a cell into, for Snap to Fine Grid.
-    pub fine_grid_divisions: u32,
+    /// How many parts the fine grid splits a cell into, for Snap to Fine Grid: from 1 to
+    /// [`MAX_FINE_GRID_DIVISIONS`].
+    pub fine_grid_divisions: u16,
 }
 
 impl Default for Interface {

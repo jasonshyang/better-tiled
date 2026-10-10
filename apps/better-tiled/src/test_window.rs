@@ -93,8 +93,8 @@ impl TestWindow {
         self.settle();
     }
 
-    /// Drags on the map from the middle of cell `from` to the middle of cell `to` with the
-    /// primary button, holding `modifiers`, passing every cell between.
+    /// Drags on the map from the middle of the current layer's cell `from` to the middle of
+    /// cell `to` with the primary button, holding `modifiers`, passing every cell between.
     pub(crate) fn drag_cells(
         &mut self,
         from: glam::IVec2,
@@ -103,6 +103,23 @@ impl TestWindow {
     ) {
         let start = self.screen_of(from);
         let end = self.screen_of(to);
+        self.drag_on_screen(start, end, modifiers);
+    }
+
+    /// Drags on the map from `from` to `to` in the map's screen space (world pixels, where the
+    /// canvas draws) with the primary button, holding `modifiers`.
+    pub(crate) fn drag_world(
+        &mut self,
+        from: glam::DVec2,
+        to: glam::DVec2,
+        modifiers: egui::Modifiers,
+    ) {
+        let start = self.screen_of_world(from);
+        let end = self.screen_of_world(to);
+        self.drag_on_screen(start, end, modifiers);
+    }
+
+    fn drag_on_screen(&mut self, start: egui::Pos2, end: egui::Pos2, modifiers: egui::Modifiers) {
         self.pointer(egui::Event::PointerMoved(start));
         self.pointer(egui::Event::PointerButton {
             pos: start,
@@ -124,7 +141,7 @@ impl TestWindow {
         self.settle();
     }
 
-    /// Clicks cell `cell` of the map with `button`, holding `modifiers`.
+    /// Clicks the current layer's cell `cell` with `button`, holding `modifiers`.
     pub(crate) fn click_cell(
         &mut self,
         cell: glam::IVec2,
@@ -132,6 +149,26 @@ impl TestWindow {
         modifiers: egui::Modifiers,
     ) {
         let at = self.screen_of(cell);
+        self.click_on_screen(at, button, modifiers);
+    }
+
+    /// Clicks the map at `at` in its screen space with `button`, holding `modifiers`.
+    pub(crate) fn click_world(
+        &mut self,
+        at: glam::DVec2,
+        button: egui::PointerButton,
+        modifiers: egui::Modifiers,
+    ) {
+        let at = self.screen_of_world(at);
+        self.click_on_screen(at, button, modifiers);
+    }
+
+    fn click_on_screen(
+        &mut self,
+        at: egui::Pos2,
+        button: egui::PointerButton,
+        modifiers: egui::Modifiers,
+    ) {
         self.pointer(egui::Event::PointerMoved(at));
         for pressed in [true, false] {
             self.pointer(egui::Event::PointerButton {
@@ -144,11 +181,20 @@ impl TestWindow {
         self.settle();
     }
 
-    /// Where a cell's middle is on screen.
+    /// Where the middle of the current layer's cell is on screen.
     fn screen_of(&mut self, cell: glam::IVec2) -> egui::Pos2 {
         self.harness.run_steps(1);
         let Some(at) = self.harness.state().cell_on_screen(cell) else {
             panic!("no map is shown, so cell {cell} is nowhere");
+        };
+        at
+    }
+
+    /// Where a point of the map's screen space is on screen.
+    fn screen_of_world(&mut self, world: glam::DVec2) -> egui::Pos2 {
+        self.harness.run_steps(1);
+        let Some(at) = self.harness.state().world_on_screen(world) else {
+            panic!("no map is shown, so {world} is nowhere");
         };
         at
     }

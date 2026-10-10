@@ -126,12 +126,8 @@ impl Tool for BrushTool {
         if let Some(capture) = self.capture {
             let rect = IRect::from_corners(capture.start, capture.end);
             let color = cx.editor.settings().theme.selection_color.0;
-            out.vectors.extend(region_preview(
-                &cx.map.geometry(),
-                &TileRegion::from_rect(rect),
-                color,
-                1.0,
-            ));
+            out.vectors
+                .extend(region_preview(cx, &TileRegion::from_rect(rect), color, 1.0));
             return;
         }
         let Some(hover) = self.hover else {

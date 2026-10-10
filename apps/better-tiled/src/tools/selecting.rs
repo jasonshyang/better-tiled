@@ -7,6 +7,8 @@ use bt_render::VectorItem;
 use egui::Modifiers;
 use glam::DVec2;
 
+use super::tool::ToolContext;
+
 /// The mode a press with `modifiers` selects in, as in Tiled: Shift adds, Command subtracts,
 /// both intersect; otherwise the toolbar's mode.
 pub(crate) fn mode_at_press(modifiers: Modifiers, default: SelectionMode) -> SelectionMode {
@@ -36,19 +38,20 @@ pub(crate) fn region_polygons(geometry: &MapGeometry, region: &TileRegion) -> Ve
         .collect()
 }
 
-/// A region drawn as a selection preview: filled faintly and outlined.
+/// Cells of the current layer drawn as a selection preview: filled faintly and outlined.
 pub(crate) fn region_preview(
-    geometry: &MapGeometry,
+    cx: &ToolContext<'_>,
     region: &TileRegion,
     color: Color,
     line: f32,
 ) -> Vec<VectorItem> {
-    region_polygons(geometry, region)
+    region_polygons(&cx.map.geometry(), region)
         .into_iter()
         .map(|points| {
             VectorItem::polygon(points)
                 .fill(Color::rgba(color.r, color.g, color.b, 48))
                 .stroke(Color::rgba(color.r, color.g, color.b, 220), line)
+                .translated(cx.layer_offset)
         })
         .collect()
 }

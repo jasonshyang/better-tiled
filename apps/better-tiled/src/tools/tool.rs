@@ -7,6 +7,7 @@ use std::sync::Arc;
 use bt_core::{Layer, LayerId, Map, TileLayer};
 use bt_editor::{DocumentId, Editor, Intent, Selection, ToolKind};
 use bt_render::{PreviewTile, VectorItem};
+use glam::DVec2;
 
 use crate::canvas::Gesture;
 
@@ -18,6 +19,11 @@ pub(crate) struct ToolContext<'a> {
     pub(crate) doc: DocumentId,
     /// Its map.
     pub(crate) map: &'a Arc<Map>,
+    /// Screen points per world pixel: how big a point on screen is on the map.
+    pub(crate) zoom: f64,
+    /// The current layer's offset, its groups' included: pointers are measured from it, and
+    /// what a tool draws of the layer's cells and pixels is drawn at it.
+    pub(crate) layer_offset: DVec2,
     /// The intents the tool sends.
     pub(crate) out: &'a mut Vec<Intent>,
 }
@@ -37,6 +43,16 @@ impl ToolContext<'_> {
     /// The current layer's cells, when it is a tile layer.
     pub(crate) fn tile_layer(&self) -> Option<&TileLayer> {
         self.current_layer()?.as_tile_layer()
+    }
+
+    /// Where a pixel of the current layer is in the map's screen space.
+    pub(crate) fn pixel_to_world(&self, pixel: DVec2) -> DVec2 {
+        self.map.geometry().pixel_to_screen(pixel) + self.layer_offset
+    }
+
+    /// `points` screen points in world pixels, for distances measured on screen.
+    pub(crate) fn world_length(&self, points: f64) -> f64 {
+        points / self.zoom.max(f64::EPSILON)
     }
 
     /// How the status bar names the Command key: ⌘ on macOS, Ctrl elsewhere.

@@ -3,15 +3,16 @@
 
 use std::path::PathBuf;
 
-use bt_core::{Cell, LayerId, PlacedCell};
+use bt_core::{Cell, LayerId, MapObject, ObjectId, PlacedCell};
 use bt_edit::{FillShape, SelectionMode, TileRegion};
 use bt_utils::IRect;
-use glam::IVec2;
+use glam::{DVec2, IVec2};
 
 use crate::actions::{ActionId, PaletteTarget};
 use crate::document::{DocumentId, ViewState};
 use crate::effect::{Choice, DecisionId, FileRequest};
 use crate::files::{Loaded, NewMap, NewTileset};
+use crate::objects::ObjectStroke;
 use crate::recovery::Orphan;
 use crate::settings::Settings;
 use crate::tools::Stroke;
@@ -81,6 +82,39 @@ pub enum Intent {
     },
     /// A step of the brush's or the eraser's stroke.
     Stroke(Stroke),
+    /// Select objects: `ids` combined with the selected ones as `mode` says.
+    SelectObjects {
+        /// The document.
+        doc: DocumentId,
+        /// The objects.
+        ids: Vec<ObjectId>,
+        /// How they combine with the selection.
+        mode: SelectionMode,
+    },
+    /// Insert an object into the current object layer (its id is given then).
+    InsertObject {
+        /// The document.
+        doc: DocumentId,
+        /// The object, in pixel space.
+        object: Box<MapObject>,
+    },
+    /// A step of a drag of the selected objects.
+    ObjectStroke(ObjectStroke),
+    /// Paste the copied objects into the current object layer, centred on a point (pixel
+    /// space) or where they were copied from: the window's answer to `Effect::PasteAtPointer`.
+    PasteObjects {
+        /// The document.
+        doc: DocumentId,
+        /// Where the pointer is over the map, if it is.
+        at: Option<DVec2>,
+    },
+    /// Move the selected objects to another object layer.
+    MoveObjectsToLayer {
+        /// The document.
+        doc: DocumentId,
+        /// The layer.
+        layer: LayerId,
+    },
     /// Bucket Fill from a cell.
     Fill {
         /// The document.

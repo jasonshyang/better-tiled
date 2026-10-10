@@ -5,9 +5,12 @@ use bt_editor::{DocumentId, Intent, ToolKind};
 use super::brush::BrushTool;
 use super::eraser::Eraser;
 use super::fills::{BucketFill, ShapeFill};
+use super::insert_objects::{InsertKind, InsertObject};
+use super::insert_polygon::InsertPolygon;
 use super::magic_wand::LikeTiles;
 use super::picker::Picker;
 use super::rect_select::RectSelect;
+use super::select_objects::SelectObjects;
 use super::tool::Tool;
 
 /// The tools.
@@ -37,6 +40,14 @@ impl Default for ToolBox {
                 Box::new(RectSelect::default()),
                 Box::new(LikeTiles::magic_wand()),
                 Box::new(LikeTiles::same_tile()),
+                Box::new(SelectObjects::default()),
+                Box::new(InsertObject::new(InsertKind::Rectangle)),
+                Box::new(InsertObject::new(InsertKind::Ellipse)),
+                Box::new(InsertObject::new(InsertKind::Capsule)),
+                Box::new(InsertObject::new(InsertKind::Point)),
+                Box::new(InsertObject::new(InsertKind::Tile)),
+                Box::new(InsertObject::new(InsertKind::Text)),
+                Box::new(InsertPolygon::default()),
             ],
             active: None,
         }

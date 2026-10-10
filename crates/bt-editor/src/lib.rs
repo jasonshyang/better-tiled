@@ -15,6 +15,7 @@ mod intent;
 mod layer_commands;
 mod map_commands;
 mod notice;
+mod objects;
 mod recovery;
 mod session;
 mod settings;
@@ -39,13 +40,15 @@ pub use history::{
 };
 pub use intent::Intent;
 pub use notice::{Notice, Severity};
+pub use objects::{ObjectFrame, ObjectStroke, ObjectStrokeKind};
 pub use recovery::{
     Orphan, Snapshot, SnapshotMeta, delete_snapshot, orphans, remove_heartbeat, touch_heartbeat,
 };
 pub use session::{FileViewState, Session};
 pub use settings::{
-    Behaviour, General, Interface, MajorGrid, MigrateError, ObjectSelection, SETTINGS_VERSION,
-    SettingColor, Settings, SettingsError, Snapping, Theme, data_folder,
+    Behaviour, General, Interface, MAX_FINE_GRID_DIVISIONS, MajorGrid, MigrateError,
+    ObjectSelection, SETTINGS_VERSION, SettingColor, Settings, SettingsError, Snapping, Theme,
+    data_folder,
 };
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root};
 pub use tools::{FillPreview, MAX_BRUSH_SIZE, Stroke, StrokeKind, ToolFamily, ToolKind, ToolState};

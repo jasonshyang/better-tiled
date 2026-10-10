@@ -27,6 +27,11 @@ pub(crate) struct OverlayInput<'a> {
     pub(crate) settings: &'a Settings,
     /// The selected cells' outline, in the map's pixels on screen.
     pub(crate) selection: &'a [Vec<DVec2>],
+    /// The current layer's offset: the grid, the selection and the hovered cell are drawn at
+    /// it, as the tools measure from it.
+    pub(crate) layer_offset: DVec2,
+    /// The selected objects' frames, in the map's screen space (their layers' offsets in).
+    pub(crate) objects: &'a [Vec<DVec2>],
     /// What the current tool draws.
     pub(crate) tool: &'a [VectorItem],
 }
@@ -49,7 +54,17 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
             i32::try_from(major.columns).unwrap_or(0),
             i32::try_from(major.rows).unwrap_or(0),
         ));
-        items.extend(grid_vectors(&geometry, input.visible, input.zoom_px, style));
+        let offset = input.layer_offset;
+        items.extend(
+            grid_vectors(
+                &geometry,
+                input.visible.translated(-offset),
+                input.zoom_px,
+                style,
+            )
+            .into_iter()
+            .map(|line| line.translated(offset)),
+        );
     }
     let map_cells = input.map.tile_bounding_rect();
     if !input.map.infinite {
@@ -59,15 +74,23 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
         }
     }
     let selection = input.settings.theme.selection_color.0;
-    for outline in input.selection {
+    let cells = input
+        .selection
+        .iter()
+        .map(|outline| (outline, input.layer_offset));
+    let objects = input.objects.iter().map(|frame| (frame, DVec2::ZERO));
+    for (outline, offset) in cells.chain(objects) {
         // Ants: dark dashes over a light line, visible on any tiles.
         items.push(
-            VectorItem::polygon(outline.clone()).stroke(Color::rgba(255, 255, 255, 220), line),
+            VectorItem::polygon(outline.clone())
+                .stroke(Color::rgba(255, 255, 255, 220), line)
+                .translated(offset),
         );
         items.push(
             VectorItem::polygon(outline.clone())
                 .stroke(with_alpha(selection, 255), line)
-                .dashed(ANTS),
+                .dashed(ANTS)
+                .translated(offset),
         );
     }
     items.extend(input.tool.iter().cloned());
@@ -77,7 +100,8 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
         items.push(
             VectorItem::polygon(geometry.tile_polygon(cell))
                 .fill(with_alpha(selection, 48))
-                .stroke(with_alpha(selection, 200), line),
+                .stroke(with_alpha(selection, 200), line)
+                .translated(input.layer_offset),
         );
     }
     Arc::from(items)
@@ -104,6 +128,8 @@ mod tests {
             hover: Some(IVec2::new(1, 1)),
             settings,
             selection: &[],
+            layer_offset: DVec2::ZERO,
+            objects: &[],
             tool: &[],
         }
     }
@@ -136,6 +162,57 @@ mod tests {
             overlay_vectors(&selected).len(),
             4,
             "a selection is a light line under dark dashes"
+        );
+        let frames = vec![vec![DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y]];
+        let objects = OverlayInput {
+            objects: &frames,
+            layer_offset: DVec2::splat(8.0),
+            ..input(&map, &settings, false)
+        };
+        let drawn = overlay_vectors(&objects);
+        assert_eq!(drawn.len(), 4, "selected objects are framed the same way");
+        assert_eq!(
+            drawn[1],
+            VectorItem::polygon(frames[0].clone()).stroke(Color::rgba(255, 255, 255, 220), 2.0),
+            "where their layers put them, whatever the current layer"
+        );
+    }
+
+    #[test]
+    fn the_grid_the_selection_and_the_hovered_cell_follow_the_current_layer() {
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(4))
+            .build()
+            .unwrap();
+        let settings = Settings::default();
+        let outline = vec![vec![DVec2::ZERO, DVec2::X, DVec2::ONE]];
+        let offset = DVec2::new(5.0, -3.0);
+        let at = |layer_offset| {
+            overlay_vectors(&OverlayInput {
+                selection: &outline,
+                layer_offset,
+                ..input(&map, &settings, false)
+            })
+        };
+        let (still, moved) = (at(DVec2::ZERO), at(offset));
+        assert_eq!(still.len(), moved.len());
+        assert_eq!(moved[0], still[0], "the map's border stays");
+        for (moved, still) in moved.iter().zip(still.iter()).skip(1) {
+            assert_eq!(*moved, still.clone().translated(offset));
+        }
+        let grid = |layer_offset| {
+            overlay_vectors(&OverlayInput {
+                layer_offset,
+                ..input(&map, &settings, true)
+            })
+        };
+        let (still, moved) = (grid(DVec2::ZERO), grid(offset));
+        assert_eq!(
+            moved.first(),
+            still
+                .first()
+                .map(|line| line.clone().translated(offset))
+                .as_ref(),
+            "the grid's first line moves with the layer"
         );
     }
 }

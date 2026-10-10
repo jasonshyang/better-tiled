@@ -154,7 +154,10 @@ impl PreferencesDialog {
                 });
                 ui.end_row();
                 ui.label("Fine grid divisions");
-                ui.add(egui::DragValue::new(&mut interface.fine_grid_divisions).range(1..=64));
+                ui.add(
+                    egui::DragValue::new(&mut interface.fine_grid_divisions)
+                        .range(1..=bt_editor::MAX_FINE_GRID_DIVISIONS),
+                );
                 ui.end_row();
                 ui.label("Highlighted layer fades to");
                 color_field(ui, &mut interface.fade_color);

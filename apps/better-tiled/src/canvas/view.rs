@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use bt_core::{LayerId, Map, MapGeometry};
+use bt_core::{LayerId, Map, MapGeometry, ObjectId};
 use bt_editor::{
     DocumentId, Editor, Intent, Settings, TileRegion, ViewRequest, ViewState, ViewToggles,
 };
@@ -66,6 +66,11 @@ pub(crate) struct Canvas {
     hint: Option<String>,
     /// The selection's outline, kept while the selection and the grid stay the same.
     selection_outline: Option<SelectionOutline>,
+    /// The selected objects' frames, kept while the selection and the map stay the same.
+    objects_outline: Option<ObjectsOutline>,
+    /// The current layer's offset (its groups' included): the tools measure the pointer from it
+    /// and the grid, the selection and the hovered cell are drawn at it, as in Tiled.
+    layer_offset: DVec2,
 }
 
 /// A selection's outline on screen, with what it was worked out from.
@@ -76,12 +81,20 @@ struct SelectionOutline {
     polygons: Vec<Vec<DVec2>>,
 }
 
-/// What is under the pointer.
+/// The selected objects' frames on screen, with what they were worked out from.
+#[derive(Clone, Debug)]
+struct ObjectsOutline {
+    map: Arc<Map>,
+    ids: Vec<ObjectId>,
+    frames: Vec<Vec<DVec2>>,
+}
+
+/// What is under the pointer, on the current layer.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct Hover {
     /// The cell.
     pub(crate) cell: IVec2,
-    /// The map pixel (object coordinates).
+    /// The pixel (object coordinates).
     pub(crate) pixel: DVec2,
 }
 
@@ -103,6 +116,8 @@ pub(crate) struct CanvasFrame<'a> {
     pub(crate) gpu: Option<&'a CanvasGpu>,
     /// A text field has the keyboard, so Space types instead of panning.
     pub(crate) typing: bool,
+    /// A dialog is open, so Escape and Enter are its.
+    pub(crate) dialog_open: bool,
     /// The editor, which the tools read.
     pub(crate) editor: &'a Editor,
 }
@@ -144,13 +159,15 @@ impl Canvas {
         self.last_view = Some(view);
         self.pointer = pointer;
         let geometry = frame.map.geometry();
+        self.layer_offset = current_layer_offset(frame);
+        let layer_offset = self.layer_offset;
         self.hover = pointer
             .filter(|_| response.hovered() || response.dragged())
             .map(|at| {
-                let world = view.screen_to_world(at);
+                let local = view.screen_to_world(at) - layer_offset;
                 Hover {
-                    cell: geometry.tile_at(world),
-                    pixel: geometry.screen_to_pixel(world),
+                    cell: geometry.tile_at(local),
+                    pixel: geometry.screen_to_pixel(local),
                 }
             });
         self.run_tool(ui, frame, &view, response.hovered(), tools, out);
@@ -183,12 +200,15 @@ impl Canvas {
         out: &mut Vec<Intent>,
     ) {
         let geometry = frame.map.geometry();
+        let layer_offset = self.layer_offset;
         let to_pointer = |screen: egui::Pos2| {
             let world = view.screen_to_world(screen);
+            let local = world - layer_offset;
             Pointer {
                 screen,
-                pixel: geometry.screen_to_pixel(world),
-                cell: geometry.tile_at(world),
+                world,
+                pixel: geometry.screen_to_pixel(local),
+                cell: geometry.tile_at(local),
             }
         };
         let space = !frame.typing && ui.input(|input| input.key_down(egui::Key::Space));
@@ -196,6 +216,7 @@ impl Canvas {
             rect: view.rect,
             hovered,
             panning: space || frame.typing,
+            keys: !frame.typing && !frame.dialog_open,
             to_pointer: &to_pointer,
         };
         let gestures = ui.input(|input| self.gestures.read(input, &read));
@@ -208,6 +229,8 @@ impl Canvas {
             editor: frame.editor,
             doc: frame.doc,
             map: frame.map,
+            zoom: self.camera.zoom,
+            layer_offset: self.layer_offset,
             out,
         };
         for gesture in &gestures {
@@ -217,13 +240,14 @@ impl Canvas {
         self.hint = Some(tool.hint(&cx));
     }
 
-    /// Where the middle of a cell is on screen in the last frame (for the window's tests).
+    /// Where the middle of the current layer's cell is on screen in the last frame (for the
+    /// window's tests).
     #[cfg(test)]
     pub(crate) fn cell_on_screen(&self, map: &Map, cell: IVec2) -> Option<egui::Pos2> {
         let view = self.last_view?;
         let corners = map.geometry().tile_polygon(cell);
         let middle = corners.iter().copied().sum::<DVec2>() / corners.len().max(1) as f64;
-        Some(view.world_to_screen(middle))
+        Some(view.world_to_screen(middle + self.layer_offset))
     }
 
     /// What the current tool says it does.
@@ -254,6 +278,36 @@ impl Canvas {
         self.selection_outline
             .as_ref()
             .map_or(&[], |o| o.polygons.as_slice())
+    }
+
+    /// The selected objects' frames, worked out again only when the selection or the map
+    /// changed.
+    fn object_polygons(&mut self, frame: &CanvasFrame<'_>) -> &[Vec<DVec2>] {
+        let ids = frame
+            .editor
+            .document(frame.doc)
+            .map(|d| d.selection().objects.clone())
+            .unwrap_or_default();
+        let fresh = self
+            .objects_outline
+            .as_ref()
+            .is_some_and(|o| Arc::ptr_eq(&o.map, frame.map) && o.ids == ids);
+        if !fresh {
+            let frames = frame
+                .editor
+                .object_frames(frame.doc, &ids)
+                .into_iter()
+                .map(|f| f.corners.to_vec())
+                .collect();
+            self.objects_outline = Some(ObjectsOutline {
+                map: Arc::clone(frame.map),
+                ids,
+                frames,
+            });
+        }
+        self.objects_outline
+            .as_ref()
+            .map_or(&[], |o| o.frames.as_slice())
     }
 
     /// Carries out a camera move the editor asked for, about the pointer when it is over the
@@ -309,6 +363,7 @@ impl Canvas {
     ) -> FrameInput {
         let pixels_per_point = view.pixels_per_point as f32;
         let selection = self.selection_polygons(frame).to_vec();
+        let objects = self.object_polygons(frame).to_vec();
         let overlays = overlay_vectors(&OverlayInput {
             map: frame.map,
             visible: view.render_camera().visible_rect(viewport_px(view)),
@@ -318,6 +373,8 @@ impl Canvas {
             hover: self.hover.map(|hover| hover.cell),
             settings: frame.settings,
             selection: &selection,
+            layer_offset: self.layer_offset,
+            objects: &objects,
             tool: &self.tool_overlay.vectors,
         });
         let layers = if frame.toggles.highlight_current_layer {
@@ -417,6 +474,16 @@ impl Canvas {
             self.camera.begin_zoom_to(zoom, at, view);
         }
     }
+}
+
+/// The offset of the document's current layer, its groups' included; none without one.
+fn current_layer_offset(frame: &CanvasFrame<'_>) -> DVec2 {
+    frame
+        .editor
+        .document(frame.doc)
+        .and_then(|d| d.selection().current_layer)
+        .and_then(|layer| frame.map.effective_layer(layer))
+        .map_or(DVec2::ZERO, |state| state.offset)
 }
 
 /// A camera showing the whole map in a view of `size` points.

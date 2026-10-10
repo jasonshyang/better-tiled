@@ -33,8 +33,7 @@ pub(crate) fn outline_cells(
     color: Color,
     out: &mut Overlay,
 ) {
-    out.vectors
-        .extend(region_preview(&cx.map.geometry(), region, color, 1.0));
+    out.vectors.extend(region_preview(cx, region, color, 1.0));
 }
 
 /// The cells from `from` to `to` as Tiled's tools pass them, without `from` (painted already).

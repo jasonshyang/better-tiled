@@ -4,10 +4,13 @@
 mod brush;
 mod eraser;
 mod fills;
+mod insert_objects;
+mod insert_polygon;
 mod magic_wand;
 mod painting;
 mod picker;
 mod rect_select;
+mod select_objects;
 mod selecting;
 mod tool;
 mod toolbox;

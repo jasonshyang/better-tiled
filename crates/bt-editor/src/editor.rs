@@ -17,6 +17,7 @@ use crate::files::Files;
 use crate::history::{Gesture, History};
 use crate::intent::Intent;
 use crate::notice::Notice;
+use crate::objects::ObjectStrokeState;
 use crate::recovery::{RecoveryPlan, Snapshot, SnapshotMeta};
 use crate::session::Session;
 use crate::settings::Settings;
@@ -77,6 +78,7 @@ impl EditorBuilder {
             documents: Documents::default(),
             gesture: None,
             stroke: None,
+            object_stroke: None,
             keymap,
             tools: ToolState::default(),
             palette: PaletteState::default(),
@@ -103,6 +105,8 @@ pub struct Editor {
     pub(crate) gesture: Option<Gesture>,
     /// A tile tool's stroke under way.
     pub(crate) stroke: Option<StrokeState>,
+    /// A drag of objects under way.
+    pub(crate) object_stroke: Option<ObjectStrokeState>,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
     pub(crate) palette: PaletteState,
@@ -174,6 +178,14 @@ impl Editor {
                 Vec::new()
             }
             Intent::PickTiles { doc, cells } => self.pick_tiles(doc, &cells),
+            Intent::SelectObjects { doc, ids, mode } => {
+                self.select_objects(doc, &ids, mode);
+                Vec::new()
+            }
+            Intent::InsertObject { doc, object } => self.insert_object(doc, *object),
+            Intent::ObjectStroke(step) => self.object_stroke(step),
+            Intent::PasteObjects { doc, at } => self.paste_copied_objects(doc, at),
+            Intent::MoveObjectsToLayer { doc, layer } => self.move_selected_objects_to(doc, layer),
             Intent::Stroke(step) => self.stroke(step),
             Intent::Fill {
                 doc,
@@ -343,6 +355,11 @@ impl Editor {
     /// Takes new preferences: the key bindings must name commands and keys. The window writes
     /// them out.
     pub(crate) fn change_settings(&mut self, settings: Settings) -> Vec<Effect> {
+        if let Some(problem) = settings.problem() {
+            return vec![Effect::Notify(Notice::error(format!(
+                "The preferences were not changed: {problem}"
+            )))];
+        }
         let keymap = match Keymap::from_settings(&settings.keymap, self.keymap.is_mac()) {
             Ok(keymap) => keymap,
             Err(error) => {

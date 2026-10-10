@@ -154,6 +154,13 @@ impl App {
         self.canvases.get(&doc)?.cell_on_screen(map, cell)
     }
 
+    /// Where a point of the current map's screen space is on screen (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn world_on_screen(&self, world: glam::DVec2) -> Option<egui::Pos2> {
+        let doc = self.editor.current()?;
+        Some(self.canvases.get(&doc)?.last_view()?.world_to_screen(world))
+    }
+
     /// Delivers intents as a worker would (for the window's tests: a file dialog's answer).
     #[cfg(test)]
     pub(crate) fn inject_worker_result(&mut self, intents: Vec<Intent>) {
@@ -377,6 +384,7 @@ impl App {
             settings: self.editor.settings(),
             gpu: self.gpu.as_ref(),
             typing: is_typing(ui.ctx()),
+            dialog_open: self.modals.is_open(),
             editor: &self.editor,
         };
         let canvas = self.canvases.entry(doc).or_default();

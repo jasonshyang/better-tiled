@@ -16,6 +16,8 @@ use crate::error::EditError;
 pub(crate) struct Clipboard {
     /// Tiles.
     pub(crate) tiles: Option<TileClip>,
+    /// Objects.
+    pub(crate) objects: Option<bt_edit::ObjectClip>,
 }
 
 impl Editor {

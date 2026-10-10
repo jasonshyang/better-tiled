@@ -129,6 +129,15 @@ impl Editor {
             .collect()
     }
 
+    /// The brush's first tile in the map's tilesets: what Insert Tile places. `None` without a
+    /// brush, or when the tile's tileset is not the map's yet.
+    pub fn brush_tile(&self, doc: DocumentId) -> Option<Cell> {
+        let brush = self.tools.brush.as_ref()?;
+        let map = self.map_of(doc)?;
+        let clip = &brush.variations().first()?.clip;
+        cells_in_map(map, clip).first().map(|placed| placed.cell)
+    }
+
     /// Takes a step of a stroke.
     pub(crate) fn stroke(&mut self, step: Stroke) -> Vec<Effect> {
         match step {
