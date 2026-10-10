@@ -12,14 +12,15 @@ use std::sync::Arc;
 
 use bt_automap::{Error, ProblemKind, files};
 use bt_core::{
-    ClassType, ClassUsage, CustomType, CustomTypes, FileRef, Map, Project, Properties, Property,
-    TileData, TileId, Tileset, TilesetRef, Value,
+    ClassType, ClassUsage, CustomType, CustomTypes, FileRef, Layer, LayerId, LayerKind, Map,
+    MapObject, ObjectId, ObjectLayer, ObjectTemplate, Project, Properties, Property, TileData,
+    TileId, Tileset, TilesetRef, Value,
 };
 use bt_test_data::Scratch;
 use bt_test_data::fixtures::{Atlas, MapBuilder};
 use bt_tmx::{Loader, WriteRequest};
 use common::{grid_of, load_map};
-use glam::UVec2;
+use glam::{DVec2, UVec2};
 
 /// A folder with an external tileset (`tiles.tsx` and its image) for rule maps and maps.
 struct Folder {
@@ -284,6 +285,116 @@ fn rules_reached_through_symbolic_links_share_the_maps_tilesets() {
     assert_eq!(rules.rule_maps()[0].path(), folder.path("linked/rule.tmx"));
     rules.apply(&mut map, None, 1);
     assert_eq!(grid_of(&map, "set"), "2");
+}
+
+#[test]
+fn every_file_whose_change_reloads_the_rules_is_watched() {
+    let folder = Folder::new("bt-automap-files-watched");
+    folder.write_rule("all.tmx", 1, 2);
+    folder.write_rule("town.tmx", 2, 3);
+    folder.write_rule("sub/cave.tmx", 2, 4);
+    folder.write_text("sub/rules.txt", "[cave*]\ncave.tmx\n");
+    // A rule map placing an object made from a template.
+    let template = ObjectTemplate {
+        object: Some(MapObject {
+            size: DVec2::splat(16.0),
+            ..MapObject::default()
+        }),
+        ..ObjectTemplate::default()
+    };
+    WriteRequest::for_template(&template, &folder.path("thing.tx"))
+        .write()
+        .unwrap();
+    let mut objects = folder.map(UVec2::new(1, 1), &[("input_set", "1")]);
+    objects.layers.push(Layer::new(
+        LayerId(9),
+        "output_things",
+        LayerKind::Object(ObjectLayer {
+            objects: Arc::new(vec![MapObject {
+                id: ObjectId(1),
+                template: Some(FileRef::new("thing.tx", folder.path("thing.tx"))),
+                size: DVec2::splat(16.0),
+                ..MapObject::default()
+            }]),
+            ..ObjectLayer::default()
+        }),
+    ));
+    objects.next_layer_id = 10;
+    objects.next_object_id = 2;
+    folder.write_map("objects.tmx", &objects);
+    folder.write_text("broken.tmx", "<map><layer");
+    let rules_path = folder.write_text(
+        "rules.txt",
+        "all.tmx\n[town*]\ntown.tmx\n[*]\nsub/rules.txt\nobjects.tmx\nbroken.tmx\n",
+    );
+    let mut loader = Loader::default();
+    let rules = files::load(&mut loader, &rules_path, Some(Path::new("/maps/field.tmx"))).unwrap();
+    // Town's rules do not apply to this map and broken.tmx cannot be read: both are watched.
+    assert_eq!(rules.rule_maps().len(), 2);
+    let mut expected: Vec<PathBuf> = [
+        "rules.txt",
+        "sub/rules.txt",
+        "all.tmx",
+        "town.tmx",
+        "sub/cave.tmx",
+        "objects.tmx",
+        "broken.tmx",
+        "tiles.tsx",
+        "thing.tx",
+    ]
+    .iter()
+    .map(|name| folder.path(name))
+    .collect();
+    expected.sort();
+    assert_eq!(rules.watched_files(), expected);
+}
+
+#[test]
+fn an_include_cycle_is_a_note_naming_the_files() {
+    let folder = Folder::new("bt-automap-files-cycle");
+    folder.write_rule("one.tmx", 1, 2);
+    folder.write_text("sub/rules.txt", "../rules.txt\n");
+    let rules_path = folder.write_text("rules.txt", "one.tmx\nsub/rules.txt\n");
+    let mut loader = Loader::default();
+    let rules = files::load(&mut loader, &rules_path, None).unwrap();
+    assert_eq!(rules.rule_maps().len(), 1);
+    let problems = rules.problems();
+    assert_eq!(problems.len(), 1);
+    assert_eq!(problems[0].kind, ProblemKind::IncludeCycle);
+    assert_eq!(problems[0].severity(), bt_automap::Severity::Note);
+    let text = &problems[0].text;
+    assert!(
+        text.contains(&folder.path("sub/rules.txt").display().to_string()),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_failed_load_names_the_files_to_watch_for_the_rules_to_load_again() {
+    let folder = Folder::new("bt-automap-files-failed");
+    folder.write_rule("one.tmx", 1, 2);
+    let rules_path = folder.write_text("rules.txt", "one.tmx\nsub/rules.txt\ntwo.tmx\n");
+    let mut loader = Loader::default();
+    // A list that cannot be read stops the load; it is among the files to watch.
+    assert!(matches!(
+        files::load(&mut loader, &rules_path, None),
+        Err(Error::RulesFile { .. })
+    ));
+    assert_eq!(
+        files::listed_files(&rules_path),
+        [
+            folder.path("rules.txt"),
+            folder.path("sub/rules.txt"),
+            folder.path("one.tmx")
+        ]
+    );
+    // So is a rule map that does not exist.
+    folder.write_text("sub/rules.txt", "");
+    assert!(matches!(
+        files::load(&mut loader, &rules_path, None),
+        Err(Error::MissingRuleMap { .. })
+    ));
+    assert!(files::listed_files(&rules_path).contains(&folder.path("two.tmx")));
 }
 
 #[test]

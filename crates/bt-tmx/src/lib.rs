@@ -45,7 +45,7 @@ pub use loader::{Loaded, Loader, LoaderBuilder};
 pub use object_types::{load_object_types, parse_object_types};
 pub use project::{load_project, parse_project};
 pub use rebase::rebase_file_references;
-pub use rules::{RuleMapEntry, parse_rules_file};
+pub use rules::{IncludeCycle, RuleMapEntry, RulesFile, parse_rules_file, read_rules_file};
 pub use stamp::{Stamp, StampVariation};
 pub use warning::{Target, Warning, WarningKind};
 pub use world::resolve_world_maps;

@@ -215,7 +215,9 @@ fn highlands_rules_without_variations_give_the_scenes_base_tiles_exactly() {
     let Some(mut pack) = highlands() else {
         return;
     };
-    let entries = bt_tmx::parse_rules_file(&pack.dir.join("rules.txt")).unwrap();
+    let entries = bt_tmx::parse_rules_file(&pack.dir.join("rules.txt"))
+        .unwrap()
+        .entries;
     let mut builder = RuleSet::builder();
     for entry in entries
         .iter()

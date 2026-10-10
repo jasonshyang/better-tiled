@@ -4,7 +4,8 @@
 //! `[pattern]` restricts the entries after it to maps whose file name matches the
 //! case-insensitive wildcard, and `[*]` lifts it; a path relative to the list names a rule map,
 //! or, ending in `.txt`, a list read in place with the current filter, whose own filter changes
-//! stay inside it.
+//! stay inside it. A list that includes one being read (an include cycle) is not read again;
+//! the result says so, with every list it read, for those who watch them.
 
 use std::path::{Path, PathBuf};
 
@@ -12,6 +13,27 @@ use crate::error::Error;
 use crate::loader::absolute;
 use crate::paths::resolve_reference;
 use crate::text::read_text;
+
+/// A rule list as read: the rule maps it names, with the lists it read on the way.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RulesFile {
+    /// The rule maps, in order.
+    pub entries: Vec<RuleMapEntry>,
+    /// Every list read: the file itself, then the lists it includes, in the order they were
+    /// read.
+    pub lists: Vec<PathBuf>,
+    /// The includes skipped because they name a list being read.
+    pub cycles: Vec<IncludeCycle>,
+}
+
+/// An include of a list being read, which is not read again.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IncludeCycle {
+    /// The list with the include.
+    pub list: PathBuf,
+    /// The list it names.
+    pub included: PathBuf,
+}
 
 /// A rule map a rule list names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,27 +54,35 @@ impl RuleMapEntry {
     }
 }
 
-/// Reads a rule list and the lists it includes; include cycles are skipped. Fails when a list
-/// cannot be read; rule maps are not checked here.
-pub fn parse_rules_file(path: &Path) -> Result<Vec<RuleMapEntry>, Error> {
-    let mut entries = Vec::new();
-    read_list(&absolute(path)?, None, &mut Vec::new(), &mut entries)?;
-    Ok(entries)
+/// Reads a rule list and the lists it includes; an include of a list being read is skipped and
+/// reported. Fails when a list cannot be read; rule maps are not checked here.
+pub fn parse_rules_file(path: &Path) -> Result<RulesFile, Error> {
+    let mut read = RulesFile::default();
+    read_rules_file(path, &mut read)?;
+    Ok(read)
+}
+
+/// [`parse_rules_file`] into `read`, which keeps what was read when a list cannot be: the
+/// lists read up to it, it included, and the rule maps they named.
+pub fn read_rules_file(path: &Path, read: &mut RulesFile) -> Result<(), Error> {
+    read_list(&absolute(path)?, None, &mut Vec::new(), read)
+}
+
+/// The file a path names, for telling whether a list is being read: canonical when it exists.
+fn identity(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn read_list(
     path: &Path,
     mut filter: Option<String>,
     reading: &mut Vec<PathBuf>,
-    entries: &mut Vec<RuleMapEntry>,
+    read: &mut RulesFile,
 ) -> Result<(), Error> {
-    let identity = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    if reading.contains(&identity) {
-        return Ok(());
-    }
+    read.lists.push(path.to_path_buf());
     let text = read_text(path)?;
     let dir = path.parent().unwrap_or(Path::new(""));
-    reading.push(identity);
+    reading.push(identity(path));
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
@@ -68,9 +98,16 @@ fn read_list(
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("txt"))
         {
-            read_list(&target, filter.clone(), reading, entries)?;
+            if reading.contains(&identity(&target)) {
+                read.cycles.push(IncludeCycle {
+                    list: path.to_path_buf(),
+                    included: target,
+                });
+            } else {
+                read_list(&target, filter.clone(), reading, read)?;
+            }
         } else {
-            entries.push(RuleMapEntry {
+            read.entries.push(RuleMapEntry {
                 path: target,
                 filter: filter.clone(),
             });
@@ -195,7 +232,8 @@ mod tests {
             "  inner.tmx  \n[cave*]\ncave.tmx\n",
         )
         .unwrap();
-        let entries = parse_rules_file(&scratch.join("rules.txt")).unwrap();
+        let read = parse_rules_file(&scratch.join("rules.txt")).unwrap();
+        let entries = &read.entries;
         let shown: Vec<(String, Option<&str>)> = entries
             .iter()
             .map(|e| {
@@ -220,6 +258,34 @@ mod tests {
             ]
         );
         assert!(entries[1].applies_to("Town2.tmx") && !entries[1].applies_to("cave.tmx"));
+        // Every list read is reported, and the list including itself is a cycle, read once.
+        assert_eq!(
+            read.lists,
+            [scratch.join("rules.txt"), scratch.join("sub/rules.txt")]
+        );
+        assert_eq!(
+            read.cycles,
+            [IncludeCycle {
+                list: scratch.join("rules.txt"),
+                included: scratch.join("rules.txt"),
+            }]
+        );
         assert!(parse_rules_file(&scratch.join("missing.txt")).is_err());
+        // A list that cannot be read stops the reading; what was read up to it is kept.
+        std::fs::write(
+            scratch.join("broken.txt"),
+            "base.tmx\nnowhere/rules.txt\nlast.tmx\n",
+        )
+        .unwrap();
+        let mut partial = RulesFile::default();
+        assert!(read_rules_file(&scratch.join("broken.txt"), &mut partial).is_err());
+        assert_eq!(
+            partial.lists,
+            [
+                scratch.join("broken.txt"),
+                scratch.join("nowhere/rules.txt")
+            ]
+        );
+        assert_eq!(partial.entries.len(), 1);
     }
 }

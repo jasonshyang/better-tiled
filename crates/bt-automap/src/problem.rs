@@ -121,6 +121,8 @@ pub enum ProblemKind {
     IdleMissingLayer,
 
     // Notes.
+    /// A rules file includes one being read (an include cycle); the include is skipped.
+    IncludeCycle,
     /// A rule map matched nothing in a run, and a layer it reads held no tile when it ran.
     IdleEmptyLayer,
     /// A rule map matched nothing in a run though its input layers held tiles.
@@ -169,7 +171,7 @@ impl ProblemKind {
             | BindingRefused
             | TilesetCopy
             | IdleMissingLayer => Severity::Warning,
-            IdleEmptyLayer | IdleNoMatch | OrphanInput | OrphanOutput | NoRules
+            IncludeCycle | IdleEmptyLayer | IdleNoMatch | OrphanInput | OrphanOutput | NoRules
             | RuleNeverMatches | FullRunFallback | PaintedNotRestored => Severity::Note,
         }
     }

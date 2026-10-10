@@ -1,16 +1,17 @@
 //! The one part of the crate that touches files, as Tiled's `AutomappingManager` does: finding
 //! the rules for a map, reading a `rules.txt` (or a single rule map) and the rule maps it lists
-//! through a `bt-tmx` loader, so their tilesets are the map's own values, and reloading them
-//! when they change, keeping a broken rule map's previous rules until it is fixed. Unlike Tiled,
-//! a failed load never leaves entries behind to be listed twice on the next, and an include
-//! cycle is skipped rather than followed for ever.
+//! through a `bt-tmx` loader, so their tilesets are the map's own values, reloading them when
+//! they change, keeping a broken rule map's previous rules until it is fixed, and saying which
+//! files to watch for that. Unlike Tiled, a failed load never leaves entries behind to be
+//! listed twice on the next, and an include cycle is skipped, with a note, rather than followed
+//! for ever.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bt_core::{CustomTypes, Map, Project};
-use bt_tmx::{Loader, parse_rules_file};
+use bt_tmx::{IncludeCycle, Loader, RulesFile, parse_rules_file, read_rules_file};
 
 use crate::problem::{Problem, ProblemKind};
 use crate::rulemap::resolve_match_type;
@@ -71,9 +72,21 @@ fn is_rules_file(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("txt"))
 }
 
+/// What a rules file lists for a map, with the files read on the way.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Listed {
+    /// The rule maps that apply to the map, in order.
+    rule_maps: Vec<PathBuf>,
+    /// The files whose change changes the list: the lists read and every rule map they list,
+    /// whichever maps it applies to.
+    files: Vec<PathBuf>,
+    /// The includes skipped because they name a list being read.
+    cycles: Vec<IncludeCycle>,
+}
+
 /// The rule maps `rules_path` lists for a map named `map_file_name`, in order, after checking
 /// that every rule map it lists exists (a missing one stops Tiled from running any).
-fn listed_rule_maps(rules_path: &Path, map_file_name: &str) -> Result<Vec<PathBuf>, Error> {
+fn listed_rule_maps(rules_path: &Path, map_file_name: &str) -> Result<Listed, Error> {
     if !is_rules_file(rules_path) {
         if !rules_path.exists() {
             return Err(Error::MissingRuleMap {
@@ -81,23 +94,66 @@ fn listed_rule_maps(rules_path: &Path, map_file_name: &str) -> Result<Vec<PathBu
                 rules_file: rules_path.to_path_buf(),
             });
         }
-        return Ok(vec![rules_path.to_path_buf()]);
+        return Ok(Listed {
+            rule_maps: vec![rules_path.to_path_buf()],
+            files: vec![rules_path.to_path_buf()],
+            cycles: Vec::new(),
+        });
     }
-    let entries = parse_rules_file(rules_path).map_err(|source| Error::RulesFile {
+    let read = parse_rules_file(rules_path).map_err(|source| Error::RulesFile {
         path: rules_path.to_path_buf(),
         source,
     })?;
-    if let Some(missing) = entries.iter().find(|e| !e.path.exists()) {
+    if let Some(missing) = read.entries.iter().find(|e| !e.path.exists()) {
         return Err(Error::MissingRuleMap {
             path: missing.path.clone(),
             rules_file: rules_path.to_path_buf(),
         });
     }
-    Ok(entries
-        .into_iter()
-        .filter(|e| e.applies_to(map_file_name))
-        .map(|e| e.path)
-        .collect())
+    let mut files = read.lists;
+    files.extend(read.entries.iter().map(|e| e.path.clone()));
+    Ok(Listed {
+        rule_maps: read
+            .entries
+            .into_iter()
+            .filter(|e| e.applies_to(map_file_name))
+            .map(|e| e.path)
+            .collect(),
+        files,
+        cycles: read.cycles,
+    })
+}
+
+/// The files a load of `rules_path` reads before its rule maps, as far as they can be read: the
+/// rules files (nested ones, and one that cannot be read, included) and every rule map they
+/// list. After a failed [`load`], what to watch for the rules to load again; after a load,
+/// [`RuleSet::watched_files`] names every file.
+pub fn listed_files(rules_path: &Path) -> Vec<PathBuf> {
+    if !is_rules_file(rules_path) {
+        return vec![rules_path.to_path_buf()];
+    }
+    let mut read = RulesFile::default();
+    // The load says why a list cannot be read; here only the files read on the way matter.
+    let _unreadable = read_rules_file(rules_path, &mut read).err();
+    let mut files = read.lists;
+    if files.is_empty() {
+        files.push(rules_path.to_path_buf());
+    }
+    files.extend(read.entries.into_iter().map(|e| e.path));
+    files
+}
+
+/// An include cycle as a problem: a note naming the files.
+fn cycle_problem(cycle: &IncludeCycle) -> Problem {
+    Problem::new(
+        ProblemKind::IncludeCycle,
+        format!(
+            "the rules file {} includes {}, which is already being read, so the include is \
+             skipped",
+            cycle.list.display(),
+            cycle.included.display()
+        ),
+    )
 }
 
 /// A rule map read, or why it could not be.
@@ -191,9 +247,13 @@ fn load_keeping(
     let listed = listed_rule_maps(rules_path, &map_file_name)?;
     let mut builder = RuleSet::builder()
         .custom_types(Arc::clone(loader.custom_types()))
-        .rules_file(rules_path.to_path_buf());
+        .rules_file(rules_path.to_path_buf())
+        .listed_files(listed.files);
+    for cycle in &listed.cycles {
+        builder = builder.problem(cycle_problem(cycle));
+    }
     let mut read: HashMap<PathBuf, ReadRuleMap> = HashMap::new();
-    for path in listed {
+    for path in listed.rule_maps {
         let seen = read.contains_key(&path);
         let outcome = read
             .entry(path.clone())
@@ -211,6 +271,33 @@ fn load_keeping(
 }
 
 impl RuleSet {
+    /// Every file whose change must reload the rules: the rules files read, nested ones
+    /// included; every rule map they list, whichever maps it applies to and whether it could be
+    /// read (so fixing one reloads); the external tilesets the rule maps use; and the
+    /// templates their objects come from. Sorted, each once.
+    pub fn watched_files(&self) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = self.listed_files().to_vec();
+        files.extend(self.tileset_files());
+        for rule_map in self.rule_maps() {
+            files.push(rule_map.path().to_path_buf());
+            rule_map.map().for_each_layer(|layer, _| {
+                if let Some(objects) = layer.as_object_layer() {
+                    files.extend(
+                        objects
+                            .objects
+                            .iter()
+                            .filter_map(|o| o.template.as_ref())
+                            .map(|t| t.path.clone()),
+                    );
+                }
+            });
+        }
+        files.retain(|path| path.is_absolute());
+        files.sort();
+        files.dedup();
+        files
+    }
+
     /// The external tileset files the rule maps use: what to watch for the rules to change.
     pub fn tileset_files(&self) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = self
@@ -294,6 +381,7 @@ mod tests {
         let names = |map: &str| -> Vec<String> {
             listed_rule_maps(&scratch.join("rules.txt"), map)
                 .unwrap()
+                .rule_maps
                 .iter()
                 .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
                 .collect()
@@ -301,6 +389,17 @@ mod tests {
         assert_eq!(names("Town2.tmx"), ["a.tmx", "town.tmx", "a.tmx"]);
         assert_eq!(names("cave.tmx"), ["a.tmx", "cave.tmx", "a.tmx"]);
         assert_eq!(names(""), ["a.tmx", "a.tmx"], "a map not saved yet");
+        // The files to watch are the list and every rule map it lists, for any map.
+        let listed = listed_rule_maps(&scratch.join("rules.txt"), "Town2.tmx").unwrap();
+        let mut files = listed.files;
+        files.sort();
+        files.dedup();
+        let mut expected: Vec<PathBuf> = ["a.tmx", "cave.tmx", "rules.txt", "town.tmx"]
+            .iter()
+            .map(|name| scratch.join(name))
+            .collect();
+        expected.sort();
+        assert_eq!(files, expected);
         // A rule map that is missing, even for other maps, stops the load as it stops Tiled.
         std::fs::remove_file(scratch.join("cave.tmx")).unwrap();
         assert!(matches!(
@@ -312,9 +411,8 @@ mod tests {
             Err(Error::RulesFile { .. })
         ));
         // A rule map named directly is its own list.
-        assert_eq!(
-            listed_rule_maps(&scratch.join("a.tmx"), "town.tmx").unwrap(),
-            [scratch.join("a.tmx")]
-        );
+        let alone = listed_rule_maps(&scratch.join("a.tmx"), "town.tmx").unwrap();
+        assert_eq!(alone.rule_maps, [scratch.join("a.tmx")]);
+        assert_eq!(alone.files, [scratch.join("a.tmx")]);
     }
 }

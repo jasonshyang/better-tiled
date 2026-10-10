@@ -314,8 +314,8 @@ fn rule_probability_skips_rules_by_their_chance_at_each_position() {
     assert_eq!(report.rule_map_matches[0], report.matches);
 }
 
-/// `rules-file-recursive`: a rules file that includes itself is read once; Tiled would follow it
-/// for ever.
+/// `rules-file-recursive`: a rules file that includes itself is read once, with a note; Tiled
+/// would follow it for ever.
 #[test]
 fn rules_file_recursive_reads_a_self_including_list_once() {
     let Some(dir) = tiled_case("rules-file-recursive") else {
@@ -329,6 +329,9 @@ fn rules_file_recursive_reads_a_self_including_list_once() {
     )
     .unwrap();
     assert!(rules.rule_maps().is_empty());
+    let kinds: Vec<ProblemKind> = rules.problems().iter().map(|p| p.kind).collect();
+    assert_eq!(kinds, [ProblemKind::IncludeCycle]);
+    assert!(rules.watched_files().contains(&dir.join("rules.txt")));
     let mut map = load_map(&mut loader, &dir.join("map.tmx"));
     let before = map.clone();
     let report = rules.apply(&mut map, None, 1);

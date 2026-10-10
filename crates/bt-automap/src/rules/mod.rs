@@ -26,6 +26,8 @@ pub struct RuleSet {
     pub(crate) locality: Locality,
     problems: Vec<Problem>,
     rules_file: Option<PathBuf>,
+    /// The rules files read and the rule maps they list, when the set was loaded from files.
+    listed_files: Vec<PathBuf>,
 }
 
 impl RuleSet {
@@ -60,6 +62,11 @@ impl RuleSet {
         self.rules_file.as_deref()
     }
 
+    /// The rules files read and every rule map they list, when the set was loaded from files.
+    pub(crate) fn listed_files(&self) -> &[PathBuf] {
+        &self.listed_files
+    }
+
     /// The tileset the rules number `index` ([`TableTile::tileset`](crate::TableTile)), as the
     /// first rule map using it refers to it.
     pub fn tileset(&self, index: usize) -> Option<&TilesetRef> {
@@ -83,6 +90,7 @@ pub struct RuleSetBuilder {
     entries: Vec<Entry>,
     problems: Vec<Problem>,
     rules_file: Option<PathBuf>,
+    listed_files: Vec<PathBuf>,
 }
 
 impl RuleSetBuilder {
@@ -118,6 +126,12 @@ impl RuleSetBuilder {
         self
     }
 
+    /// The rules files read and every rule map they list.
+    pub(crate) fn listed_files(mut self, files: Vec<PathBuf>) -> RuleSetBuilder {
+        self.listed_files = files;
+        self
+    }
+
     /// Adds a problem of the rule set as a whole.
     pub(crate) fn problem(mut self, problem: Problem) -> RuleSetBuilder {
         self.problems.push(problem);
@@ -150,6 +164,7 @@ impl RuleSetBuilder {
             locality,
             problems: self.problems,
             rules_file: self.rules_file,
+            listed_files: self.listed_files,
         }
     }
 }
