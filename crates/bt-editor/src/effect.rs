@@ -44,6 +44,9 @@ pub enum Effect {
     /// Read a tileset's pixels on a worker for a labelling helper, and hand the result back as
     /// [`crate::Intent::TilesetImageRead`].
     ReadTilesetImage(crate::terrain_helpers::TilesetImageJob),
+    /// Put RPG Maker autotiles together on a worker for New Tileset (writing a new image), and
+    /// hand the tileset back as [`crate::Intent::AutotilesExpanded`].
+    ExpandAutotiles(crate::files::AutotilesJob),
 }
 
 /// A dialog of the window's.

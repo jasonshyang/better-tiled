@@ -127,6 +127,14 @@ impl App {
                     self.notify(Notice::error(problem));
                 }
             }
+            Effect::ExpandAutotiles(job) => {
+                let spawned = self.workers.spawn("autotiles", move || {
+                    vec![Intent::AutotilesExpanded(Box::new(job.run()))]
+                });
+                if let Err(problem) = spawned {
+                    self.notify(Notice::error(problem));
+                }
+            }
         }
     }
 }

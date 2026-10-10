@@ -48,6 +48,9 @@ pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
                 Effect::ReadTilesetImage(job) => {
                     pending.push(Intent::TilesetImageRead(Box::new(job.run())));
                 }
+                Effect::ExpandAutotiles(job) => {
+                    pending.push(Intent::AutotilesExpanded(Box::new(job.run())));
+                }
                 other => out.push(other),
             }
         }

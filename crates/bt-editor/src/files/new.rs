@@ -8,8 +8,10 @@ use bt_core::{
     Orientation, RenderOrder, StaggerAxis, TileLayer, Tileset, TilesetImage, TilesetRef,
 };
 use bt_edit::add_tileset;
+use bt_terrain::rpg_maker;
 use glam::{IVec2, UVec2};
 
+use super::autotiles::AutotilesJob;
 use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
 use crate::effect::Effect;
@@ -109,7 +111,8 @@ impl NewMap {
     }
 }
 
-/// What New Tileset makes: an atlas cut from an image, or a collection to add images to.
+/// What New Tileset makes: an atlas cut from an image, a collection to add images to, or blob
+/// sets put together from RPG Maker autotiles.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NewTileset {
     /// The tileset's name.
@@ -138,6 +141,15 @@ pub enum NewTilesetSource {
     },
     /// One image per tile, added later.
     Collection,
+    /// An RPG Maker A2 sheet of floor autotiles: each is put together into the 47 tiles of a
+    /// blob set and a terrain of one set, written as a new image beside the sheet on a worker
+    /// ([`crate::AutotilesJob`]). Its tiles are square, `tile_size` pixels.
+    RpgMakerAutotiles {
+        /// The sheet.
+        sheet: PathBuf,
+        /// Its size in pixels, as the window read it.
+        sheet_size: UVec2,
+    },
 }
 
 impl NewTileset {
@@ -149,19 +161,46 @@ impl NewTileset {
         if self.tile_size.x == 0 || self.tile_size.y == 0 {
             return Some("Tiles must be at least one pixel wide and high".to_owned());
         }
-        if let NewTilesetSource::Atlas { image_size, .. } = &self.source
-            && self.tileset().tile_count() == 0
-        {
-            return Some(format!(
-                "Not one {}×{} tile fits the {}×{} image",
-                self.tile_size.x, self.tile_size.y, image_size.x, image_size.y
-            ));
+        match &self.source {
+            NewTilesetSource::Atlas { image_size, .. } if self.made_here().tile_count() == 0 => {
+                Some(format!(
+                    "Not one {}×{} tile fits the {}×{} image",
+                    self.tile_size.x, self.tile_size.y, image_size.x, image_size.y
+                ))
+            }
+            NewTilesetSource::RpgMakerAutotiles { sheet_size, .. } => {
+                autotiles_problem(self.tile_size, *sheet_size)
+            }
+            NewTilesetSource::Atlas { .. } | NewTilesetSource::Collection => None,
         }
-        None
     }
 
-    /// The tileset.
-    pub fn tileset(&self) -> Tileset {
+    /// What to know before the tileset is made: for RPG Maker autotiles, why the sheet may not
+    /// be put together right (`bt_terrain::rpg_maker::sheet_warning`: another kind of RPG Maker
+    /// sheet, or not a whole number of autotiles).
+    pub fn warning(&self) -> Option<String> {
+        let NewTilesetSource::RpgMakerAutotiles { sheet, sheet_size } = &self.source else {
+            return None;
+        };
+        let file_name = sheet
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        rpg_maker::sheet_warning(&file_name, sheet_size.x, sheet_size.y, self.tile_size.x)
+            .map(|warning| warning.to_string())
+    }
+
+    /// The tileset, for an image or a collection; `None` for RPG Maker autotiles, whose tileset
+    /// is made on a worker once the sheet is put together.
+    pub fn tileset(&self) -> Option<Tileset> {
+        match self.source {
+            NewTilesetSource::RpgMakerAutotiles { .. } => None,
+            NewTilesetSource::Atlas { .. } | NewTilesetSource::Collection => Some(self.made_here()),
+        }
+    }
+
+    /// The tileset of an image or a collection.
+    fn made_here(&self) -> Tileset {
         let mut tileset = Tileset {
             name: self.name.trim().to_owned(),
             tile_width: self.tile_size.x,
@@ -206,15 +245,36 @@ impl Editor {
         Vec::new()
     }
 
-    /// Adds a new tileset to a map, embedded in it, as one step.
+    /// Adds a new tileset to a map, embedded in it, as one step; RPG Maker autotiles are put
+    /// together on a worker first.
     pub(crate) fn create_tileset(&mut self, doc: DocumentId, new: &NewTileset) -> Vec<Effect> {
         if let Some(problem) = new.problem() {
             return vec![Effect::Notify(Notice::error(problem))];
         }
+        if self.documents.get(doc).is_none() {
+            return vec![warn(EditError::NoSuchDocument(doc))];
+        }
+        match &new.source {
+            NewTilesetSource::RpgMakerAutotiles { sheet, .. } => {
+                vec![Effect::ExpandAutotiles(AutotilesJob::new(
+                    doc,
+                    sheet.clone(),
+                    new.tile_size.x,
+                    new.name.trim(),
+                ))]
+            }
+            NewTilesetSource::Atlas { .. } | NewTilesetSource::Collection => {
+                self.add_new_tileset(doc, new.made_here())
+            }
+        }
+    }
+
+    /// Adds `tileset` to `doc`'s map, embedded in it, as one step.
+    pub(crate) fn add_new_tileset(&mut self, doc: DocumentId, tileset: Tileset) -> Vec<Effect> {
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return vec![warn(EditError::NoSuchDocument(doc))];
         };
-        let tileset = TilesetRef::embedded(Arc::new(new.tileset()));
+        let tileset = TilesetRef::embedded(Arc::new(tileset));
         let result = self.transact(doc, "New Tileset", |tx| {
             let map = tx.map_mut(asset)?;
             add_tileset(map, tileset).map_err(EditError::from)
@@ -224,6 +284,28 @@ impl Editor {
             Err(error) => vec![warn(error)],
         }
     }
+}
+
+/// Why RPG Maker autotiles of `tile` pixels cannot be put together from a sheet of
+/// `sheet_size` pixels, if they cannot.
+fn autotiles_problem(tile: UVec2, sheet_size: UVec2) -> Option<String> {
+    if tile.x != tile.y {
+        return Some("RPG Maker tiles are square: their width and height must be the same".into());
+    }
+    if !tile.x.is_multiple_of(2) {
+        return Some(format!(
+            "RPG Maker tiles are put together from quarters, so their size is even, not {} \
+             pixels",
+            tile.x
+        ));
+    }
+    if rpg_maker::autotiles(sheet_size.x, sheet_size.y, tile.x).min_element() == 0 {
+        return Some(format!(
+            "Not one autotile of 2×3 {}-pixel tiles fits the {}×{} image",
+            tile.x, sheet_size.x, sheet_size.y
+        ));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -295,10 +377,47 @@ mod tests {
                 spacing: 2,
             },
         };
-        let tileset = new.tileset();
+        let tileset = new.tileset().unwrap();
         assert_eq!(tileset.name, "terrain");
         // (70 - 2 + 2) / 18 = 3 columns; (36 - 2 + 2) / 18 = 2 rows.
         assert_eq!((tileset.columns(), tileset.tile_count()), (3, 6));
+    }
+
+    #[test]
+    fn rpg_maker_sheets_need_square_even_tiles_and_a_whole_autotile() {
+        let sheet = |name: &str, tile: UVec2, size: UVec2| NewTileset {
+            name: "Floors".into(),
+            tile_size: tile,
+            source: NewTilesetSource::RpgMakerAutotiles {
+                sheet: PathBuf::from("/sheets").join(name),
+                sheet_size: size,
+            },
+        };
+        let floors = sheet("Outside_A2.png", UVec2::splat(48), UVec2::new(768, 576));
+        assert_eq!((floors.problem(), floors.warning()), (None, None));
+        assert!(floors.tileset().is_none(), "made on a worker");
+        let problem = |new: NewTileset| new.problem().unwrap();
+        assert_eq!(
+            problem(sheet("a.png", UVec2::new(48, 32), UVec2::new(96, 144))),
+            "RPG Maker tiles are square: their width and height must be the same"
+        );
+        assert_eq!(
+            problem(sheet("a.png", UVec2::splat(15), UVec2::new(96, 144))),
+            "RPG Maker tiles are put together from quarters, so their size is even, not 15 \
+             pixels"
+        );
+        assert_eq!(
+            problem(sheet("a.png", UVec2::splat(48), UVec2::new(90, 144))),
+            "Not one autotile of 2×3 48-pixel tiles fits the 90×144 image"
+        );
+        let walls = sheet("Inside_A4.png", UVec2::splat(48), UVec2::new(768, 720));
+        assert_eq!(walls.problem(), None);
+        assert!(
+            walls
+                .warning()
+                .unwrap()
+                .starts_with("This looks like an A4 sheet")
+        );
     }
 
     #[test]

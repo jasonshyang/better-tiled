@@ -1,7 +1,8 @@
 //! The tileset editor's terrain helpers in the window, on tilesets drawn lane by lane: Layout…
 //! finds a block in the image, Apply labels it and Label All labels every block found;
 //! Auto-label… labels the chosen terrain from the tile clicked; Patterns shows what a set lacks
-//! and labels a tile with a pattern clicked; each one step.
+//! and labels a tile with a pattern clicked; New Tileset puts RPG Maker autotiles together into
+//! a blob set; each one step.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use bt_terrain::TerrainColor;
 use bt_terrain::layouts::LAYOUTS;
 use bt_test_data::Scratch;
 use bt_test_data::fixtures::{
-    Atlas, MapBuilder, TerrainSetBuilder, blank_picture, corners, paint_lanes,
+    Atlas, MapBuilder, TerrainSetBuilder, blank_picture, corners, paint_a2_autotile, paint_lanes,
 };
 use bt_tmx::WriteRequest;
 use egui::{Modifiers, PointerButton};
@@ -250,4 +251,60 @@ fn a_set_too_large_to_list_says_how_many_patterns_it_needs() {
     window.click("Patterns");
     assert!(window.shows("“Ground” needs 390625 patterns: too many to list."));
     assert!(!window.shows("Pattern 1"));
+}
+
+#[test]
+fn new_tileset_puts_rpg_maker_autotiles_together_into_a_blob_set() {
+    let scratch = Scratch::new("window-rpg-maker").unwrap();
+    // One autotile of 16-pixel tiles, in a sheet whose name says A1: it warns, and is made.
+    let mut picture = blank_picture(2 * TILE, 3 * TILE);
+    paint_a2_autotile(&mut picture, UVec2::ZERO, TILE, GRASS);
+    let sheet = scratch.join("Floors_A1.png");
+    picture.save(&sheet).unwrap();
+    let atlas = Atlas::builder()
+        .name("ground")
+        .build_in(scratch.path())
+        .unwrap();
+    let path = map_with(&scratch, atlas.tileset);
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+
+    window.press(Modifiers::COMMAND | Modifiers::SHIFT, egui::Key::P);
+    window.type_text("new tileset");
+    window.press(Modifiers::NONE, egui::Key::Enter);
+    assert!(window.has_modal(), "New Tileset asks");
+    window.click("RPG Maker autotiles");
+    window.click("Browse…");
+    window.answer_file_dialog(bt_editor::FileRequest::TilesetImage, &sheet);
+    assert!(window.shows(
+        "This looks like an A1 sheet (animated water): each animation frame becomes a terrain \
+         of its own, and its waterfalls are not put together right"
+    ));
+    window.click("OK");
+    assert!(!window.has_modal());
+
+    let map = window.editor().map_of(doc).unwrap();
+    assert_eq!(map.tilesets.len(), 2, "added after the map's own");
+    let added = &map.tilesets[1].tileset;
+    assert_eq!(
+        (added.name.as_str(), added.tile_size()),
+        ("Floors_A1", UVec2::splat(TILE))
+    );
+    let [set] = added.wang_sets.as_slice() else {
+        panic!("one terrain set");
+    };
+    let names: Vec<&str> = set.colors.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!((set.kind, names), (WangSetType::Mixed, vec!["Autotile 1"]));
+    assert!(scratch.join("Floors_A1 blob.png").is_file());
+    let steps: Vec<String> = window
+        .editor()
+        .document(doc)
+        .unwrap()
+        .history()
+        .entries()
+        .into_iter()
+        .map(|e| e.label)
+        .collect();
+    assert_eq!(steps, ["New Tileset"]);
 }

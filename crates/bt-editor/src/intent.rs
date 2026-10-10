@@ -367,6 +367,8 @@ pub enum Intent {
         /// The tile.
         tile: TileId,
     },
+    /// RPG Maker autotiles New Tileset asked for were put together: the tileset joins the map.
+    AutotilesExpanded(Box<crate::files::ExpandedAutotiles>),
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

@@ -1,6 +1,7 @@
 //! Files: opening, saving, closing and quitting, and what the editor knows about them.
 
 mod add_tileset;
+mod autotiles;
 mod close;
 mod load;
 mod new;
@@ -16,6 +17,7 @@ use crate::document::DocumentId;
 use crate::effect::DecisionId;
 use crate::store::AssetId;
 
+pub use autotiles::{AutotilesJob, ExpandedAutotiles};
 pub use load::{LoadJob, Loaded};
 pub(crate) use load::{
     LoadKind, LoadPurpose, LoadSource, LoadedContent, LoadedFiles, ProjectChoice, hash_file,
