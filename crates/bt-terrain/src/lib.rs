@@ -29,6 +29,7 @@ mod paint;
 pub mod patterns;
 mod pixels;
 mod request;
+pub mod rpg_maker;
 mod terrain;
 mod topology;
 mod wangid;
