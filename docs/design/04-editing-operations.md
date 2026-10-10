@@ -1,8 +1,8 @@
 # Editing operations — `bt-edit`
 
-*2026-10-09. The design of the crate that holds the logic behind every editing command as
-functions over `Map`: selections, fills, the brush, the clipboard, carried selections, map,
-layer, tileset and object commands. The high-level design (`00-high-level-design.md`, §7) sets
+*2026-10-09; as built at the end of M2, 2026-10-10 (§1.1). The design of the crate that holds
+the logic behind every editing command as functions over `Map`: selections, fills, the brush,
+the clipboard, carried selections, map, layer, tileset and object commands. The high-level design (`00-high-level-design.md`, §7) sets
 the conventions; this doc says what each part does, the rules it follows (Tiled's, and where
 not), and how it is tested. Tiled's own sources are cited as `reference/tiled/src/...`.*
 
@@ -18,7 +18,41 @@ Dependencies: `bt-core` and `bt-utils`. Most of the crate ports the behaviour of
 (`reference/tiled/src/tiled`, GPL-2.0-or-later, used under GPL-3.0-or-later); each module names
 its sources.
 
-## 2. Conventions
+### 1.1 As built at M2
+
+The whole crate was built in M2, as the modules below; the sections after this one describe
+them, and where the built crate differs from their text the difference is said here.
+
+| Module | As built |
+|---|---|
+| `region`, `select`, `shapes` | `TileRegion` (sorted runs per row: set algebra, `bounds`, `rects`, `outline` with `MapGeometry::region_outline`'s corner order) and `SelectionMode`; flood fill, magic wand, select same tile, fill area and invert; `FillShape` and the regions of Shape Fill and Rectangular Select |
+| `lattice`, `axis` | the grid's own lattice (cells, the diamond grid behind staggered rows, axial hex coordinates), its motions and their integer matrices; `Axis` is the one direction type of every flip (brush, carried tiles, objects), named after Tiled's `FlipDirection` |
+| `brush/` | `Brush { variations, mode: Stamp \| Random, size }`, a variation being a weighted `TileClip`; placement along points, fill of a region, capture, flips and turns on every grid; random choices seeded per cell |
+| `clip/` | `TileClip`, `copy`, `cut` (`TileCut`), `erase`, `erase_targets`, `find_target_layers` (`PasteTarget::Layer \| NewLayer`), `paste` with a mask |
+| `float/` | `FloatingTiles` (`lift` → `TileLift { tiles, erased }`, `moved`, `flipped`, `rotated`, `centre`, `place` → `PasteReport`, `region`, `at_rest`, `clip`); a pivot is a `TilePivot`, doubled lattice coordinates, so the centre of any selection is exact |
+| `layer_ops/`, `map_ops/` | the layer and map commands of §10, with `offset_layers(ids, delta, snap)` moving only unlocked layers |
+| `objects/` | `space` (`ObjectSpace::of_map`, `of_tile`, `of_template`), `find`, `edit`, `order` (with `reorder_objects` to a place in a list), `bounds`, `hit`, `transform` (with `drag_angle` for rotate handles), `align`, `snap`, `convert`, `resize` (`Resize`, `ResizeHandle`, `resize_quad`), `node` and `nodes` (Edit Polygons); every function has an `_in` twin over one object list and its space, which is how a tile's collision shapes are edited |
+| `object_clip`, `ids`, `duplicate_name` | `ObjectClip` with reference rewiring and `paste_offset`; `NewIds` (`from_map`, `after_highest`, `take`, `skip_past`, `store_in`) and `IdRemap`; the one `name_of_duplicate` |
+| `tileset_ops`, `adjust_tiles`, `tile_layers` | §8 and §12 |
+
+Object outlines are not computed here: the one outline geometry (`object_outline`,
+`ObjectFrame`, `Outline`, `Segment`) lives in `bt-core`, and the renderer draws from it too.
+
+Where the built crate differs from the text below, or from Tiled:
+
+- **Edit Polygons.** A polygon keeps three nodes and a polyline two, or the object goes (Tiled
+  removes an object only below two nodes, so it can leave two-node polygons); a join that would
+  leave a polygon under three nodes leaves it unchanged; naming a polyline's two ends in
+  `connect_polylines` closes it into a polygon.
+- **Resizing.** A side dragged past the opposite one stops at 1 % of the extent it had (Tiled's
+  floor for scale factors; Tiled lets a size reach zero). A box side of no length keeps a scale
+  of 1 where Tiled would divide by zero. A tile object's offset scales with its image, so the
+  dragged side follows the pointer exactly. Positions are pixel space shared by every layer;
+  the caller removes layer offsets.
+- **Pickers.** `node_at` and `segment_at` measure their tolerance on screen, as `objects_at`
+  does.
+
+
 
 - **In place, with a report.** An operation mutates the map it is given and returns what it
   changed: rectangles per layer, ids made or removed, tilesets added. When nothing would change
@@ -57,7 +91,7 @@ its sources.
 | `layer_ops` | new, duplicate, remove, move, raise and lower, group and ungroup, merge down, via copy and cut, visibility and locks, offsets |
 | `tileset_ops` | find, add, unify, usage, remove, replace, swap tiles |
 | `adjust_tiles` | re-indexing after a tileset image changed its column count |
-| `objects/` | `find`, `edit` (add, duplicate, remove, move), `order`, `bounds`, `hit`, `transform` (flip, rotate), `align`, `snap`, `convert` (to polygon, reset tile size) |
+| `objects/` | `space`, `find`, `edit` (add, duplicate, remove, move), `order`, `bounds`, `hit`, `transform` (flip, rotate), `align`, `snap`, `convert` (to polygon, reset tile size), `resize`, `node`, `nodes` |
 | `object_clip` | `ObjectClip`, copy, cut, paste with reference rewiring |
 | `ids` | id allocation and `IdRemap` |
 

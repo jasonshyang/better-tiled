@@ -1,6 +1,7 @@
 # Editor core — `bt-editor`
 
-*2026-10-09; the M1 part as built at the end of M1, 2026-10-10 (§1.1). The design of the crate
+*2026-10-09; the M1 part as built at the end of M1 (§1.1) and the M2 part at the end of M2
+(§1.2), both 2026-10-10. The design of the crate
 that is the editor without a window: what is open, how it changes, how it relates to the files
 on disk, what the user can do to it, and what the editor remembers between runs. The high-level
 design (`00-high-level-design.md`, §8) states the shape: an asset store, documents as views on
@@ -50,6 +51,57 @@ visibility, lock and name are transactions, so they undo.
 only when the settings' key bindings name an unknown command or key. The crate's dependencies
 at M1 are `bt-core`, `bt-tmx`, `bt-utils`, `glam`, `log`, `serde`, `serde_json`, `thiserror`
 and `toml`.
+
+### 1.2 As built at M2
+
+M2 made the editor edit: everything a level needs, from the action table to the tileset
+editor's model. What it added or changed, module by module:
+
+| Module | What it holds |
+|---|---|
+| `actions/` | the action table, 92 commands, made by one macro with const builders (`.on(context)`, `.keys`, `.keys_by_platform`, `.toggle`, `.tool`, `.repeating`, `.text_edit`); `enabled` with the reason a command cannot run (its context, a lock, nothing to act on, not built yet), `checked`, `execute`; the palette (commands, recent files, layers, "x, y" to go to a cell) ranked by Tiled's search score with a word found in a file's name counting double, recency, and half for a disabled entry; equal ranks list the shorter label first |
+| `document/` | `Selection { current_layer, layers, tiles, objects, nodes, carried }`; selecting layers, tiles and objects (on a tile's collision shapes in the tileset editor's Collision mode); `carried.rs`, carried selections (below); `TilesetEditing { home, tiles, current, mode: Tiles \| Collision \| Animation }`, the tileset editor a document shows; the magic wand's and Select Same Tile's areas |
+| `store/` | `TilesetHome { Asset(id) \| Embedded { map, slot } }`, where a tileset lives; `tileset_at`, `home_of_slot`; `Tx::tileset_at_mut` changes either kind |
+| `tools/` | `ToolKind` (18 tools) with their `ToolFamily`; `ToolState` (the tool, the one before, the last of each family, the brush, random mode, size, selection mode, fill shape, the seed previews and paint share); `tool_family(doc)`, which is the object tools' while collision shapes are edited; strokes (`Stroke::Begin`, `Paint`, `Erase`, `Move`, `End`, `Cancel`), previews that are what gets painted, Bucket Fill, Shape Fill, the picker and capture |
+| `objects/` | `ObjectHost::Map \| Tile`, where the object tools edit; picking by the object-selection preference; `SnapToggle` (Command toggles grid snapping, with Shift the fine grid, as Tiled's `SnapHelper`); `ObjectStroke` drags (`Move`, `Rotate` from the drag's two points, `Resize` by a handle, `MoveNodes`, and the Offset Layers tool's move); `selection_handles`; Edit Polygons' nodes (`node_handles`, `node_at`, `segment_at`, select, insert, delete, join, split); the object commands, the Objects panel's rows (`object_rows`), visibility, centring and reordering |
+| `clipboard.rs` | tiles (copy, cut, delete, paste as the brush, paste in place) and objects (paste at the pointer or in place) |
+| `layer_commands.rs`, `map_commands.rs`, `offset_map.rs` | the Layer menu, several layers selected, layers moved by a drag, opacity as one merging step; Crop to Selection, Autocrop, Resize Map (refused for infinite maps) and Offset Map (`MapOffset`, `LayerChoice`; locked layers are left and named) |
+| `tileset_commands.rs` | Edit Tileset and back, the tiles chosen, the editor's mode, a tile's animation as one step, `edited_tileset`, and `collision_view`: a one-cell map of the tile and its shapes for the window to draw |
+| `files/` | New Map and New Tileset (embedded, with Tiled's defaults), Add External Tileset (read on a worker, added as one step), tileset files (`.tsx`, `.tsj`) opened in tabs of their own and saved to their files |
+| `watch.rs` | the watcher's model (`Observation`, `Found`, `WatchModel`): a file changed by another program reloads as a step, or asks when the open copy has unsaved changes |
+| `recovery.rs` | unsaved tileset files are snapshotted too, and come back in their tabs |
+| `settings/` | the watcher switch, the fine grid (1 to 128, a value outside refused when loaded or changed), snapping, object selection, enclosed rubber bands, a tool key that goes back; `ChangeSettings` checks the key bindings |
+| `properties/` | the property-editing model of §14 |
+
+**Carried selections** are explicit state, as §4 designs them, but without a `TileSelection`
+type: the selection holds `carried: Option<Carried { base, tiles, layers }>` beside its cells. A
+transaction that changes anything but the carried tiles lets them go where they are (the
+transaction sets a flag when it keeps them), and so does selecting other cells or layers.
+Dragging inside the selection with a tool that selects tiles is a `Stroke` of kind `Move`; X, Y
+and Z mirror and turn the selected tiles while such a tool is current; Delete and Cut drop the
+carried tiles and show what they covered; undo brings the carry back with the selection.
+
+**The tileset editor** edits a tileset where it lives. A tileset file opens in a tab of its own
+(its document's asset is the tileset); a map's embedded tileset is edited in place of the map,
+in the map's document, so its changes are steps of the map's history (Tiled opens it in a tab).
+While the tileset editor is open, the Map and TileLayer contexts do not hold and ObjectLayer
+holds only in Collision mode, so the map's commands say why they wait. The edit commands (Cut,
+Copy, Paste, Delete, Select All and None, Invert, the flips and turns) belong to any document,
+and their own rules say when there is nothing for them to act on.
+
+The intents added: `RunPalette`, `CreateMap`, `CreateTileset`, `ResizeMap`, `OffsetMap`,
+`EditTileset`, `StopEditingTileset`, `SelectTilesetTiles`, `SetTilesetMode`,
+`SetTileAnimation`, `SelectLayers`, `MoveLayers`, `SetLayerOpacity`, `SelectTiles`, `PickTiles`,
+`Stroke`, `Fill`, `ShapeFill`, `PickFromMap`, `Capture`, `SetFillShape`, `SetSelectionMode`,
+`SelectObjects`, `InsertObject`, `ObjectStroke`, `PasteObjects`, `MoveObjectsToLayer`,
+`SetObjectVisible`, `CenterOnObject`, `ReorderObjects`, `SelectNodes`, `InsertNode`,
+`Observed`, `ChangeSettings`. The effects added: `Show(Dialog)` (New Map, New Tileset,
+Preferences, the palette, Move Objects to Layer, Resize Map, Offset Map), `PickFile` of a
+tileset image or an external tileset, `PasteAtPointer`, `ReloadImages`, `WriteSettings`, the view
+requests `CenterOnCell` and `CenterOn`, and the question `Conflict` (a file changed on disk
+while unsaved) answered `KeepMine` or `Reload`.
+
+The crate now depends on `bt-edit` too.
 
 ## 2. The editor
 

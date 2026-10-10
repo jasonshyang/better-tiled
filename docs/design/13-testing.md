@@ -1,6 +1,6 @@
 # Testing
 
-*2026-10-09; what M0 and M1 built is as built at the end of M1, 2026-10-10. The rules every
+*2026-10-09; what M0, M1 and M2 built is as built at the end of M2, 2026-10-10. The rules every
 crate's tests follow and the infrastructure they share: the corpora and how they are found, the
 fixtures, the oracle and golden-file policies, randomised tests, the editor harness, external
 programs, performance checks, the gates no test can automate, and continuous integration. Each
@@ -171,6 +171,17 @@ frames until the workers are done and the layout has stopped moving (a new dialo
 itself a frame before it is placed, so a click right after it opens would miss). The
 `--screenshot` picture test waits for a window that can present; the development machine runs
 it by hand for now.
+
+As built at M2, the window's tests drive the tools with the pointer (`click_cell`,
+`drag_cells`, `click_world`, `drag_world`, `click_on_screen`, `drag_on_screen`), answer file
+dialogs, poll the watcher, and find tiles of the Tiles panel, the tileset editor and the
+animation palette, and points of the collision view, on screen. A double-click needs the
+earlier clicks to be over (`pause`), as egui counts close clicks anywhere as one burst. The
+milestone's measure is a window test of its own, `a_level_is_built_from_scratch_in_the_window`:
+a new map, a tileset from an image, painting and filling, an object layer with a rectangle, a
+collision shape drawn in the tileset editor, Save As, and the file read back. `bt-edit`'s
+randomised tests (brushes, carried tiles, layer and map commands, objects, nodes) use the
+seeded runs of §6 through `bt-test-data`'s `Fuzz`.
 
 ## 8. External programs
 

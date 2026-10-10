@@ -1,6 +1,6 @@
 # Data model — `bt-core` and `bt-utils`
 
-*2026-10-09; as built at the end of M0, 2026-10-10. The design of the two bottom crates: the
+*2026-10-09; as built at the end of M0, 2026-10-10, with M2's object geometry (§13.6). The design of the two bottom crates: the
 primitives every crate shares and the pure data model of maps, tilesets, objects, properties,
 terrain sets, worlds and projects, with the grid geometry of every Tiled orientation. The
 high-level design (`00-high-level-design.md`, §3.5 and §4) says why these crates exist; this doc
@@ -539,6 +539,17 @@ drawn upright (tile and text objects): the projected position minus the alignmen
 the size. `object_outline(object)`: the drawn outline of any object in screen space, rotation
 included, which the canvas, the headless pictures, the Godot export and `bt view` all use; it is
 built with the renderer (M1), which is its first user.
+
+As built at M2, the one object geometry lives here, following libtiled: `object_outline(geometry,
+object, tileset)` and `object_pixel_outline` (the same in pixel space) give an `Outline`
+(`Area`, `Path` or `Point`, with `bounds`, `segments`, `hits`, `touches`, `lies_within`);
+`object_marker` is Tiled's 20-pixel square or circle for a shape without a size;
+`tile_object_box` places a tile object's image by its alignment and scaled tile offset;
+`ObjectFrame` maps an object's own coordinates to the screen and the map's pixels and back
+(upright for tile and text objects); `Segment` with the nearest point and distance, and the
+polygon and rotation helpers they need. `bt-edit` measures, hits and resizes objects with them,
+and the renderer draws them. `MapObject::kind_name` names an object's kind for the Objects
+panel.
 
 ## 14. Validation
 

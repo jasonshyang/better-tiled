@@ -1,6 +1,7 @@
 # The application — `apps/better-tiled`
 
-*2026-10-09; the M1 part as built at the end of M1, 2026-10-10 (§1.1). The design of the window:
+*2026-10-09; the M1 part as built at the end of M1 (§1.1) and the M2 part at the end of M2
+(§1.2), both 2026-10-10. The design of the window:
 tabs, menus, panels, dialogs, tools and the canvas, built on `bt-editor` (`05-editor-core.md`)
 and `bt-render` (`03-rendering.md`) with eframe and egui. The high-level design
 (`00-high-level-design.md`, §9) states the rule: the application holds no map logic; if it needs
@@ -67,6 +68,60 @@ The menus are the window's arrangement of `bt-editor`'s action table (File, Edit
 Open Recent), each item asking the editor whether it is enabled and checked and the keymap for
 its key. Not yet built: tools and gestures, the toolbar, the other panels, the panel layout in
 the session, the watcher, the live server, the command palette, the `BT_SCREENSHOT_*` hooks.
+
+### 1.2 As built at M2
+
+M2 made the window edit. What it added:
+
+- **Gestures** (`canvas/gesture.rs`): `Hover`, `Press`, `Drag`, `Release` (one the canvas never
+  saw is made up), `DoubleClick`, `ModifiersChanged`, `Cancel` (Escape), `Confirm` (Enter) and
+  `Leave`, each with the pointer's screen point, its world point, and its pixel and cell **on
+  the current layer**: the layer's offset (its groups' included) is taken off, as Tiled's tools
+  do, and the grid, the tile selection and the hovered cell are drawn at that offset. Escape
+  and Enter reach the tool only while no text field has the keyboard and no dialog is open.
+- **Tools** (`tools/`): the `Tool` trait (`handle`, `overlay`, `hint`, `reset`) over a
+  `ToolContext`; the `ToolBox` makes the current one active and resets the one before. Built:
+  Brush, Eraser, Bucket Fill, Shape Fill, Picker, Rectangular Select, Magic Wand, Select Same
+  Tile (dragging inside the selection moves its tiles, `carry_drag.rs`), Offset Layers, Select
+  Objects (with resize and rotate handles), Edit Polygons, Insert Rectangle, Ellipse, Capsule,
+  Point, Tile, Text and Insert Polygon. §6 below as built: Insert Polygon is Tiled's one tool,
+  the first point closing a polygon and a right-click or Enter finishing a polyline (no
+  separate Insert Polyline, no Backspace); the selection modes at a press are Tiled's (Shift
+  adds, Command subtracts, both intersect); Command toggles snapping for object gestures and
+  Command with Shift the fine grid; Escape with nothing under way in an insert tool goes back
+  to Select Objects, as in Tiled.
+- **Overlays** (`canvas/overlay.rs`): marching ants for the tile selection (amber while it
+  carries its tiles) and for the selected objects' frames in every tool; each tool's own
+  vectors and previewed tiles.
+- **The toolbar** (`app/toolbar.rs`): the tools of the family the document takes (the object
+  tools in the collision editor, without Insert Tile and Insert Text, as Tiled's collision
+  editor), Offset Layers on a map, and the options of the current tool where it is shown.
+- **Menus** (`menus.rs`, `app/menu.rs`): File, Edit, View (with snapping), Map, Layer, Objects
+  and Tools from the action table; the panels' context menus draw from the same entries, and a
+  disabled entry shows its reason on hover.
+- **Panels** (`panels/`): Layers and Objects are tabs of the left group, Tiles is on the right.
+  Layers: several layers (Shift picks a range, ⌘ adds or removes), dragged to a new place or
+  into a group, a context menu with every layer command, a strip of buttons, an opacity slider
+  for the selected layers (one step per drag). Objects: each object layer's objects in the order they are
+  drawn, a filter by name, class, kind or id, an eye per object, a double-click centres the view,
+  dragging reorders. Tiles: a click or a dragged rectangle makes the brush; Edit Tileset.
+- **The tileset editor** (`tileset_editor/`): shown in place of a map, or in a tileset's tab,
+  with Tiles, Collision and Animation. Collision draws a one-cell map of the tile and its shapes
+  on a canvas of its own (`CanvasRole::Collision`: no cells to select, its own camera) and edits
+  them with the object tools; Animation lists the frames with their durations, moves and
+  removes them, adds a frame per tile clicked in a palette, and plays a preview. While a map's
+  tileset is edited in its place, the left panels wait.
+- **Dialogs** (`dialogs/`): the command palette (⇧⌘P), New Map, New Tileset (an image picked
+  through the file dialog), Preferences (General, Interface, Keyboard with search and a recorded
+  key, Theme), Resize Map (a preview whose old map drags to set the offset), Offset Map, and
+  Move Objects to Layer.
+- **Files** (`files/`): the watcher (a thread polling the files the editor names every 800 ms,
+  reporting only what changed), the file dialogs' filters (images, tilesets).
+
+`TestWindow` gained the pointer (`click_cell`, `drag_cells`, `click_world`, `drag_world`,
+`click_on_screen`, `drag_on_screen`), answers to file dialogs, polling the watcher, and places
+to find on screen: tiles of the Tiles panel, of the tileset editor and of the animation
+palette, and points of the collision view.
 
 ## 2. Startup
 

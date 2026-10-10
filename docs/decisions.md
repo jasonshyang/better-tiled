@@ -510,3 +510,117 @@ files copied, images hard-linked.
 **Instead of:** saving the pack's map where it is, or copying the whole pack.
 **Why:** the purchased files must never be written; hard links make a mirror of a large pack
 instant, and the editor writes only Tiled's files.
+
+## 2026-10-10 — A map's tilesets are edited in place of the map
+
+**Decided:** Edit Tileset shows the tileset editor in the map's own tab, in place of the map,
+and an embedded tileset's changes are steps of the map's history; a tileset file opened on its
+own gets a tab of its own. While the tileset editor is open, the map's commands say they wait
+for the map.
+**Instead of:** Tiled's tab per tileset, embedded ones included, or the design's edit mode of
+the Tiles panel.
+**Why:** an embedded tileset has no file and no asset of its own: in its map's tab its changes
+undo with the map's, and the map's save writes them. The Tiles panel is too narrow for drawing
+collision shapes or laying out frames; the centre is not.
+
+## 2026-10-10 — Tools measure from the current layer's offset
+
+**Decided:** the pointer's cell and pixel are the current layer's, its offset (its groups'
+included) taken off, and the grid, the tile selection and the hovered cell are drawn at that
+offset, as Tiled does.
+**Instead of:** measuring every tool on the map's own grid.
+**Why:** on a layer with an offset, paint and new objects would land away from the pointer.
+
+## 2026-10-10 — Modifiers are Tiled's, with ⌘ for its Ctrl
+
+**Decided:** at a press, Shift adds to the selection, ⌘ (Ctrl elsewhere) subtracts and both
+intersect; for object gestures ⌘ toggles grid snapping and ⌘ with Shift the fine grid (Tiled's
+`SnapHelper`); a rotate handle turns in steps of 15° with ⌘.
+**Instead of:** the design's ⌥ or ⌃ to subtract and ⌃ to snap rotation.
+**Why:** Tiled's Ctrl is ⌘ on a Mac, and Tiled's users keep their habits.
+
+## 2026-10-10 — One Insert Polygon tool, as Tiled's
+
+**Decided:** Insert Polygon (P) closes a polygon when the first point is clicked again and
+finishes a polyline on a right-click or Enter; Escape drops the shape, or with nothing under way
+goes back to Select Objects.
+**Instead of:** separate Insert Polygon and Insert Polyline tools (P, L) and Backspace to take
+the last point back.
+**Why:** Tiled has one tool and no Backspace there; a second tool would be a second key to learn
+for the same gesture.
+
+## 2026-10-10 — Escape and Enter belong to dialogs and fields first
+
+**Decided:** the canvas's tool gets Escape and Enter only while no text field has the keyboard
+and no dialog is open.
+**Instead of:** every key event reaching the tool as well, since the canvas is drawn before the
+dialogs.
+**Why:** choosing a palette entry with Enter must not also finish a polygon, and closing a dialog
+with Escape must not also switch tools.
+
+## 2026-10-10 — The edit commands belong to any document
+
+**Decided:** Cut, Copy, Paste, Delete, Select All and None, Invert and the flips and turns are
+commands of any document, and their own rules say when they have nothing to act on: the
+selected tiles, the selected objects, or a tile's collision shapes.
+**Instead of:** commands of maps only.
+**Why:** the tileset editor's collision shapes take the same keys as a map's objects.
+
+## 2026-10-10 — Carried tiles live in the selection
+
+**Decided:** the selection holds what it carries beside its cells, a transaction that changes
+anything else lets the tiles go where they are, and so does selecting other cells or layers; a
+drag of the tiles is a tile stroke of its own kind; Escape lets them go, selection and all.
+**Instead of:** a `TileSelection` type and a separate gesture type.
+**Why:** one selection type and one stroke type keep undo, the history and the tools as they
+were; letting go on any other edit keeps the map behind the carried tiles from going stale.
+
+## 2026-10-10 — Equal palette scores list the shorter label first
+
+**Decided:** entries the search scores alike are listed shorter label first, then by name.
+**Instead of:** Tiled's alphabetical order, which lists Snap to Fine Grid before Snap to Grid for
+"snap to grid".
+**Why:** the shorter label is the one the words describe more of.
+
+## 2026-10-10 — Values out of range are refused when settings load
+
+**Decided:** a fine grid outside 1 to 128 divisions (Tiled's range) stops the start with the
+file and the reason, and the Preferences cannot set one.
+**Instead of:** clamping it wherever it is used.
+**Why:** a silent clamp hides a broken file; the rule is to fail at startup.
+
+## 2026-10-10 — New Tileset embeds the tileset
+
+**Decided:** New Tileset adds the tileset to the map, embedded.
+**Instead of:** Tiled's question of where to save a new tileset file.
+**Why:** a level made from scratch needs no second file to save; the map holds everything until
+its tileset is shared.
+
+## 2026-10-10 — Map commands and locks
+
+**Decided:** Resize Map is refused for infinite maps; Offset Map leaves locked layers and names
+them; Add External Tileset takes one file at a time, each one step, and names a tileset the map
+already has.
+**Instead of:** Tiled, which resizes infinite maps, offsets locked layers and adds several files
+in one step, silently skipping those it has.
+**Why:** an infinite map has no size to resize; locks hold everywhere else; one file per step
+keeps undo plain.
+
+## 2026-10-10 — The Layers and Objects panels
+
+**Decided:** the Layers panel keeps an opacity slider for the selected layers (one step per
+drag); layers dropped onto a group go on top of its layers; the Objects panel lists a layer's
+objects in the order they are drawn, and a double-click centres the view on one.
+**Instead of:** Tiled's current panels, which have no opacity slider, drop into a group at its
+bottom, list objects in list order and centre on a single click.
+**Why:** opacity is set most often while looking at the map; the top of a group is where a
+dropped layer is seen; the drawn order is the order the user sees.
+
+## 2026-10-10 — Shapes keep their nodes and their size
+
+**Decided:** Edit Polygons keeps a polygon's three nodes and a polyline's two, removing the
+object otherwise; a resize handle dragged past the opposite side stops at 1 % of the extent it
+had.
+**Instead of:** Tiled, which can leave two-node polygons and lets a size reach zero.
+**Why:** a two-node polygon or an object without a size draws as nothing a user can select
+again.
