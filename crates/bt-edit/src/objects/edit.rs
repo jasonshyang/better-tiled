@@ -660,7 +660,7 @@ mod tests {
         use bt_utils::rng::Rng;
 
         use crate::axis::Axis;
-        use crate::objects::{align, convert, order, transform};
+        use crate::objects::{align, convert, order, resize, transform};
         use crate::testutil::random_object;
 
         let fuzz = Fuzz::from_env(0x0ED1_7ED5, 150);
@@ -695,7 +695,7 @@ mod tests {
                 let layer = LayerId([1, 3][rng.below(2).unwrap() as usize]);
                 let delta = DVec2::new(rng.next_f64() * 40.0 - 20.0, rng.next_f64() * 40.0 - 20.0);
                 let before = map.clone();
-                let result = match rng.below(13).unwrap() {
+                let result = match rng.below(14).unwrap() {
                     0 => duplicate_objects(&mut map, &some, delta, rng.below(2) == Some(0)),
                     1 => remove_objects(&mut map, &some),
                     2 => move_objects_to_layer(&mut map, &some, layer),
@@ -720,6 +720,14 @@ mod tests {
                     9 => order::move_objects_up(&mut map, &some),
                     10 => convert::rect_to_polygon(&mut map, &some),
                     11 => align::distribute_objects(&mut map, &some, Axis::Horizontal),
+                    12 => {
+                        let handle = resize::ResizeHandle::ALL[rng.below(8).unwrap() as usize];
+                        let mut drag = resize::Resize::handle_to(handle, delta * 4.0);
+                        if rng.below(2) == Some(0) {
+                            drag = drag.keeping_proportions();
+                        }
+                        resize::resize_objects(&mut map, &some, drag)
+                    }
                     _ => move_objects(&mut map, &some, delta),
                 };
                 let context = format!("case {case} ({}), step {step}", fuzz.reproduce());

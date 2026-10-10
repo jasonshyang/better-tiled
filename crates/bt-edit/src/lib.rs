@@ -77,10 +77,13 @@ pub use objects::order::{
     move_objects_down, move_objects_down_in, move_objects_up, move_objects_up_in, raise_objects,
     raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, render_order,
 };
+pub use objects::resize::{
+    Resize, ResizeHandle, resize_objects, resize_objects_in, resize_quad, resize_quad_in,
+};
 pub use objects::snap::{SnapMode, move_anchor, move_anchor_in, snap, snap_delta};
 pub use objects::space::ObjectSpace;
 pub use objects::transform::{
-    Pivot, flip_objects, flip_objects_in, flip_origin, flip_origin_in, rotate_objects,
+    Pivot, drag_angle, flip_objects, flip_objects_in, flip_origin, flip_origin_in, rotate_objects,
     rotate_objects_in,
 };
 pub use region::{SelectionMode, TileRegion};

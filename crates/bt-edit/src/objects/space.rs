@@ -7,8 +7,8 @@
 //! what the renderer draws.
 
 use bt_core::{
-    Alignment, Cell, GridOrientation, Map, MapGeometry, MapObject, ObjectTemplate, Orientation,
-    Outline, TileId, Tileset, TilesetGrid, TilesetRef, object_marker, object_outline,
+    Alignment, Cell, GridOrientation, Map, MapGeometry, MapObject, ObjectFrame, ObjectTemplate,
+    Orientation, Outline, TileId, Tileset, TilesetGrid, TilesetRef, object_marker, object_outline,
     object_pixel_outline, tile_object_box,
 };
 use bt_utils::DRect;
@@ -103,6 +103,11 @@ impl<'a> ObjectSpace<'a> {
         let fallback = Tileset::default();
         self.geometry
             .object_alignment(Some(self.tileset_of(cell).unwrap_or(&fallback)))
+    }
+
+    /// Where `object`'s own coordinates are drawn in this space.
+    pub(crate) fn frame_of(&self, object: &MapObject) -> ObjectFrame {
+        ObjectFrame::of(&self.geometry, object)
     }
 
     /// The outline of `object` as drawn, in screen space; rectangles, ellipses and capsules

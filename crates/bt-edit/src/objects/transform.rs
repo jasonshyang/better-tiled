@@ -2,10 +2,12 @@
 //! `flipInPixelCoordinates` (`reference/tiled/src/libtiled/mapobject.cpp`, with
 //! `alignmentOffset` and `flipAlignment` from `libtiled/tiled.cpp`), `FlipMapObjects`
 //! (`tiled/flipmapobjects.cpp`), `MapDocument::flipSelectedObjects` and
-//! `rotateSelectedObjects` (`tiled/mapdocument.cpp`), and the rotate handle of
+//! `rotateSelectedObjects` (`tiled/mapdocument.cpp`), and the rotate handles of
 //! `ObjectSelectionTool::updateRotatingItems` (`tiled/objectselectiontool.cpp`).
 
-use bt_core::{Alignment, Map, MapObject, ObjectId, ObjectLayer, ObjectOverrides, Shape, rotated};
+use bt_core::{
+    Alignment, Map, MapGeometry, MapObject, ObjectId, ObjectLayer, ObjectOverrides, Shape, rotated,
+};
 use glam::DVec2;
 
 use crate::axis::Axis;
@@ -235,6 +237,34 @@ fn turned(space: &ObjectSpace, object: &MapObject, degrees: f64, pivot: Pivot) -
         turned.overrides |= ObjectOverrides::ROTATION;
     }
     turned
+}
+
+/// The steps a rotate handle snaps to, in degrees (Tiled's 15°).
+const ROTATION_SNAP: f64 = 15.0;
+
+/// How far a drag of a rotate handle turns objects around `centre`: the angle from the direction
+/// of where the drag started (`from`) to the direction of where it is now (`to`), seen from the
+/// centre on screen, clockwise in degrees from -180 to 180, all three points pixel space
+/// (Tiled's `updateRotatingItems`). With `snap` the angle is rounded to whole steps of 15°
+/// (Tiled's Ctrl). The objects then turn by it with [`rotate_objects`] around
+/// [`Pivot::Point`] of the centre.
+pub fn drag_angle(
+    geometry: &MapGeometry,
+    centre: DVec2,
+    from: DVec2,
+    to: DVec2,
+    snap: bool,
+) -> f64 {
+    let centre = geometry.pixel_to_screen(centre);
+    let start = centre - geometry.pixel_to_screen(from);
+    let now = centre - geometry.pixel_to_screen(to);
+    let turn = (now.y.atan2(now.x) - start.y.atan2(start.x)).to_degrees();
+    let degrees = (turn + 180.0).rem_euclid(360.0) - 180.0;
+    if snap {
+        ((degrees + ROTATION_SNAP / 2.0) / ROTATION_SNAP).floor() * ROTATION_SNAP
+    } else {
+        degrees
+    }
 }
 
 /// A rotation brought within [0, 360) (Tiled's `normalizeRotation`).
@@ -633,6 +663,63 @@ mod tests {
             geometry.pixel_to_screen(turned.pos) - geometry.pixel_to_screen(pivot),
             rotated(arm, 90.0),
         );
+        assert_eq!(turned.rotation, 90.0);
+    }
+
+    #[test]
+    fn rotate_handles_turn_by_the_angle_dragged_around_the_centre() {
+        let map = space_map(Orientation::Orthogonal, Alignment::Unspecified);
+        let geometry = map.geometry();
+        let centre = v(100.0, 100.0);
+        let angle = |from, to, snap| drag_angle(&geometry, centre, from, to, snap);
+        // From the right of the centre to below it is a quarter turn clockwise on screen.
+        assert!((angle(v(110.0, 100.0), v(100.0, 110.0), false) - 90.0).abs() < 1e-9);
+        assert!((angle(v(110.0, 100.0), v(100.0, 90.0), false) + 90.0).abs() < 1e-9);
+        // Ctrl snaps to steps of 15°: 16.7° goes to 15°, 6.8° to nothing.
+        assert_eq!(angle(v(110.0, 100.0), v(110.0, 103.0), true), 15.0);
+        assert_eq!(angle(v(110.0, 100.0), v(110.0, 101.2), true), 0.0);
+        assert_eq!(angle(v(110.0, 100.0), v(105.0, 108.66), true), 60.0);
+        assert_eq!(angle(v(110.0, 100.0), v(110.0, 100.0), false), 0.0);
+        // On an isometric map the angle is the one the screen shows: from the centre's right
+        // corner of a cell to its bottom corner is a quarter turn of the diamond's diagonals.
+        let iso = space_map(Orientation::Isometric, Alignment::Unspecified);
+        let geometry = iso.geometry();
+        let centre = v(32.0, 32.0);
+        let screen = geometry.pixel_to_screen(centre);
+        let right = geometry.screen_to_pixel(screen + v(20.0, 0.0));
+        let below = geometry.screen_to_pixel(screen + v(0.0, 20.0));
+        assert!((drag_angle(&geometry, centre, right, below, false) - 90.0).abs() < 1e-9);
+        // The objects then turn around the centre by it.
+        let mut map = space_map(Orientation::Orthogonal, Alignment::Unspecified);
+        map.layers.push(bt_core::Layer::new(
+            bt_core::LayerId(1),
+            "things",
+            bt_core::LayerKind::Object(ObjectLayer {
+                objects: Arc::new(vec![MapObject {
+                    id: ObjectId(1),
+                    ..rect_object(110.0, 100.0, 4.0, 4.0)
+                }]),
+                ..ObjectLayer::default()
+            }),
+        ));
+        map.next_layer_id = 2;
+        map.next_object_id = 2;
+        let degrees = drag_angle(
+            &map.geometry(),
+            v(100.0, 100.0),
+            v(110.0, 100.0),
+            v(100.0, 112.0),
+            true,
+        );
+        rotate_objects(
+            &mut map,
+            &[ObjectId(1)],
+            degrees,
+            Pivot::Point(v(100.0, 100.0)),
+        )
+        .unwrap();
+        let turned = find_object(&map, ObjectId(1)).unwrap().object;
+        assert_near(turned.pos, v(100.0, 110.0));
         assert_eq!(turned.rotation, 90.0);
     }
 
