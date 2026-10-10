@@ -135,7 +135,7 @@ impl Tool for RectSelect {
         }
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self, _out: &mut Vec<Intent>) {
         self.drag = None;
     }
 }

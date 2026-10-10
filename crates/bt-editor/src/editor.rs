@@ -184,6 +184,10 @@ impl Editor {
             Intent::ShapeFill { doc, region } => self.shape_fill(doc, &region),
             Intent::PickFromMap { doc, at } => self.pick_from_map(doc, at),
             Intent::Capture { doc, rect, cut } => self.capture(doc, rect, cut),
+            Intent::SetFillShape(shape) => {
+                self.tools.fill_shape = shape;
+                Vec::new()
+            }
             Intent::SetSelectionMode(mode) => {
                 self.tools.selection_mode = mode;
                 Vec::new()

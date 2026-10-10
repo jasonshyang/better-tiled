@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use bt_core::{Cell, LayerId, PlacedCell};
-use bt_edit::{SelectionMode, TileRegion};
+use bt_edit::{FillShape, SelectionMode, TileRegion};
 use bt_utils::IRect;
 use glam::IVec2;
 
@@ -115,6 +115,8 @@ pub enum Intent {
         /// Erase them too (Shift at release).
         cut: bool,
     },
+    /// What Shape Fill paints (the toolbar's).
+    SetFillShape(FillShape),
     /// The selection tools' default mode (the toolbar's).
     SetSelectionMode(SelectionMode),
     /// Show or hide a layer.

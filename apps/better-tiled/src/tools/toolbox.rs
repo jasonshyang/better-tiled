@@ -1,8 +1,12 @@
 //! One instance of each tool, kept across documents; the current one is the editor's choice.
 
-use bt_editor::{DocumentId, ToolKind};
+use bt_editor::{DocumentId, Intent, ToolKind};
 
+use super::brush::BrushTool;
+use super::eraser::Eraser;
+use super::fills::{BucketFill, ShapeFill};
 use super::magic_wand::LikeTiles;
+use super::picker::Picker;
 use super::rect_select::RectSelect;
 use super::tool::Tool;
 
@@ -25,6 +29,11 @@ impl Default for ToolBox {
     fn default() -> ToolBox {
         ToolBox {
             tools: vec![
+                Box::new(BrushTool::default()),
+                Box::new(Eraser::default()),
+                Box::new(BucketFill::default()),
+                Box::new(ShapeFill::default()),
+                Box::new(Picker::default()),
                 Box::new(RectSelect::default()),
                 Box::new(LikeTiles::magic_wand()),
                 Box::new(LikeTiles::same_tile()),
@@ -41,13 +50,14 @@ impl ToolBox {
         &mut self,
         kind: ToolKind,
         doc: DocumentId,
+        out: &mut Vec<Intent>,
     ) -> Option<&mut (dyn Tool + 'static)> {
         let now = Active { kind, doc };
         if self.active != Some(now) {
             if let Some(previous) = self.active
                 && let Some(tool) = self.tools.iter_mut().find(|t| t.kind() == previous.kind)
             {
-                tool.reset();
+                tool.reset(out);
             }
             self.active = Some(now);
         }

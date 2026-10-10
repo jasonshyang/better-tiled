@@ -3,7 +3,7 @@
 //! cannot be used are the menu's.
 
 use bt_editor::{
-    ActionId, Editor, Enabled, Intent, SelectionMode, ToolFamily, ToolKind, tool_action,
+    ActionId, Editor, Enabled, FillShape, Intent, SelectionMode, ToolFamily, ToolKind, tool_action,
 };
 
 /// The tools, in the order the toolbar shows them.
@@ -30,6 +30,11 @@ const OBJECT_TOOLS: [ToolKind; 9] = [
     ToolKind::InsertText,
 ];
 
+const SHAPES: [(FillShape, &str); 2] = [
+    (FillShape::Rectangle, "Rectangle"),
+    (FillShape::Ellipse, "Ellipse"),
+];
+
 const MODES: [(SelectionMode, &str); 4] = [
     (SelectionMode::Replace, "Replace"),
     (SelectionMode::Add, "Add"),
@@ -49,6 +54,31 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
         };
         for &tool in tools.iter().chain([&ToolKind::OffsetLayers]) {
             tool_button(ui, editor, tool, current == tool, out);
+        }
+        if current == ToolKind::ShapeFill {
+            ui.separator();
+            let shape = editor.tools().fill_shape();
+            for (option, label) in SHAPES {
+                if ui.selectable_label(shape == option, label).clicked() {
+                    out.push(Intent::SetFillShape(option));
+                }
+            }
+        }
+        if matches!(current, ToolKind::Brush | ToolKind::Eraser) {
+            ui.separator();
+            if current == ToolKind::Brush {
+                let random = editor.checked(ActionId::RandomMode).unwrap_or(false);
+                if ui.selectable_label(random, "Random").clicked() {
+                    out.push(Intent::Run(ActionId::RandomMode));
+                }
+            }
+            ui.label(format!("Size {}", editor.tools().brush_size()));
+            if ui.small_button("−").clicked() {
+                out.push(Intent::Run(ActionId::BrushSizeDown));
+            }
+            if ui.small_button("+").clicked() {
+                out.push(Intent::Run(ActionId::BrushSizeUp));
+            }
         }
         if matches!(
             current,

@@ -340,6 +340,55 @@ fn preferences_change_settings_and_keys_and_are_saved() {
 }
 
 #[test]
+fn the_picker_brush_and_eraser_paint_on_the_map() {
+    let scratch = Scratch::new("window-paint").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let cell_at = |window: &TestWindow, at: IVec2| {
+        let doc = window.editor().current().unwrap();
+        window.editor().map_of(doc).unwrap().layers[0]
+            .as_tile_layer()
+            .unwrap()
+            .cell(at)
+    };
+    // A tile found nowhere on the row the stroke paints.
+    let row: Vec<_> = (10..=14)
+        .map(|x| cell_at(&window, IVec2::new(x, 10)))
+        .collect();
+    let source = (0..40)
+        .flat_map(|y| (0..40).map(move |x| IVec2::new(x, y)))
+        .find(|at| !row.contains(&cell_at(&window, *at)))
+        .expect("the desert has more than one kind of tile");
+    let picked = cell_at(&window, source);
+    window.press(egui::Modifiers::NONE, egui::Key::I);
+    window.click_cell(source, egui::PointerButton::Primary, egui::Modifiers::NONE);
+    assert_eq!(window.editor().tools().tool(), bt_editor::ToolKind::Brush);
+    window.drag_cells(
+        IVec2::new(10, 10),
+        IVec2::new(14, 10),
+        egui::Modifiers::NONE,
+    );
+    for x in 10..=14 {
+        assert_eq!(cell_at(&window, IVec2::new(x, 10)), picked, "{x}");
+    }
+    window.press(command(), egui::Key::Z);
+    assert_ne!(
+        cell_at(&window, IVec2::new(12, 10)),
+        picked,
+        "the stroke is one step"
+    );
+
+    window.press(egui::Modifiers::NONE, egui::Key::E);
+    window.drag_cells(IVec2::new(3, 3), IVec2::new(5, 3), egui::Modifiers::NONE);
+    for x in 3..=5 {
+        assert!(cell_at(&window, IVec2::new(x, 3)).is_empty());
+    }
+}
+
+#[test]
 fn closing_with_unsaved_work_asks_first() {
     let scratch = Scratch::new("window-close-unsaved").unwrap();
     let Some(path) = desert(&scratch) else {

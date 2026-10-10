@@ -74,6 +74,7 @@ pub(crate) trait Tool {
     /// What the status bar says it does, with the meaning of the modifiers held.
     fn hint(&self, cx: &ToolContext<'_>) -> String;
 
-    /// Drops whatever it was in the middle of (another tool or document became current).
-    fn reset(&mut self);
+    /// Stops whatever it was in the middle of (another tool or document became current); a
+    /// stroke under way is finished through `out`.
+    fn reset(&mut self, out: &mut Vec<Intent>);
 }

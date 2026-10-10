@@ -437,8 +437,14 @@ impl App {
             .resizable(true)
             .default_size(300.0)
             .show(ui, |ui| {
-                self.tiles_panel
-                    .show(ui, &self.editor, doc, &mut self.tile_images, &self.images);
+                self.tiles_panel.show(
+                    ui,
+                    &self.editor,
+                    doc,
+                    &mut self.tile_images,
+                    &self.images,
+                    &mut self.intents,
+                );
             });
     }
 

@@ -195,7 +195,7 @@ impl Tool for LikeTiles {
         )
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self, _out: &mut Vec<Intent>) {
         self.press = None;
         self.preview = None;
         self.at = None;

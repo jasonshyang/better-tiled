@@ -201,7 +201,7 @@ impl Canvas {
         let gestures = ui.input(|input| self.gestures.read(input, &read));
         self.tool_overlay = Overlay::default();
         self.hint = None;
-        let Some(tool) = tools.activate(frame.editor.tools().tool(), frame.doc) else {
+        let Some(tool) = tools.activate(frame.editor.tools().tool(), frame.doc, out) else {
             return;
         };
         let mut cx = ToolContext {
