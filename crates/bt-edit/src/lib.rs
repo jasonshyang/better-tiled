@@ -42,7 +42,7 @@ pub use clip::{
 };
 pub use error::EditError;
 pub use ids::{IdRemap, NewIds};
-pub use lattice::{FlipDirection, RotateDirection};
+pub use lattice::RotateDirection;
 pub use layer_ops::{
     LayerLocation, LayerType, LayerViaSource, can_merge_down, children, duplicate_layers,
     group_layers, layer_order, layer_via_copy, layer_via_cut, locate, lower_layers,

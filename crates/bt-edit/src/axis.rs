@@ -1,5 +1,6 @@
-//! The two directions of a map (Tiled's `FlipDirection`, `reference/tiled/src/libtiled/tiled.h`,
-//! and the axis objects are spaced along).
+//! The two directions of a map: the way a flip mirrors (Tiled's `FlipDirection`,
+//! `reference/tiled/src/libtiled/tiled.h`), for objects, brushes, clips and carried tiles alike,
+//! and the way objects are spaced out.
 
 use glam::DVec2;
 

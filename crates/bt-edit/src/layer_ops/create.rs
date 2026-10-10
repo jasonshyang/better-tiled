@@ -9,6 +9,7 @@ use std::sync::Arc;
 use bt_core::{ImageLayer, Layer, LayerId, LayerKind, Map, ObjectLayer};
 
 use super::tree::{LayerLocation, check_layers, holds_or_is, in_layer_order, insert_layer, locate};
+use crate::duplicate_name::name_of_duplicate;
 use crate::error::EditError;
 use crate::ids::{IdRemap, take_layer_id, take_object_id};
 use crate::report::LayersReport;
@@ -106,34 +107,6 @@ pub(crate) fn numbered_name(map: &Map, base: &str, counted: impl Fn(&Layer) -> b
             return name;
         }
     }
-}
-
-/// Tiled's name for a duplicate: "Copy" added, or a number after an earlier "Copy" ("Walls
-/// Copy" → "Walls Copy 2" → "Walls Copy 3"). An empty name stays empty.
-pub(crate) fn name_of_duplicate(name: &str) -> String {
-    if name.is_empty() {
-        return String::new();
-    }
-    // Tiled's pattern is `(.*)\s*Copy\s*(\d+)?$`: the last "Copy", then only spaces and digits.
-    if let Some(at) = name.rfind("Copy") {
-        let before = name.get(..at).unwrap_or_default();
-        let after = name.get(at + "Copy".len()..).unwrap_or_default();
-        let digits = after.trim_start();
-        if digits.chars().all(|c| c.is_ascii_digit()) {
-            // A number too large for Tiled's `toInt` reads as 0, as there.
-            let number = if digits.is_empty() {
-                2
-            } else {
-                digits.parse::<i32>().unwrap_or(0).saturating_add(1)
-            };
-            let base = before.trim();
-            if base.is_empty() {
-                return format!("Copy {number}");
-            }
-            return format!("{base} Copy {number}");
-        }
-    }
-    format!("{name} Copy")
 }
 
 /// A layer copied by [`duplicate_layers`], before it is put in the tree.

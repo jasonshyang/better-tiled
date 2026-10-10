@@ -18,9 +18,10 @@ pub(crate) fn take_layer_id(map: &mut Map) -> Result<LayerId, EditError> {
 
 /// Takes the map's next object id.
 pub(crate) fn take_object_id(map: &mut Map) -> Result<ObjectId, EditError> {
-    let id = map.next_object_id.max(1);
-    map.next_object_id = id.checked_add(1).ok_or(EditError::OutOfIds)?;
-    Ok(ObjectId(id))
+    let mut ids = NewIds::from_map(map);
+    let id = ids.take()?;
+    ids.store_in(map);
+    Ok(id)
 }
 
 /// The ids copies of objects were given. A reference from one copy to an object that was copied

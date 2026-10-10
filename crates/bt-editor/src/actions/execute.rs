@@ -2,7 +2,7 @@
 //! the window. Nothing here opens a dialog or touches a file.
 
 use bt_core::{Map, MapGeometry};
-use bt_edit::{Brush, FlipDirection, LayerType, RotateDirection};
+use bt_edit::{Brush, Axis, LayerType, RotateDirection};
 
 use super::enabled::Enabled;
 use super::table::{ActionId, ActionKind};
@@ -166,9 +166,9 @@ impl Editor {
             ActionId::Delete => on_document(self, Editor::delete_tiles),
             ActionId::FlipHorizontal | ActionId::FlipVertical => {
                 let direction = if id == ActionId::FlipHorizontal {
-                    FlipDirection::Horizontal
+                    Axis::Horizontal
                 } else {
-                    FlipDirection::Vertical
+                    Axis::Vertical
                 };
                 self.transform_brush(|brush, geometry| brush.flipped(direction, geometry));
                 Vec::new()

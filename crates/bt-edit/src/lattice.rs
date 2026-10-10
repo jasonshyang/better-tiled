@@ -10,16 +10,9 @@
 
 use bt_core::{Flip, Hex, HexParams, MapGeometry, Orientation, StaggerAxis, StaggerIndex};
 use bt_utils::IRect;
-use glam::IVec2;
 
-/// Which way a mirror goes, on screen.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum FlipDirection {
-    /// Left and right swap.
-    Horizontal,
-    /// Top and bottom swap.
-    Vertical,
-}
+use crate::axis::Axis;
+use glam::IVec2;
 
 /// Which way a turn goes, on screen: a quarter turn, or a sixth on hexagonal maps.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -34,7 +27,7 @@ pub enum RotateDirection {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Motion {
     /// A mirror on screen.
-    Mirror(FlipDirection),
+    Mirror(Axis),
     /// A turn on screen.
     Turn(RotateDirection),
 }
@@ -157,8 +150,8 @@ impl Lattice {
         }
         let p = self.point(cell);
         let moved = match motion {
-            Motion::Mirror(FlipDirection::Horizontal) => IVec2::new(-p.x, p.y),
-            Motion::Mirror(FlipDirection::Vertical) => IVec2::new(p.x, -p.y),
+            Motion::Mirror(Axis::Horizontal) => IVec2::new(-p.x, p.y),
+            Motion::Mirror(Axis::Vertical) => IVec2::new(p.x, -p.y),
             Motion::Turn(RotateDirection::Clockwise) => IVec2::new(-p.y, p.x),
             Motion::Turn(RotateDirection::CounterClockwise) => IVec2::new(p.y, -p.x),
         };
@@ -169,14 +162,12 @@ impl Lattice {
     pub(crate) fn moved_flip(self, flip: Flip, motion: Motion) -> Flip {
         let hexagonal = matches!(self, Lattice::Hexagonal(_));
         match motion {
-            Motion::Mirror(FlipDirection::Horizontal) if hexagonal => {
-                flip.flipped_hex_horizontally()
-            }
-            Motion::Mirror(FlipDirection::Vertical) if hexagonal => flip.flipped_hex_vertically(),
+            Motion::Mirror(Axis::Horizontal) if hexagonal => flip.flipped_hex_horizontally(),
+            Motion::Mirror(Axis::Vertical) if hexagonal => flip.flipped_hex_vertically(),
             Motion::Turn(RotateDirection::Clockwise) if hexagonal => flip.rotated_hex_cw(),
             Motion::Turn(RotateDirection::CounterClockwise) if hexagonal => flip.rotated_hex_ccw(),
-            Motion::Mirror(FlipDirection::Horizontal) => flip.flipped_horizontally(),
-            Motion::Mirror(FlipDirection::Vertical) => flip.flipped_vertically(),
+            Motion::Mirror(Axis::Horizontal) => flip.flipped_horizontally(),
+            Motion::Mirror(Axis::Vertical) => flip.flipped_vertically(),
             Motion::Turn(RotateDirection::Clockwise) => flip.rotated_cw(),
             Motion::Turn(RotateDirection::CounterClockwise) => flip.rotated_ccw(),
         }
@@ -244,12 +235,12 @@ mod tests {
                 assert_eq!(lattice.cell(lattice.point(cell)), cell, "{geometry:?}");
                 for (motion, back) in [
                     (
-                        Motion::Mirror(FlipDirection::Horizontal),
-                        Motion::Mirror(FlipDirection::Horizontal),
+                        Motion::Mirror(Axis::Horizontal),
+                        Motion::Mirror(Axis::Horizontal),
                     ),
                     (
-                        Motion::Mirror(FlipDirection::Vertical),
-                        Motion::Mirror(FlipDirection::Vertical),
+                        Motion::Mirror(Axis::Vertical),
+                        Motion::Mirror(Axis::Vertical),
                     ),
                     (
                         Motion::Turn(RotateDirection::Clockwise),
@@ -284,8 +275,8 @@ mod tests {
             for cell in cells() {
                 let before = screen(&geometry, cell) - screen(&geometry, base);
                 for (direction, expected) in [
-                    (FlipDirection::Horizontal, DVec2::new(-before.x, before.y)),
-                    (FlipDirection::Vertical, DVec2::new(before.x, -before.y)),
+                    (Axis::Horizontal, DVec2::new(-before.x, before.y)),
+                    (Axis::Vertical, DVec2::new(before.x, -before.y)),
                 ] {
                     let motion = Motion::Mirror(direction);
                     let after = screen(&geometry, lattice.moved(cell, motion))

@@ -187,8 +187,9 @@ mod tests {
     use glam::UVec2;
 
     use super::*;
+    use crate::axis::Axis;
     use crate::clip::{find_target_layers, paste};
-    use crate::lattice::{FlipDirection, RotateDirection};
+    use crate::lattice::RotateDirection;
     use crate::testutil::{assert_valid, atlas, clip_grid, every_grid, map_grid, trimmed};
 
     fn square() -> MapGeometry {
@@ -401,8 +402,8 @@ mod tests {
                 let brush = Brush::capture(&map, &[LayerId(1)], rect).unwrap();
                 // Mirrored and turned brushes keep their shapes too.
                 let brush = match rng.below(5).unwrap() {
-                    0 => brush.flipped(FlipDirection::Horizontal, geometry),
-                    1 => brush.flipped(FlipDirection::Vertical, geometry),
+                    0 => brush.flipped(Axis::Horizontal, geometry),
+                    1 => brush.flipped(Axis::Vertical, geometry),
                     2 => brush.rotated(RotateDirection::Clockwise, geometry),
                     3 => brush.rotated(RotateDirection::CounterClockwise, geometry),
                     _ => brush,

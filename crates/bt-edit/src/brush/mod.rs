@@ -17,9 +17,10 @@ use bt_utils::IRect;
 use bt_utils::rng::RandomPicker;
 use glam::IVec2;
 
+use crate::axis::Axis;
 use crate::clip::{ClipLayer, ClipTilesets, TileClip, copy};
 use crate::error::EditError;
-use crate::lattice::{FlipDirection, Lattice, RotateDirection};
+use crate::lattice::{Lattice, RotateDirection};
 use crate::region::TileRegion;
 
 /// How a brush paints.
@@ -216,7 +217,7 @@ impl Brush {
 
     /// The brush with every variation mirrored on screen (Tiled's X and Y), each tile with it;
     /// see [`TileClip::flipped`].
-    pub fn flipped(&self, direction: FlipDirection, geometry: &MapGeometry) -> Brush {
+    pub fn flipped(&self, direction: Axis, geometry: &MapGeometry) -> Brush {
         self.with_clips(|clip| clip.flipped(direction, geometry))
     }
 
@@ -440,7 +441,7 @@ mod tests {
             IRect::from_min_size(IVec2::ZERO, IVec2::new(2, 1)),
         )
         .unwrap()
-        .flipped(FlipDirection::Horizontal, &map.geometry())
+        .flipped(Axis::Horizontal, &map.geometry())
         .rotated(RotateDirection::Clockwise, &map.geometry());
         brush
             .add_variation(wide.variations()[0].clip.clone(), 1.0)
@@ -507,7 +508,7 @@ mod tests {
                 }
                 let context = format!("case {case} ({}) on {geometry:?}", fuzz.reproduce());
                 assert_eq!(turned, brush, "{context}");
-                for direction in [FlipDirection::Horizontal, FlipDirection::Vertical] {
+                for direction in [Axis::Horizontal, Axis::Vertical] {
                     let mirrored = brush
                         .flipped(direction, &geometry)
                         .flipped(direction, &geometry);
@@ -585,7 +586,7 @@ mod tests {
                             brush = brush.rotated(RotateDirection::Clockwise, &geometry);
                         }
                         if rng.below(2) == Some(0) {
-                            brush = brush.flipped(FlipDirection::Vertical, &geometry);
+                            brush = brush.flipped(Axis::Vertical, &geometry);
                         }
                         if rng.below(3) == Some(0) {
                             brush = brush.with_mode(BrushMode::Random).with_size(2);

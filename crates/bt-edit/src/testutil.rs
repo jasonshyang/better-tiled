@@ -176,8 +176,6 @@ pub(crate) fn group(name: &str, layers: Vec<bt_core::Layer>) -> bt_core::Layer {
     bt_core::Layer::new(bt_core::LayerId(0), name, bt_core::LayerKind::Group(layers))
 }
 
-/// A rectangle object at `(x, y)` of `w × h` pixels; the map builder gives its id.
-
 /// A rectangle object at (`x`, `y`) of `w` × `h` pixels, with id 0 for a map builder to number.
 pub(crate) fn rect_object(x: f64, y: f64, w: f64, h: f64) -> bt_core::MapObject {
     bt_core::MapObject {

@@ -17,7 +17,8 @@ use bt_core::{Cell, Color, MapGeometry, PlacedCell, TileLayer, TilesetRef};
 use bt_utils::IRect;
 use glam::{IVec2, UVec2};
 
-use crate::lattice::{FlipDirection, Lattice, Motion, RotateDirection};
+use crate::axis::Axis;
+use crate::lattice::{Lattice, Motion, RotateDirection};
 use crate::region::TileRegion;
 
 /// Tiles set aside: one or more named layers of one size, bottom to top, and the tilesets
@@ -136,7 +137,7 @@ impl TileClip {
 
     /// The clip mirrored on screen, each tile mirrored with it (Tiled's X and Y stamp actions).
     /// It keeps its origin; see [`TileClip::rotated`] for how it fits there.
-    pub fn flipped(&self, direction: FlipDirection, geometry: &MapGeometry) -> TileClip {
+    pub fn flipped(&self, direction: Axis, geometry: &MapGeometry) -> TileClip {
         self.moved(Motion::Mirror(direction), geometry)
     }
 
@@ -290,9 +291,9 @@ mod tests {
         assert_eq!(grid(&right), trimmed("3hd 1hd\n. 2hd\n4d ."));
         let left = clip.rotated(RotateDirection::CounterClockwise, &square());
         assert_eq!(grid(&left), trimmed(". 4hvd\n2vd .\n1vd 3vd"));
-        let mirrored = clip.flipped(FlipDirection::Horizontal, &square());
+        let mirrored = clip.flipped(Axis::Horizontal, &square());
         assert_eq!(grid(&mirrored), trimmed(". 2h 1h\n4hv . 3h"));
-        let upside_down = clip.flipped(FlipDirection::Vertical, &square());
+        let upside_down = clip.flipped(Axis::Vertical, &square());
         assert_eq!(grid(&upside_down), trimmed("3v . 4\n1v 2v ."));
     }
 
@@ -300,7 +301,7 @@ mod tests {
     fn an_isometric_mirror_swaps_the_axes() {
         let iso = MapGeometry::new(Orientation::Isometric, IVec2::new(32, 16), IVec2::ONE);
         let clip = clip_of("1 2 3", IVec2::ZERO);
-        let mirrored = clip.flipped(FlipDirection::Horizontal, &iso);
+        let mirrored = clip.flipped(Axis::Horizontal, &iso);
         assert_eq!(mirrored.size, IVec2::new(1, 3));
         assert_eq!(grid(&mirrored), trimmed("1h\n2h\n3h"));
     }
@@ -312,7 +313,7 @@ mod tests {
             ..MapGeometry::new(Orientation::Hexagonal, IVec2::splat(32), IVec2::ONE)
         };
         let clip = clip_of("1d", IVec2::ZERO);
-        let mirrored = clip.flipped(FlipDirection::Horizontal, &hex);
+        let mirrored = clip.flipped(Axis::Horizontal, &hex);
         let cell = mirrored.layers[0].cells.cell(IVec2::ZERO);
         assert_eq!(cell.flip(), Flip::D.flipped_hex_horizontally());
         let turned = clip.rotated(RotateDirection::Clockwise, &hex);
@@ -418,7 +419,7 @@ mod tests {
                     }
                     assert_eq!(turned, clip, "{direction:?}, {}", context());
                 }
-                for direction in [FlipDirection::Horizontal, FlipDirection::Vertical] {
+                for direction in [Axis::Horizontal, Axis::Vertical] {
                     let mirrored = clip
                         .flipped(direction, &geometry)
                         .flipped(direction, &geometry);
