@@ -145,3 +145,113 @@ fn a_tileset_file_opens_in_its_own_tab_and_saves_there() {
     apply(&mut editor, Intent::Open(path));
     assert_eq!(editor.documents().in_order().count(), tabs);
 }
+
+#[test]
+fn collision_shapes_are_edited_with_the_object_tools_and_commands() {
+    use bt_core::{MapObject, ObjectId};
+    use bt_editor::{ObjectStroke, ObjectStrokeKind, SnapToggle};
+    use glam::DVec2;
+
+    let atlas = Atlas::builder().build_embedded().unwrap();
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::new(2, 2))
+        .tileset(atlas.tileset)
+        .tile_layer("ground", "1 1\n1 1")
+        .build()
+        .unwrap();
+    let mut editor = Editor::new();
+    let doc = editor.open_new_map(map);
+    editor.apply(Intent::EditTileset {
+        doc,
+        slot: TilesetSlot::new(0).unwrap(),
+    });
+    editor.apply(Intent::SelectTilesetTiles {
+        doc,
+        tiles: vec![TileId(3)],
+        current: Some(TileId(3)),
+    });
+    editor.apply(Intent::SetTilesetMode {
+        doc,
+        mode: TilesetMode::Collision,
+    });
+    let shapes = |editor: &Editor| -> Vec<(u32, DVec2)> {
+        editor
+            .edited_tileset(doc)
+            .unwrap()
+            .tile(TileId(3))
+            .and_then(|data| data.collision.as_ref())
+            .map(|group| {
+                group
+                    .layer
+                    .objects
+                    .iter()
+                    .map(|o| (o.id.0, o.pos))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let selected = |editor: &Editor| editor.document(doc).unwrap().selection().objects.clone();
+
+    // A shape inserted goes into the tile, with the tile's first id, and is selected.
+    editor.apply(Intent::InsertObject {
+        doc,
+        object: Box::new(MapObject {
+            pos: DVec2::new(2.0, 2.0),
+            size: DVec2::new(8.0, 8.0),
+            ..MapObject::default()
+        }),
+    });
+    assert_eq!(shapes(&editor), [(1, DVec2::new(2.0, 2.0))]);
+    assert_eq!(selected(&editor), [ObjectId(1)]);
+    assert_eq!(
+        editor.objects_at(doc, DVec2::new(5.0, 5.0), 1.0),
+        [ObjectId(1)]
+    );
+    assert!(
+        editor.map_of(doc).unwrap().layers.len() == 1,
+        "the map gained no layer"
+    );
+
+    // A drag moves it as one step.
+    for step in [
+        ObjectStroke::Begin {
+            doc,
+            kind: ObjectStrokeKind::Move,
+        },
+        ObjectStroke::Move {
+            delta: DVec2::new(4.0, 0.0),
+            snap: SnapToggle::Keep,
+        },
+        ObjectStroke::End,
+    ] {
+        editor.apply(Intent::ObjectStroke(step));
+    }
+    assert_eq!(shapes(&editor), [(1, DVec2::new(6.0, 2.0))]);
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(shapes(&editor), [(1, DVec2::new(2.0, 2.0))]);
+
+    // Copy and Paste in Place make a second shape; Select All and Delete leave the tile
+    // without a collision group, as Tiled does.
+    editor.apply(Intent::Run(ActionId::Copy));
+    editor.apply(Intent::Run(ActionId::PasteInPlace));
+    assert_eq!(
+        shapes(&editor),
+        [(1, DVec2::new(2.0, 2.0)), (2, DVec2::new(2.0, 2.0))]
+    );
+    editor.apply(Intent::Run(ActionId::SelectAll));
+    assert_eq!(selected(&editor), [ObjectId(1), ObjectId(2)]);
+    editor.apply(Intent::Run(ActionId::Delete));
+    assert!(
+        editor
+            .edited_tileset(doc)
+            .unwrap()
+            .tile(TileId(3))
+            .is_none(),
+        "no shapes, no group, no data"
+    );
+    editor.apply(Intent::Run(ActionId::Undo));
+    assert_eq!(shapes(&editor).len(), 2);
+    assert_eq!(
+        editor.enabled(ActionId::MoveObjectsToLayer),
+        Enabled::Disabled(Some("Collision shapes stay with their tile".to_owned()))
+    );
+}

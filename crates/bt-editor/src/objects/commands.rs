@@ -1,16 +1,21 @@
 //! The object commands: selecting objects, inserting one, and the Objects menu with Delete,
-//! Cut, Copy and Paste on objects. Each change is one step; objects on locked layers are left
-//! where they are and the locks are named.
+//! Cut, Copy and Paste on objects, on a map's object layers or on a tile's collision shapes
+//! (`host`). Each change is one step; objects on locked layers are left where they are and the
+//! locks are named.
 
-use bt_core::{DrawOrder, LayerId, MapObject, ObjectId};
+use bt_core::{DrawOrder, LayerId, MapObject, ObjectId, ObjectLayer};
 use bt_edit::{
-    Axis, ObjectClip, Pivot, SelectionMode, add_object, copy_objects, cut_objects,
-    duplicate_objects, flip_objects, flip_origin, lower_objects, lower_objects_to_bottom,
-    move_objects_to_layer, paste_objects, paste_offset, raise_objects, raise_objects_to_top,
-    remove_objects, rotate_objects,
+    Axis, NewIds, ObjectClip, ObjectSpace, Pivot, SelectionMode, add_object, add_object_in,
+    copy_objects, copy_objects_in, cut_objects, cut_objects_in, duplicate_objects,
+    duplicate_objects_in, flip_objects, flip_objects_in, flip_origin, flip_origin_in,
+    lower_objects, lower_objects_in, lower_objects_to_bottom, lower_objects_to_bottom_in,
+    move_objects_to_layer, paste_objects, paste_objects_in, paste_offset, raise_objects,
+    raise_objects_in, raise_objects_to_top, raise_objects_to_top_in, remove_objects,
+    remove_objects_in, rotate_objects, rotate_objects_in,
 };
 use glam::DVec2;
 
+use super::host::{ObjectHost, change_tile_shapes};
 use super::snapping::SnapToggle;
 use super::stroke::unlocked_objects;
 use crate::document::DocumentId;
@@ -58,8 +63,20 @@ impl Editor {
         }
     }
 
-    /// Inserts an object into the current object layer as one step; it becomes the selection.
+    /// Inserts an object into the current object layer, or among the current tile's collision
+    /// shapes, as one step; it becomes the selection.
     pub(crate) fn insert_object(&mut self, doc: DocumentId, object: MapObject) -> Vec<Effect> {
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            let result = self.transact(doc, "Insert Object", |tx| {
+                let id = change_tile_shapes(tx, home, tile, |objects, _| {
+                    let mut ids = NewIds::after_highest(objects);
+                    add_object_in(objects, object, None, &mut ids)
+                })?;
+                tx.selection.objects = vec![id];
+                Ok::<_, EditError>(())
+            });
+            return result.err().map(warn).into_iter().collect();
+        }
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return Vec::new();
         };
@@ -93,25 +110,42 @@ impl Editor {
         result.err().map(warn).into_iter().collect()
     }
 
-    /// Runs `change` on the selected objects of unlocked layers as one step labelled `label`;
-    /// the locked layers holding the others are named.
+    /// Runs a change on the selected objects as one step labelled `label`: `on_map` on those of
+    /// a map's unlocked layers (the locked layers holding the others are named), `on_shapes` on
+    /// a tile's collision shapes.
     fn on_selected_objects(
         &mut self,
         doc: DocumentId,
         label: &str,
-        change: impl FnOnce(&mut bt_core::Map, &[ObjectId]) -> Result<(), bt_edit::EditError>,
+        on_map: impl FnOnce(&mut bt_core::Map, &[ObjectId]) -> Result<(), bt_edit::EditError>,
+        on_shapes: impl FnOnce(
+            &mut ObjectLayer,
+            &ObjectSpace<'_>,
+            &[ObjectId],
+        ) -> Result<(), bt_edit::EditError>,
     ) -> Vec<Effect> {
+        let selected = self
+            .documents
+            .get(doc)
+            .map(|d| d.selection().objects.clone())
+            .unwrap_or_default();
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            if selected.is_empty() {
+                return Vec::new();
+            }
+            let result = self.transact(doc, label, |tx| {
+                change_tile_shapes(tx, home, tile, |objects, space| {
+                    on_shapes(objects, space, &selected)
+                })
+            });
+            return result.err().map(warn).into_iter().collect();
+        }
         let (Some(asset), Some(map)) = (
             self.documents.get(doc).map(|d| d.asset()),
             self.map_of(doc).cloned(),
         ) else {
             return Vec::new();
         };
-        let selected = self
-            .documents
-            .get(doc)
-            .map(|d| d.selection().objects.clone())
-            .unwrap_or_default();
         let split = unlocked_objects(&map, &selected);
         let mut effects: Vec<Effect> = self
             .locked_objects_notice(doc, &split.locked_layers)
@@ -122,7 +156,7 @@ impl Editor {
         }
         let ids = split.unlocked;
         let result = self.transact(doc, label, |tx| {
-            change(tx.map_mut(asset)?, &ids).map_err(EditError::from)
+            on_map(tx.map_mut(asset)?, &ids).map_err(EditError::from)
         });
         effects.extend(result.err().map(warn));
         effects
@@ -130,22 +164,37 @@ impl Editor {
 
     /// Delete on objects.
     pub(crate) fn delete_objects(&mut self, doc: DocumentId) -> Vec<Effect> {
-        self.on_selected_objects(doc, "Delete Objects", |map, ids| {
-            remove_objects(map, ids).map(|_| ())
-        })
+        self.on_selected_objects(
+            doc,
+            "Delete Objects",
+            |map, ids| remove_objects(map, ids).map(|_| ()),
+            |objects, _, ids| remove_objects_in(objects, ids).map(|_| ()),
+        )
     }
 
     /// Copy on objects.
     pub(crate) fn copy_selected_objects(&mut self, doc: DocumentId) -> Vec<Effect> {
-        let Some(map) = self.map_of(doc).cloned() else {
-            return Vec::new();
-        };
         let selected = self
             .documents
             .get(doc)
             .map(|d| d.selection().objects.clone())
             .unwrap_or_default();
-        match copy_objects(&map, &selected) {
+        let copied = match self.object_host(doc) {
+            Some(ObjectHost::Tile { home, tile }) => {
+                let Some(shapes) = self.tile_shapes(home, tile) else {
+                    return Vec::new();
+                };
+                copy_objects_in(&shapes.shapes, &shapes.space(), &selected)
+            }
+            Some(ObjectHost::Map(_)) => {
+                let Some(map) = self.map_of(doc).cloned() else {
+                    return Vec::new();
+                };
+                copy_objects(&map, &selected)
+            }
+            None => return Vec::new(),
+        };
+        match copied {
             Ok(clip) => {
                 self.clipboard.objects = Some(clip);
                 Vec::new()
@@ -156,24 +205,53 @@ impl Editor {
 
     /// Cut on objects: Copy, then the unlocked ones are removed.
     pub(crate) fn cut_selected_objects(&mut self, doc: DocumentId) -> Vec<Effect> {
-        let mut copied: Option<ObjectClip> = None;
-        let effects = self.on_selected_objects(doc, "Cut Objects", |map, ids| {
-            copied = Some(cut_objects(map, ids)?);
-            Ok(())
-        });
-        if let Some(clip) = copied {
+        let copied: std::cell::Cell<Option<ObjectClip>> = std::cell::Cell::new(None);
+        let effects = self.on_selected_objects(
+            doc,
+            "Cut Objects",
+            |map, ids| {
+                copied.set(Some(cut_objects(map, ids)?));
+                Ok(())
+            },
+            |objects, space, ids| {
+                copied.set(Some(cut_objects_in(objects, space, ids)?));
+                Ok(())
+            },
+        );
+        if let Some(clip) = copied.into_inner() {
             self.clipboard.objects = Some(clip);
         }
         effects
     }
 
-    /// Paste on objects: into the current object layer, centred on `at` (pixel space) and
-    /// snapped when given, else where they were copied from; they become the selection.
+    /// Paste on objects: into the current object layer (or among the current tile's collision
+    /// shapes), centred on `at` (pixel space) and snapped when given, else where they were
+    /// copied from; they become the selection.
     pub(crate) fn paste_copied_objects(
         &mut self,
         doc: DocumentId,
         at: Option<DVec2>,
     ) -> Vec<Effect> {
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            let (Some(clip), Some(shapes)) =
+                (self.clipboard.objects.clone(), self.tile_shapes(home, tile))
+            else {
+                return Vec::new();
+            };
+            let snapping = self.snap_mode(SnapToggle::Keep);
+            let offset = at.map_or(DVec2::ZERO, |cursor| {
+                paste_offset(shapes.space().geometry(), &clip, cursor, snapping)
+            });
+            let result = self.transact(doc, "Paste Objects", |tx| {
+                let report = change_tile_shapes(tx, home, tile, |objects, _| {
+                    let mut ids = NewIds::after_highest(objects);
+                    paste_objects_in(objects, &clip, offset, &mut ids)
+                })?;
+                tx.selection.objects = report.changed;
+                Ok::<_, EditError>(())
+            });
+            return result.err().map(warn).into_iter().collect();
+        }
         let (Some(clip), Some(asset), Some(map)) = (
             self.clipboard.objects.clone(),
             self.documents.get(doc).map(|d| d.asset()),
@@ -220,6 +298,23 @@ impl Editor {
     /// Duplicate Objects: copies in place, with their names as they were (as Tiled's default);
     /// the copies become the selection.
     pub(crate) fn duplicate_selected_objects(&mut self, doc: DocumentId) -> Vec<Effect> {
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            let selected = self
+                .documents
+                .get(doc)
+                .map(|d| d.selection().objects.clone())
+                .unwrap_or_default();
+            let result = self.transact(doc, "Duplicate Objects", |tx| {
+                let copies = change_tile_shapes(tx, home, tile, |objects, _| {
+                    let mut ids = NewIds::after_highest(objects);
+                    duplicate_objects_in(objects, &selected, DVec2::ZERO, false, &mut ids)
+                })?
+                .changed;
+                tx.selection.objects = copies;
+                Ok::<_, EditError>(())
+            });
+            return result.err().map(warn).into_iter().collect();
+        }
         let (Some(asset), Some(map)) = (
             self.documents.get(doc).map(|d| d.asset()),
             self.map_of(doc).cloned(),
@@ -258,15 +353,28 @@ impl Editor {
             Restack::ToTop => "Raise Objects to Top",
             Restack::ToBottom => "Lower Objects to Bottom",
         };
-        self.on_selected_objects(doc, label, |map, ids| {
-            match how {
-                Restack::Raise => raise_objects(map, ids)?,
-                Restack::Lower => lower_objects(map, ids)?,
-                Restack::ToTop => raise_objects_to_top(map, ids)?,
-                Restack::ToBottom => lower_objects_to_bottom(map, ids)?,
-            };
-            Ok(())
-        })
+        self.on_selected_objects(
+            doc,
+            label,
+            |map, ids| {
+                match how {
+                    Restack::Raise => raise_objects(map, ids)?,
+                    Restack::Lower => lower_objects(map, ids)?,
+                    Restack::ToTop => raise_objects_to_top(map, ids)?,
+                    Restack::ToBottom => lower_objects_to_bottom(map, ids)?,
+                };
+                Ok(())
+            },
+            |objects, space, ids| {
+                match how {
+                    Restack::Raise => raise_objects_in(objects, space, ids)?,
+                    Restack::Lower => lower_objects_in(objects, space, ids)?,
+                    Restack::ToTop => raise_objects_to_top_in(objects, ids)?,
+                    Restack::ToBottom => lower_objects_to_bottom_in(objects, ids)?,
+                };
+                Ok(())
+            },
+        )
     }
 
     /// Flips the selected objects around the middle of what they cover.
@@ -275,13 +383,24 @@ impl Editor {
             Axis::Horizontal => "Flip Horizontally",
             Axis::Vertical => "Flip Vertically",
         };
-        self.on_selected_objects(doc, label, |map, ids| {
-            let Some(origin) = flip_origin(map, ids)? else {
-                return Ok(());
-            };
-            flip_objects(map, ids, axis, origin)?;
-            Ok(())
-        })
+        self.on_selected_objects(
+            doc,
+            label,
+            |map, ids| {
+                let Some(origin) = flip_origin(map, ids)? else {
+                    return Ok(());
+                };
+                flip_objects(map, ids, axis, origin)?;
+                Ok(())
+            },
+            |objects, space, ids| {
+                let Some(origin) = flip_origin_in(objects, space, ids)? else {
+                    return Ok(());
+                };
+                flip_objects_in(objects, space, ids, axis, origin)?;
+                Ok(())
+            },
+        )
     }
 
     /// Turns each selected object a quarter around its own position (Tiled's Rotate Left and
@@ -292,9 +411,14 @@ impl Editor {
         } else {
             "Rotate Left"
         };
-        self.on_selected_objects(doc, label, |map, ids| {
-            rotate_objects(map, ids, degrees, Pivot::OwnPosition).map(|_| ())
-        })
+        self.on_selected_objects(
+            doc,
+            label,
+            |map, ids| rotate_objects(map, ids, degrees, Pivot::OwnPosition).map(|_| ()),
+            |objects, space, ids| {
+                rotate_objects_in(objects, space, ids, degrees, Pivot::OwnPosition).map(|_| ())
+            },
+        )
     }
 
     /// Moves the selected objects to another object layer.
@@ -312,9 +436,15 @@ impl Editor {
                 .into_iter()
                 .collect();
         }
-        self.on_selected_objects(doc, "Move Objects to Layer", |map, ids| {
-            move_objects_to_layer(map, ids, layer).map(|_| ())
-        })
+        if !matches!(self.object_host(doc), Some(ObjectHost::Map(_))) {
+            return Vec::new();
+        }
+        self.on_selected_objects(
+            doc,
+            "Move Objects to Layer",
+            |map, ids| move_objects_to_layer(map, ids, layer).map(|_| ()),
+            |_, _, _| Ok(()),
+        )
     }
 
     /// Whether objects were copied.
@@ -324,10 +454,15 @@ impl Editor {
 
     /// Why Raise and Lower cannot move the selected objects: their layer draws top-down.
     pub(crate) fn restack_reason(&self, doc: DocumentId) -> Option<String> {
-        let map = self.map_of(doc)?;
-        let layer = self.documents.get(doc)?.selection().current_layer?;
-        let objects = map.layer(layer)?.as_object_layer()?;
-        (objects.draw_order == DrawOrder::TopDown).then(|| {
+        let draw_order = match self.object_host(doc)? {
+            ObjectHost::Tile { home, tile } => self.tile_shapes(home, tile)?.shapes.draw_order,
+            ObjectHost::Map(_) => {
+                let map = self.map_of(doc)?;
+                let layer = self.documents.get(doc)?.selection().current_layer?;
+                map.layer(layer)?.as_object_layer()?.draw_order
+            }
+        };
+        (draw_order == DrawOrder::TopDown).then(|| {
             "The objects of this layer are drawn top-down: set its draw order to Manual to order them by hand"
                 .to_owned()
         })

@@ -6,6 +6,7 @@
 use bt_edit::{SnapMode, snap};
 use glam::DVec2;
 
+use super::host::ObjectHost;
 use crate::document::DocumentId;
 use crate::editor::Editor;
 use crate::settings::Snapping;
@@ -23,10 +24,17 @@ pub enum SnapToggle {
 }
 
 impl Editor {
-    /// `pixel` snapped as the snapping preference, changed by `toggle`, says.
+    /// `pixel` snapped as the snapping preference, changed by `toggle`, says, on the grid of
+    /// what `doc`'s object tools edit (a map, or a tile's collision shapes).
     pub fn snapped(&self, doc: DocumentId, pixel: DVec2, toggle: SnapToggle) -> DVec2 {
-        match self.map_of(doc) {
-            Some(map) => snap(&map.geometry(), pixel, self.snap_mode(toggle)),
+        let geometry = match self.object_host(doc) {
+            Some(ObjectHost::Tile { home, tile }) => self
+                .tile_shapes(home, tile)
+                .map(|shapes| *shapes.space().geometry()),
+            _ => self.map_of(doc).map(|map| map.geometry()),
+        };
+        match geometry {
+            Some(geometry) => snap(&geometry, pixel, self.snap_mode(toggle)),
             None => pixel,
         }
     }

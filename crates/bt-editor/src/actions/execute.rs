@@ -72,10 +72,7 @@ impl Editor {
                 current.map(|doc| f(editor, doc)).unwrap_or_default()
             };
         // Whether the current layer holds objects, so the shared commands act on them.
-        let objects = self
-            .situation()
-            .layer
-            .is_some_and(|l| l.as_object_layer().is_some());
+        let objects = self.edits_objects();
         match id {
             ActionId::NewMap => vec![Effect::Show(Dialog::NewMap)],
             ActionId::NewTileset => {

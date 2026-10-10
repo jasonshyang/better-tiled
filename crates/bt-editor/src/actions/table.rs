@@ -271,40 +271,40 @@ action_table! {
         .text_edit(),
     /// Cut the selected tiles or objects.
     Cut => ActionSpec::new(ActionId::Cut, "cut", "Cut", "clipboard")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd('x')])
         .text_edit(),
     /// Copy the selected tiles or objects.
     Copy => ActionSpec::new(ActionId::Copy, "copy", "Copy", "clipboard")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd('c')])
         .text_edit(),
     /// Take what was copied as the brush, or paste objects under the pointer.
     Paste => ActionSpec::new(ActionId::Paste, "paste", "Paste", "clipboard")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd('v')])
         .text_edit(),
     /// Paste where it was copied from.
     PasteInPlace => ActionSpec::new(ActionId::PasteInPlace, "paste_in_place", "Paste in Place", "clipboard same position")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd_shift('v')]),
     /// Delete the selected tiles or objects.
     Delete => ActionSpec::new(ActionId::Delete, "delete", "Delete", "remove erase clear")
-        .on(Map)
+        .on(Document)
         .keys(&[named(Key::Delete), named(Key::Backspace)])
         .text_edit(),
     /// Select every tile of the layer, or every object.
     SelectAll => ActionSpec::new(ActionId::SelectAll, "select_all", "Select All", "selection everything")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd('a')])
         .text_edit(),
     /// Select nothing.
     SelectNone => ActionSpec::new(ActionId::SelectNone, "select_none", "Select None", "selection clear deselect")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd_shift('a')]),
     /// Select the tiles or objects of the current layer that are not selected.
     InvertSelection => ActionSpec::new(ActionId::InvertSelection, "invert_selection", "Invert Selection", "selection inverse")
-        .on(Map)
+        .on(Document)
         .keys(&[cmd('i')]),
     /// Find a command by name.
     SearchActions => ActionSpec::new(ActionId::SearchActions, "search_actions", "Search Actions…", "palette command find")
@@ -470,19 +470,19 @@ action_table! {
         .keys(&[cmd('d')]),
     /// Mirror the brush, the carried tiles or the selected objects left to right.
     FlipHorizontal => ActionSpec::new(ActionId::FlipHorizontal, "flip_horizontal", "Flip Horizontally", "mirror")
-        .on(Map)
+        .on(Document)
         .keys(&[plain('x')]),
     /// Mirror them top to bottom.
     FlipVertical => ActionSpec::new(ActionId::FlipVertical, "flip_vertical", "Flip Vertically", "mirror")
-        .on(Map)
+        .on(Document)
         .keys(&[plain('y')]),
     /// Turn them counterclockwise.
     RotateLeft => ActionSpec::new(ActionId::RotateLeft, "rotate_left", "Rotate Left", "turn counterclockwise")
-        .on(Map)
+        .on(Document)
         .keys(&[shift('z')]),
     /// Turn them clockwise.
     RotateRight => ActionSpec::new(ActionId::RotateRight, "rotate_right", "Rotate Right", "turn clockwise")
-        .on(Map)
+        .on(Document)
         .keys(&[plain('z')]),
     /// Move the selected objects up a step.
     RaiseObjects => ActionSpec::new(ActionId::RaiseObjects, "raise_objects", "Raise Objects", "order up front")

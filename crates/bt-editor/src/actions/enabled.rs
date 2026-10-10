@@ -6,6 +6,7 @@ use bt_core::{Layer, LayerKind, Map};
 use super::table::{ActionId, ActionKind, ActionSpec, Context};
 use crate::document::{Document, TilesetMode};
 use crate::editor::Editor;
+use crate::objects::ObjectHost;
 use crate::settings::Snapping;
 
 /// Whether a command can run now.
@@ -25,6 +26,22 @@ pub(crate) struct Situation<'e> {
 }
 
 impl Editor {
+    /// Whether the current document's object commands act on objects now: a map's while its
+    /// current layer is an object layer, or the current tile's collision shapes.
+    pub(crate) fn edits_objects(&self) -> bool {
+        let Some(doc) = self.documents.current() else {
+            return false;
+        };
+        match self.object_host(doc) {
+            Some(ObjectHost::Tile { .. }) => true,
+            Some(ObjectHost::Map(_)) => self
+                .situation()
+                .layer
+                .is_some_and(|l| matches!(l.kind, LayerKind::Object(_))),
+            None => false,
+        }
+    }
+
     /// The current document, its map and current layer.
     pub(crate) fn situation(&self) -> Situation<'_> {
         let document = self
@@ -57,12 +74,12 @@ impl Editor {
         }
         let history = here.document.map(Document::history);
         let selection = here.document.map(Document::selection);
-        let on_tiles = here
-            .layer
-            .is_some_and(|l| matches!(l.kind, LayerKind::Tile(_)));
-        let on_objects = here
-            .layer
-            .is_some_and(|l| matches!(l.kind, LayerKind::Object(_)));
+        let editing_tileset = here.document.is_some_and(|d| d.tileset_editing().is_some());
+        let on_tiles = !editing_tileset
+            && here
+                .layer
+                .is_some_and(|l| matches!(l.kind, LayerKind::Tile(_)));
+        let on_objects = self.edits_objects();
         let has_tiles = selection.is_some_and(|s| !s.tiles.is_empty());
         let has_objects = selection.is_some_and(|s| !s.objects.is_empty());
         let has_layers = selection.is_some_and(|s| !s.layers.is_empty());
@@ -84,6 +101,11 @@ impl Editor {
                 Enabled::Disabled(None)
             }
             ActionId::SelectNone if !has_tiles && !has_objects => Enabled::Disabled(None),
+            ActionId::SelectAll | ActionId::InvertSelection
+                if !on_objects && (here.map.is_none() || editing_tileset) =>
+            {
+                Enabled::Disabled(None)
+            }
             ActionId::Cut | ActionId::Copy | ActionId::Delete
                 if !(on_tiles && has_tiles || on_objects && has_objects) =>
             {
@@ -121,6 +143,9 @@ impl Editor {
             }
             ActionId::DuplicateObjects | ActionId::MoveObjectsToLayer if !has_objects => {
                 Enabled::Disabled(None)
+            }
+            ActionId::MoveObjectsToLayer if editing_tileset => {
+                Enabled::Disabled(Some("Collision shapes stay with their tile".to_owned()))
             }
             ActionId::RaiseObjects
             | ActionId::LowerObjects

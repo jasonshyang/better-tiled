@@ -63,6 +63,12 @@ impl Editor {
     /// allocated chunks on an infinite one) and the objects of every selected unlocked object
     /// layer (Tiled's `selectAll`).
     pub(crate) fn select_all(&mut self, doc: DocumentId) -> Vec<Effect> {
+        if let Some(shapes) = self.edited_tile_shapes(doc) {
+            self.change_selection(doc, |selection| {
+                selection.objects = shapes.iter().map(|o| o.id).collect();
+            });
+            return Vec::new();
+        }
         let Some(map) = self.map_of(doc).cloned() else {
             return Vec::new();
         };
@@ -100,6 +106,16 @@ impl Editor {
     /// Invert Selection on the current layer: the cells of a tile layer's area that are not
     /// selected, or the objects of an object layer that are not.
     pub(crate) fn invert_selection(&mut self, doc: DocumentId) -> Vec<Effect> {
+        if let Some(shapes) = self.edited_tile_shapes(doc) {
+            self.change_selection(doc, |selection| {
+                selection.objects = shapes
+                    .iter()
+                    .map(|o| o.id)
+                    .filter(|id| !selection.objects.contains(id))
+                    .collect();
+            });
+            return Vec::new();
+        }
         let Some(map) = self.map_of(doc).cloned() else {
             return Vec::new();
         };
@@ -123,6 +139,16 @@ impl Editor {
             }
         });
         Vec::new()
+    }
+
+    /// The collision shapes `doc`'s tileset editor edits, when it edits them.
+    fn edited_tile_shapes(&self, doc: DocumentId) -> Option<Vec<bt_core::MapObject>> {
+        match self.object_host(doc)? {
+            crate::objects::ObjectHost::Tile { home, tile } => {
+                Some(self.tile_shapes(home, tile)?.shapes.objects.to_vec())
+            }
+            crate::objects::ObjectHost::Map(_) => None,
+        }
     }
 
     /// Changes a document's selection outside any transaction; carried tiles are let go when

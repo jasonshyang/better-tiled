@@ -5,14 +5,19 @@
 use std::sync::Arc;
 
 use bt_core::{LayerId, Map, ObjectId};
-use bt_edit::{Pivot, move_anchor, move_objects, rotate_objects, snap_delta};
+use bt_edit::{
+    Pivot, SnapMode, move_anchor, move_anchor_in, move_objects, move_objects_in, rotate_objects,
+    rotate_objects_in, snap_delta,
+};
 use glam::DVec2;
 
+use super::host::{ObjectHost, TileShapes, change_tile_shapes};
 use super::snapping::SnapToggle;
 use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
 use crate::effect::Effect;
 use crate::error::EditError;
+use crate::store::TilesetHome;
 
 /// A step of a drag of objects.
 #[derive(Clone, Debug, PartialEq)]
@@ -59,12 +64,35 @@ pub enum ObjectStrokeKind {
 #[derive(Clone, Debug)]
 pub(crate) struct ObjectStrokeState {
     doc: DocumentId,
-    /// The map as the drag found it.
-    start: Arc<Map>,
+    /// The objects as the drag found them.
+    start: StrokeStart,
     /// The objects that move: the selected ones on unlocked layers.
     ids: Vec<ObjectId>,
     /// The locked layers holding selected objects that stay.
     locked: Vec<LayerId>,
+}
+
+/// What a drag of objects starts from.
+#[derive(Clone, Debug)]
+enum StrokeStart {
+    /// The map, for objects of its layers.
+    Map(Arc<Map>),
+    /// A tile's collision shapes.
+    Tile {
+        /// Where the tileset lives.
+        home: TilesetHome,
+        /// The tile's shapes.
+        shapes: TileShapes,
+    },
+}
+
+/// How a drag changes the moving objects from where they started.
+#[derive(Copy, Clone, Debug)]
+enum StrokeChange {
+    /// Moved by a screen delta, snapped as `snapping` says.
+    Move { delta: DVec2, snapping: SnapMode },
+    /// Turned around a pixel point.
+    Rotate { degrees: f64, center: DVec2 },
 }
 
 impl Editor {
@@ -72,15 +100,31 @@ impl Editor {
     pub(crate) fn object_stroke(&mut self, step: ObjectStroke) -> Vec<Effect> {
         match step {
             ObjectStroke::Begin { doc, kind } => {
-                let Some(start) = self.map_of(doc).cloned() else {
-                    return Vec::new();
-                };
                 let selected = self
                     .documents
                     .get(doc)
                     .map(|d| d.selection().objects.clone())
                     .unwrap_or_default();
-                let split = unlocked_objects(&start, &selected);
+                let (start, split) = match self.object_host(doc) {
+                    Some(ObjectHost::Map(_)) => {
+                        let Some(map) = self.map_of(doc).cloned() else {
+                            return Vec::new();
+                        };
+                        let split = unlocked_objects(&map, &selected);
+                        (StrokeStart::Map(map), split)
+                    }
+                    Some(ObjectHost::Tile { home, tile }) => {
+                        let Some(shapes) = self.tile_shapes(home, tile) else {
+                            return Vec::new();
+                        };
+                        let split = SplitByLock {
+                            unlocked: selected,
+                            locked_layers: Vec::new(),
+                        };
+                        (StrokeStart::Tile { home, shapes }, split)
+                    }
+                    None => return Vec::new(),
+                };
                 let label = match kind {
                     ObjectStrokeKind::Move => "Move Objects",
                     ObjectStrokeKind::Rotate => "Rotate Objects",
@@ -98,20 +142,11 @@ impl Editor {
             }
             ObjectStroke::Move { delta, snap } => {
                 let snapping = self.snap_mode(snap);
-                self.reapply(|map, ids| {
-                    let geometry = map.geometry();
-                    let pixel_delta =
-                        geometry.screen_to_pixel(delta) - geometry.screen_to_pixel(DVec2::ZERO);
-                    let anchor = move_anchor(map, ids)?.unwrap_or(DVec2::ZERO);
-                    let snapped = snap_delta(&geometry, anchor, pixel_delta, snapping);
-                    move_objects(map, ids, snapped)?;
-                    Ok(())
-                })
+                self.reapply(StrokeChange::Move { delta, snapping })
             }
-            ObjectStroke::Rotate { degrees, center } => self.reapply(|map, ids| {
-                rotate_objects(map, ids, degrees, Pivot::Point(center))?;
-                Ok(())
-            }),
+            ObjectStroke::Rotate { degrees, center } => {
+                self.reapply(StrokeChange::Rotate { degrees, center })
+            }
             ObjectStroke::End => {
                 let Some(stroke) = self.object_stroke.take() else {
                     return Vec::new();
@@ -133,21 +168,53 @@ impl Editor {
         }
     }
 
-    /// Puts the map back as the drag found it and applies `change` to the moving objects.
-    fn reapply(
-        &mut self,
-        change: impl FnOnce(&mut Map, &[ObjectId]) -> Result<(), bt_edit::EditError>,
-    ) -> Vec<Effect> {
+    /// Puts the objects back as the drag found them and applies `change` to the moving ones.
+    fn reapply(&mut self, change: StrokeChange) -> Vec<Effect> {
         let Some(stroke) = self.object_stroke.clone() else {
             return Vec::new();
         };
         let Some(asset) = self.documents.get(stroke.doc).map(|d| d.asset()) else {
             return Vec::new();
         };
-        let result = self.gesture_apply(|tx| {
-            let map = tx.map_mut(asset)?;
-            *map = (*stroke.start).clone();
-            change(map, &stroke.ids).map_err(EditError::from)
+        let ids = &stroke.ids;
+        let result = self.gesture_apply(|tx| match &stroke.start {
+            StrokeStart::Map(start) => {
+                let map = tx.map_mut(asset)?;
+                *map = (**start).clone();
+                let geometry = map.geometry();
+                match change {
+                    StrokeChange::Move { delta, snapping } => {
+                        let pixel_delta =
+                            geometry.screen_to_pixel(delta) - geometry.screen_to_pixel(DVec2::ZERO);
+                        let anchor = move_anchor(map, ids)?.unwrap_or(DVec2::ZERO);
+                        let snapped = snap_delta(&geometry, anchor, pixel_delta, snapping);
+                        move_objects(map, ids, snapped)?;
+                    }
+                    StrokeChange::Rotate { degrees, center } => {
+                        rotate_objects(map, ids, degrees, Pivot::Point(center))?;
+                    }
+                }
+                Ok::<_, EditError>(())
+            }
+            StrokeStart::Tile { home, shapes } => {
+                change_tile_shapes(tx, *home, shapes.tile, |objects, space| {
+                    *objects = shapes.shapes.clone();
+                    let geometry = space.geometry();
+                    match change {
+                        StrokeChange::Move { delta, snapping } => {
+                            let pixel_delta = geometry.screen_to_pixel(delta)
+                                - geometry.screen_to_pixel(DVec2::ZERO);
+                            let anchor = move_anchor_in(objects, ids)?.unwrap_or(DVec2::ZERO);
+                            let snapped = snap_delta(geometry, anchor, pixel_delta, snapping);
+                            move_objects_in(objects, ids, snapped)?;
+                        }
+                        StrokeChange::Rotate { degrees, center } => {
+                            rotate_objects_in(objects, space, ids, degrees, Pivot::Point(center))?;
+                        }
+                    }
+                    Ok(())
+                })
+            }
         });
         result.err().map(warn).into_iter().collect()
     }

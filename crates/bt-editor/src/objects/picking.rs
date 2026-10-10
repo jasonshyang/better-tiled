@@ -11,6 +11,7 @@ use bt_edit::{ObjectSpace, RectMode, layer_order, object_bounds, objects_at, obj
 use bt_utils::DRect;
 use glam::DVec2;
 
+use super::host::ObjectHost;
 use crate::document::DocumentId;
 use crate::editor::Editor;
 use crate::settings::ObjectSelection;
@@ -29,6 +30,14 @@ impl Editor {
     /// pixels of it on the layers the object-selection preference allows (the current layer's
     /// first when it prefers it). Hidden and locked layers give none.
     pub fn objects_at(&self, doc: DocumentId, world: DVec2, tolerance: f64) -> Vec<ObjectId> {
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            let Some(shapes) = self.tile_shapes(home, tile) else {
+                return Vec::new();
+            };
+            let space = shapes.space();
+            let pixel = space.geometry().screen_to_pixel(world);
+            return objects_at(&shapes.shapes, &space, pixel, tolerance);
+        }
         let Some(map) = self.map_of(doc) else {
             return Vec::new();
         };
@@ -51,13 +60,29 @@ impl Editor {
     /// The objects a rubber band over `rect` (world) selects: those it touches, or with the
     /// preference those it encloses.
     pub fn objects_in_rect(&self, doc: DocumentId, rect: DRect) -> Vec<ObjectId> {
-        let Some(map) = self.map_of(doc) else {
-            return Vec::new();
-        };
         let mode = if self.settings.behaviour.select_enclosed {
             RectMode::Enclosed
         } else {
             RectMode::Touching
+        };
+        let corners_of = |rect: DRect| {
+            [
+                rect.min,
+                DVec2::new(rect.max.x, rect.min.y),
+                rect.max,
+                DVec2::new(rect.min.x, rect.max.y),
+            ]
+        };
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            let Some(shapes) = self.tile_shapes(home, tile) else {
+                return Vec::new();
+            };
+            let space = shapes.space();
+            let corners = corners_of(rect).map(|corner| space.geometry().screen_to_pixel(corner));
+            return objects_in_quad(&shapes.shapes, &space, corners, mode);
+        }
+        let Some(map) = self.map_of(doc) else {
+            return Vec::new();
         };
         let space = ObjectSpace::of_map(map);
         let geometry = map.geometry();
@@ -69,13 +94,8 @@ impl Editor {
             ) else {
                 continue;
             };
-            let corners = [
-                rect.min,
-                DVec2::new(rect.max.x, rect.min.y),
-                rect.max,
-                DVec2::new(rect.min.x, rect.max.y),
-            ]
-            .map(|corner| geometry.screen_to_pixel(corner - state.offset));
+            let corners =
+                corners_of(rect).map(|corner| geometry.screen_to_pixel(corner - state.offset));
             found.extend(objects_in_quad(objects, &space, corners, mode));
         }
         found
@@ -83,12 +103,29 @@ impl Editor {
 
     /// Where the objects with `ids` are on screen.
     pub fn object_frames(&self, doc: DocumentId, ids: &[ObjectId]) -> Vec<ObjectFrame> {
+        let wanted: HashSet<ObjectId> = ids.iter().copied().collect();
+        if let Some(ObjectHost::Tile { home, tile }) = self.object_host(doc) {
+            let Some(shapes) = self.tile_shapes(home, tile) else {
+                return Vec::new();
+            };
+            let space = shapes.space();
+            return shapes
+                .shapes
+                .objects
+                .iter()
+                .filter(|o| wanted.contains(&o.id))
+                .map(|object| ObjectFrame {
+                    id: object.id,
+                    corners: frame_corners(object_bounds(&space, object))
+                        .map(|corner| space.geometry().pixel_to_screen(corner)),
+                })
+                .collect();
+        }
         let Some(map) = self.map_of(doc) else {
             return Vec::new();
         };
         let space = ObjectSpace::of_map(map);
         let geometry = map.geometry();
-        let wanted: HashSet<ObjectId> = ids.iter().copied().collect();
         let mut frames = Vec::new();
         map.for_each_layer(|layer, _| {
             let (Some(objects), Some(state)) =
@@ -97,14 +134,8 @@ impl Editor {
                 return;
             };
             for object in objects.objects.iter().filter(|o| wanted.contains(&o.id)) {
-                let bounds = object_bounds(&space, object);
-                let corners = [
-                    bounds.min,
-                    DVec2::new(bounds.max.x, bounds.min.y),
-                    bounds.max,
-                    DVec2::new(bounds.min.x, bounds.max.y),
-                ]
-                .map(|corner| geometry.pixel_to_screen(corner) + state.offset);
+                let corners = frame_corners(object_bounds(&space, object))
+                    .map(|corner| geometry.pixel_to_screen(corner) + state.offset);
                 frames.push(ObjectFrame {
                     id: object.id,
                     corners,
@@ -150,4 +181,14 @@ impl Editor {
         }
         layers
     }
+}
+
+/// The corners of a rectangle, clockwise from its top-left on screen.
+fn frame_corners(rect: DRect) -> [DVec2; 4] {
+    [
+        rect.min,
+        DVec2::new(rect.max.x, rect.min.y),
+        rect.max,
+        DVec2::new(rect.min.x, rect.max.y),
+    ]
 }

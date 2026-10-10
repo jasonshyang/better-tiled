@@ -2,11 +2,13 @@
 //! inserting them, and the Objects menu's commands.
 
 mod commands;
+mod host;
 mod picking;
 mod snapping;
 mod stroke;
 
 pub(crate) use commands::Restack;
+pub(crate) use host::ObjectHost;
 pub use picking::ObjectFrame;
 pub use snapping::SnapToggle;
 pub(crate) use stroke::ObjectStrokeState;
