@@ -424,6 +424,7 @@ Where the build differs from the sections above:
 
 Tests: all 19 directories of Tiled's automapping tests are covered, the 14 with an expected
 result equal to it and the 5 without checked for what they show; the options, files and pack
-suites of §14 (fuzz, explain and layers wait for their phases); the Highlands rules give back
-the sample scene's platforms, each tile the scene's or another variation of the same tile, and
-exactly its base tiles without the variation rule maps.
+suites of §14 (fuzz, explain and layers wait for their phases), and a randomised test that a
+run equals one trying every rule at every position; the Highlands rules give back the sample
+scene's platforms, each tile the scene's or another variation of the same tile, and exactly its
+base tiles without the variation rule maps.
