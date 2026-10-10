@@ -24,12 +24,12 @@ use crate::rules::{LockedOutput, Report, RuleSet};
 
 /// What a run leaves to write back.
 pub(crate) struct RunResult {
-    pub(crate) tilesets: TilesetBinding,
-    pub(crate) targets: Targets,
+    tilesets: TilesetBinding,
+    targets: Targets,
     placed: Vec<PlacedGroup>,
     removed: Vec<RemovedObject>,
     locked: Vec<LockedOutput>,
-    pub(crate) matches: Vec<usize>,
+    matches: Vec<usize>,
     problems: Vec<Problem>,
     /// The cells a region run keeps; `None` keeps every cell.
     exact: Option<Bx>,
@@ -54,6 +54,27 @@ impl RunResult {
     /// Whether the run keeps what it wrote at `p`.
     fn keeps(&self, p: IVec2) -> bool {
         self.exact.is_none_or(|exact| exact.contains(p))
+    }
+
+    /// The cell at `p` of the run's tile layer for `name`, as the run left it; empty when the
+    /// run has no such layer. Cells are in the run's numbering of tilesets.
+    pub(crate) fn cell(&self, name: &str, p: IVec2) -> Cell {
+        self.targets
+            .tile_named(name)
+            .map_or(Cell::EMPTY, |target| target.grid.cell(p))
+    }
+
+    /// The map layer the run's tile layer for `name` is, if it is one of the map's.
+    pub(crate) fn map_layer(&self, name: &str) -> Option<LayerId> {
+        match self.targets.tile_named(name)?.origin {
+            TargetOrigin::Existing(id) => Some(id),
+            TargetOrigin::New | TargetOrigin::Temporary => None,
+        }
+    }
+
+    /// How the run numbered the rule set's tilesets.
+    pub(crate) fn tilesets(&self) -> &TilesetBinding {
+        &self.tilesets
     }
 }
 

@@ -368,6 +368,58 @@ fn highlands_region_run_after_a_stroke_is_exact_and_stays_under_its_time_bound()
     }
 }
 
+/// Explanations on the Highlands pack: what made a platform tile of the sample scene (the last
+/// write, by a rule applied there, the result a full run leaves), and where that rule matches.
+#[test]
+fn highlands_explanations_tell_what_made_a_platform_tile() {
+    let Some(pack) = highlands() else {
+        return;
+    };
+    let family = &FAMILIES[0];
+    let map = pack.scene_with_walls(family);
+    let mut full = map.clone();
+    pack.rules.apply(&mut full, None, 1);
+    // A tile the run changed.
+    let cell = tiles(&full, "walls")
+        .cells()
+        .map(|placed| placed.at)
+        .find(|&p| tiles(&map, "walls").cell(p) != tiles(&full, "walls").cell(p))
+        .unwrap();
+    let start = Instant::now();
+    let explanation = pack.rules.explain_cell(&map, cell, 1);
+    let cell_time = start.elapsed();
+    assert_eq!(explanation.layers.len(), 1);
+    assert_eq!(
+        explanation.layers[0].after,
+        tiles(&full, "walls").cell(cell)
+    );
+    let Some(bt_automap::Writer::Rule { rule, position }) = explanation.writes.last().map(|w| w.by)
+    else {
+        panic!("a rule wrote the platform tile: {:?}", explanation.writes);
+    };
+    let attempt = explanation
+        .attempts
+        .iter()
+        .find(|a| a.rule == rule && a.position == position)
+        .unwrap();
+    assert!(matches!(
+        attempt.outcome,
+        bt_automap::AttemptOutcome::Applied { .. }
+    ));
+    let start = Instant::now();
+    let matches = pack.rules.explain_rule(&map, rule, 1, 1);
+    let rule_time = start.elapsed();
+    assert!(matches.matches.iter().any(|a| a.position == position));
+    println!(
+        "Highlands: explaining a platform tile {cell_time:?} ({} attempts, {} writes); where \
+         {rule} matches {rule_time:?} ({} matches, {} near misses)",
+        explanation.attempts.len(),
+        explanation.writes.len(),
+        matches.matches.len(),
+        matches.near_misses.len()
+    );
+}
+
 /// `map` with its `walls` repeated `times`×`times` over a map that many times larger.
 fn repeated(map: &Map, times: u32) -> Map {
     let mut large = map.clone();

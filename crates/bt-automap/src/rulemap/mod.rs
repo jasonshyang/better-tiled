@@ -372,6 +372,7 @@ pub(crate) fn compile_rule_map(
             origin,
             input_box: input_box.translated(-origin),
             bounds: component.bounds,
+            cells: CellSet::from_cells(component.cells.iter().copied()),
             output_cells: output_cells.translated(-origin),
             output_origin: output_box.min,
             options: rule_options,

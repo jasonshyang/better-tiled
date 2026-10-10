@@ -116,6 +116,13 @@ impl Targets {
         index
     }
 
+    /// The tile layer of the run for `name`, if it has one.
+    pub(crate) fn tile_named(&self, name: &str) -> Option<&TileTarget> {
+        self.tile_names
+            .get(name)
+            .and_then(|&index| self.tiles.get(index))
+    }
+
     /// The tile layer rules write for `name`: bound, found by name, or created.
     pub(crate) fn tile_output(&mut self, map: &Map, names: &LayerNames, name: &str) -> usize {
         if let Some(&index) = self.tile_names.get(name) {

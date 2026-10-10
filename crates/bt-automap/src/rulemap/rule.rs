@@ -28,6 +28,8 @@ pub(crate) struct Rule {
     pub(crate) input_box: Bx,
     /// The box of all its cells, input and output, in the rule map.
     pub(crate) bounds: Bx,
+    /// Its cells, input and output, in the rule map: the 8-connected component it is.
+    pub(crate) cells: CellSet,
     /// Its output cells, relative to `origin`: what a match adds to the region later rule maps
     /// run on, where the region grows.
     pub(crate) output_cells: CellSet,

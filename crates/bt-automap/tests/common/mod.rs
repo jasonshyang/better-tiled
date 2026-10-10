@@ -3,6 +3,8 @@
 
 #![allow(dead_code, reason = "each test file uses part of the helpers")]
 
+pub mod random;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

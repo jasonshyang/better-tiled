@@ -27,6 +27,15 @@ pub trait Observer {
         false
     }
 
+    /// Positions where `rule` is tried besides those its anchor tiles give, in any order (the
+    /// run tries them in its own). A position off the rule's lattice or where the run may not
+    /// try it is reported with [`Outcome::OffLattice`] or [`Outcome::OutsideMap`]; the others
+    /// change nothing where the rule does not match.
+    fn extra_positions(&self, rule: RuleRef) -> &[IVec2] {
+        let _ = rule;
+        &[]
+    }
+
     /// A rule was tried at a position.
     fn attempt(&mut self, attempt: &Attempt<'_>) {
         let _ = attempt;
@@ -72,14 +81,16 @@ pub enum Outcome<'a> {
         /// The layers a lock kept the output out of.
         locked: Vec<LayerId>,
     },
-    /// The rule's `Probability` skipped it here.
+    /// The rule's `Probability` skipped it here (an observer is shown the checks first, which
+    /// say whether it would have matched).
     SkippedByProbability,
     /// The rule matched but its output would overlap its own earlier output
     /// (`NoOverlappingOutput`).
     Overlapping,
     /// No input set holds here.
     NoMatch,
-    /// The rule's input box does not fit inside the map here (`MatchOutsideMap` is off).
+    /// The run does not try the rule here: its input box does not fit inside the map
+    /// (`MatchOutsideMap` is off) or does not reach the region the run covers.
     OutsideMap,
     /// The position is off the rule's `ModX`/`ModY` lattice.
     OffLattice,

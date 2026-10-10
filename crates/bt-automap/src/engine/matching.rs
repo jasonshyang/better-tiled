@@ -85,6 +85,9 @@ pub(crate) struct BoundSet<'r> {
     pub(crate) grids: Vec<Option<usize>>,
     /// Its cells, bound, in the order of the set's cells.
     pub(crate) cells: Vec<BoundCell>,
+    /// Whether it can hold: `false` for a set needing a tile on a layer the map lacks, which an
+    /// observer still sees checked.
+    pub(crate) possible: bool,
 }
 
 /// What reading conditions needs.

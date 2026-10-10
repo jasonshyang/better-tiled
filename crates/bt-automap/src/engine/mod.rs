@@ -48,6 +48,7 @@ use objects::PlacedGroup;
 pub(crate) use objects::rewire;
 use targets::{Targets, refused_bindings};
 use window::RuleMapWindow;
+pub(crate) use writeback::RunResult;
 
 pub use request::{
     Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
@@ -278,7 +279,8 @@ impl<'a, O: Observer> Run<'a, O> {
 
     /// The rules of a rule map that can match in this run, bound: enabled, with an output, and
     /// with an input set that is possible and whose layers allow it; in a region run, with a
-    /// position to try in the window.
+    /// position to try in the window. An observer also sees the sets the map's layers make
+    /// impossible, checked where the rule is tried (they never hold).
     fn bind_rules(&self, run: &RuleMapRun<'a>) -> Vec<BoundRule<'a>> {
         let mut bound = Vec::new();
         for (index, rule) in run.rule_map.rules.iter().enumerate() {
@@ -309,7 +311,7 @@ impl<'a, O: Observer> Run<'a, O> {
                             !empty_allowed || none.iter().any(|c| c.is_empty())
                         })
                 });
-                if impossible {
+                if impossible && !O::ACTIVE {
                     continue;
                 }
                 sets.push(BoundSet {
@@ -321,6 +323,7 @@ impl<'a, O: Observer> Run<'a, O> {
                         .iter()
                         .map(|c| self.tilesets.bind_match(c))
                         .collect(),
+                    possible: !impossible,
                 });
             }
             if !sets.is_empty() {
@@ -414,9 +417,16 @@ impl<'a, O: Observer> Run<'a, O> {
             };
             area_of.push(area);
         }
+        // A set that never holds needs no anchor.
         let candidates: Vec<Vec<Vec<Anchor>>> = rules
             .iter()
-            .map(|rule| rule.sets.iter().map(anchor_candidates).collect())
+            .map(|rule| {
+                rule.sets
+                    .iter()
+                    .filter(|set| set.possible)
+                    .map(anchor_candidates)
+                    .collect()
+            })
             .collect();
         let mut index = AnchorIndex::new(
             &self.targets,
@@ -477,6 +487,48 @@ impl<'a, O: Observer> Run<'a, O> {
         applied
     }
 
+    /// Where the observer asks `rule` to be tried besides its anchors' positions, as keys; a
+    /// position off its lattice or where it may not be tried is reported as such.
+    fn extra_keys(
+        &mut self,
+        rule: RuleRef,
+        area: &MatchArea,
+        options: &crate::rulemap::RuleOptions,
+    ) -> Vec<ScanKey> {
+        if !O::ACTIVE {
+            return Vec::new();
+        }
+        let positions = self.observer.extra_positions(rule).to_vec();
+        let mut keys = Vec::new();
+        for p in positions {
+            if !anchor::on_lattice(p, options) {
+                self.attempted(rule, p, Outcome::OffLattice);
+            } else if let Some(key) = area.key(p) {
+                keys.push(key);
+            } else {
+                self.attempted(rule, p, Outcome::OutsideMap);
+            }
+        }
+        keys
+    }
+
+    /// Whether a rule its `Probability` skips at `p` is skipped; an observer is shown the
+    /// checks, which say whether it would have matched.
+    fn skips(&mut self, run: &RuleMapRun<'_>, rule: &BoundRule<'_>, p: IVec2) -> bool {
+        let rule_ref = RuleRef {
+            rule_map: run.index,
+            rule: rule.index,
+        };
+        if !self.skipped(rule_ref, rule.rule.options.probability, p) {
+            return false;
+        }
+        if O::ACTIVE {
+            let _would_match = self.holds(run, rule, p);
+        }
+        self.attempted(rule_ref, p, Outcome::SkippedByProbability);
+        true
+    }
+
     /// The positions where a rule matches, against the layers as they are.
     fn collect_matches(
         &mut self,
@@ -491,21 +543,30 @@ impl<'a, O: Observer> Run<'a, O> {
             rule: rule.index,
         };
         let options = rule.rule.options;
+        let extra = self.extra_keys(rule_ref, area, &options);
         let keys: Vec<ScanKey> = match anchors {
-            Some(anchors) => anchored_positions(
-                anchors,
-                index,
-                area,
-                &options,
-                run.rereads_border(rule.rule.input_box),
-            ),
+            Some(anchors) => {
+                let mut keys = anchored_positions(
+                    anchors,
+                    index,
+                    area,
+                    &options,
+                    run.rereads_border(rule.rule.input_box),
+                );
+                if !extra.is_empty() {
+                    keys.extend(extra);
+                    keys.sort_unstable();
+                    keys.dedup();
+                }
+                keys
+            }
+            // The lattice holds every position the observer may add.
             None => area.lattice(&options).collect(),
         };
         let mut found = Vec::new();
         for key in keys {
             let p = key.position();
-            if self.skipped(rule_ref, options.probability, p) {
-                self.attempted(rule_ref, p, Outcome::SkippedByProbability);
+            if self.skips(run, rule, p) {
                 continue;
             }
             if self.holds(run, rule, p) {
@@ -532,13 +593,13 @@ impl<'a, O: Observer> Run<'a, O> {
             rule: rule.index,
         };
         let options = rule.rule.options;
+        let extra = self.extra_keys(rule_ref, area, &options);
         let mut overlaps = OverlapState::default();
         let mut try_at = |run_state: &mut Self,
                           p: IVec2,
                           index: &mut AnchorIndex,
                           pending: Option<&mut Pending<'_>>| {
-            if run_state.skipped(rule_ref, options.probability, p) {
-                run_state.attempted(rule_ref, p, Outcome::SkippedByProbability);
+            if run_state.skips(run, rule, p) {
                 return;
             }
             if run_state.holds(run, rule, p) {
@@ -549,21 +610,23 @@ impl<'a, O: Observer> Run<'a, O> {
         };
         match anchors {
             Some(anchors) => {
+                let mut keys = anchored_positions(
+                    anchors,
+                    index,
+                    area,
+                    &options,
+                    run.rereads_border(rule.rule.input_box),
+                )
+                .into_iter()
+                .collect::<BTreeSet<ScanKey>>();
+                keys.extend(extra);
                 let mut pending = Pending {
                     current: ScanKey {
                         rect: 0,
                         y: i32::MIN,
                         x: i32::MIN,
                     },
-                    keys: anchored_positions(
-                        anchors,
-                        index,
-                        area,
-                        &options,
-                        run.rereads_border(rule.rule.input_box),
-                    )
-                    .into_iter()
-                    .collect::<BTreeSet<ScanKey>>(),
+                    keys,
                     anchors,
                     area,
                     options,
@@ -590,9 +653,37 @@ pub(crate) fn run<O: Observer>(
     observer: &mut O,
 ) -> Report {
     let mut report = Report::default();
+    if let Some(result) = run_rules(set, map, request, observer, &mut report) {
+        writeback::write_back(set, map, result, &mut report);
+    }
+    report
+}
+
+/// Runs `set` on `map` as `request` asks, reporting to `observer`, and leaves the map as it is:
+/// what the run would write back is in the result. `None` when the run does not start (its
+/// bindings are refused, which `report` says).
+pub(crate) fn trace<O: Observer>(
+    set: &RuleSet,
+    map: &Map,
+    request: &RunRequest,
+    observer: &mut O,
+    report: &mut Report,
+) -> Option<RunResult> {
+    run_rules(set, map, request, observer, report)
+}
+
+/// Runs the rule maps of `set` on `map` as `request` asks, without writing back; problems that
+/// stop the run or change it go to `report`. `None` when nothing is left to write back.
+fn run_rules<O: Observer>(
+    set: &RuleSet,
+    map: &Map,
+    request: &RunRequest,
+    observer: &mut O,
+    report: &mut Report,
+) -> Option<RunResult> {
     if let Some(problem) = refused_bindings(map, &request.layer_names) {
         report.problems.push(problem);
-        return report;
+        return None;
     }
     let map_rect = IRect {
         x: 0,
@@ -628,7 +719,7 @@ pub(crate) fn run<O: Observer>(
         report.incremental = true;
         if plan.exact.is_none() {
             report.rule_map_matches = vec![0; set.rule_maps().len()];
-            return report;
+            return None;
         }
         let interest = plan.interest((!map.infinite).then_some(map_rect));
         let mut run_state = Run::new(set, map, request, observer, interest, Some(plan));
@@ -636,9 +727,7 @@ pub(crate) fn run<O: Observer>(
         for index in 0..set.rule_maps().len() {
             run_state.run_rule_map(index, &region, false);
         }
-        let state = writeback::RunResult::from_run(run_state);
-        writeback::write_back(set, map, state, &mut report);
-        return report;
+        return Some(RunResult::from_run(run_state));
     }
     let mut region = match &request.area {
         Area::Whole | Area::Edit(_) => whole(),
@@ -667,9 +756,7 @@ pub(crate) fn run<O: Observer>(
             }
         }
     }
-    let state = writeback::RunResult::from_run(run_state);
-    writeback::write_back(set, map, state, &mut report);
-    report
+    Some(RunResult::from_run(run_state))
 }
 
 /// Whether `region` holds every cell of `rect`.

@@ -16,6 +16,7 @@ mod analysis;
 mod bx;
 mod cell_set;
 mod engine;
+mod explain;
 pub mod files;
 pub mod layers;
 mod object_cells;
@@ -30,6 +31,10 @@ mod rules;
 pub use analysis::{MissingLayer, TilesetCopy};
 pub use engine::{
     Area, LayerNames, LayerNamesBuilder, NameBinding, RunRequest, RunRequestBuilder, Unbound,
+};
+pub use explain::{
+    AttemptOutcome, CellWrite, ConditionCheck, Explanation, LayerAtCell, PictureLayer, PictureRole,
+    RuleAttempt, RuleMatches, RulePicture, RuleSummary, UnnamedTile,
 };
 pub use files::Error;
 pub use observer::{Attempt, Check, Condition, NoObserver, Observer, Outcome, Write, Writer};
