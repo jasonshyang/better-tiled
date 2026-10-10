@@ -46,8 +46,11 @@ impl TestWindow {
     pub(crate) fn run_as(data: &Path, pid: u32) -> TestWindow {
         let mut startup = Startup::from_folder(Cli::default(), data).unwrap();
         startup.pid = pid;
+        // Frames a 60th of a second apart, as a person's are: two clicks a few frames apart are
+        // a double click.
         let harness = Harness::builder()
             .with_size(egui::vec2(1280.0, 800.0))
+            .with_step_dt(1.0 / 60.0)
             .build_eframe(|cc| App::without_gpu(&cc.egui_ctx, startup).unwrap());
         let mut window = TestWindow { harness };
         window.settle();
@@ -76,6 +79,23 @@ impl TestWindow {
             panic!("no widget is labelled “{label}”");
         };
         node.click();
+        self.settle();
+    }
+
+    /// Double-clicks the first widget labelled `label`.
+    pub(crate) fn double_click(&mut self, label: &str) {
+        let node = self.harness.get_all_by_label(label).next();
+        let Some(node) = node else {
+            panic!("no widget is labelled “{label}”");
+        };
+        node.click();
+        node.click();
+        self.settle();
+    }
+
+    /// Types text into the focused text field.
+    pub(crate) fn type_text(&mut self, text: &str) {
+        self.harness.event(egui::Event::Text(text.to_owned()));
         self.settle();
     }
 

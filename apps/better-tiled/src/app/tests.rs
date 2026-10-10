@@ -86,6 +86,39 @@ fn layer_toggles_are_undoable_edits() {
 }
 
 #[test]
+fn a_layer_is_renamed_in_place_and_the_rename_undoes() {
+    let scratch = Scratch::new("window-rename-layer").unwrap();
+    let Some(path) = desert(&scratch) else {
+        return;
+    };
+    let mut window = TestWindow::with_data(&scratch.join("data"));
+    window.drop_file(&path);
+    let name = |window: &TestWindow| {
+        let doc = window.editor().current().unwrap();
+        window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .layer(LayerId(1))
+            .unwrap()
+            .name
+            .clone()
+    };
+    window.double_click("Ground");
+    window.press(command(), egui::Key::A);
+    window.type_text("Sand");
+    window.press(egui::Modifiers::NONE, egui::Key::Enter);
+    assert_eq!(name(&window), "Sand");
+    // Escape drops what was typed.
+    window.double_click("Sand");
+    window.type_text("stone");
+    window.press(egui::Modifiers::NONE, egui::Key::Escape);
+    assert_eq!(name(&window), "Sand");
+    window.press(command(), egui::Key::Z);
+    assert_eq!(name(&window), "Ground");
+}
+
+#[test]
 fn shortcuts_run_commands() {
     let scratch = Scratch::new("window-shortcuts").unwrap();
     let Some(path) = desert(&scratch) else {
