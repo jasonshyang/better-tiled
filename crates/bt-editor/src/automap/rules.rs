@@ -9,6 +9,7 @@ use std::sync::Arc;
 use bt_automap::{Area, IdleRuleMap, Report, RuleSet};
 use bt_core::{Map, Project};
 
+use super::explaining::Explained;
 use super::live::LiveResult;
 use crate::document::DocumentId;
 use crate::store::AssetId;
@@ -35,6 +36,8 @@ pub(crate) struct AutoMapState {
     pub(crate) saved: HashMap<DocumentId, Arc<Map>>,
     /// The cell the Explain tool chose in each document.
     pub(crate) explaining: HashMap<DocumentId, glam::IVec2>,
+    /// What the rules do at that cell, with what it was made from.
+    pub(crate) explained: HashMap<DocumentId, Explained>,
 }
 
 impl Default for AutoMapState {
@@ -47,6 +50,7 @@ impl Default for AutoMapState {
             live: HashMap::new(),
             saved: HashMap::new(),
             explaining: HashMap::new(),
+            explained: HashMap::new(),
         }
     }
 }

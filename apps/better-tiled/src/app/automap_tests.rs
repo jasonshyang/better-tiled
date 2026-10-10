@@ -142,8 +142,15 @@ fn the_explain_tool_opens_the_automap_panel_on_the_cell_clicked() {
         scratch.path(),
         "a.tmx",
         UVec2::new(3, 2),
-        &[("ground", "0 0 0\n0 0 0")],
+        &[("ground", "0 0 0\n0 0 0"), ("top", ". . .\n. . .")],
     );
+    write_tiles_map(
+        scratch.path(),
+        "flowers.tmx",
+        UVec2::new(1, 1),
+        &[("input_ground", "0"), ("output_top", "6")],
+    );
+    std::fs::write(scratch.join("rules.txt"), "flowers.tmx\n").unwrap();
     let mut window = TestWindow::with_data(&scratch.join("data"));
     window.drop_file(&map);
     let doc = window.editor().current().unwrap();
@@ -161,4 +168,6 @@ fn the_explain_tool_opens_the_automap_panel_on_the_cell_clicked() {
         window.shows("Explaining cell 2, 1"),
         "the AutoMap panel is shown"
     );
+    assert!(window.shows("If AutoMap ran now"));
+    assert!(window.shows("✔ rule 1 of flowers.tmx applied at 2, 1"));
 }

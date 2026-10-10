@@ -8,6 +8,7 @@ use bt_automap::{Area, IdleRuleMap, Problem, RuleSet, Severity};
 use bt_editor::{ActionId, AutoMapRules, DocumentId, Editor, Intent, LastRun};
 use bt_utils::text::{and_list, plural};
 
+use super::automap_explain::show_explanations;
 use super::automap_live::show_live;
 use super::problem_line::problem_line;
 
@@ -56,6 +57,7 @@ fn show_explaining(ui: &mut egui::Ui, editor: &Editor, doc: DocumentId) {
     match editor.explained_cell(doc) {
         Some(cell) => {
             ui.label(format!("Explaining cell {}, {}", cell.x, cell.y));
+            show_explanations(ui, editor, doc);
         }
         None => {
             let key = editor

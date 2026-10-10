@@ -2,6 +2,7 @@
 //! tileset is shown, a name being edited) and returns intents; none changes the editor.
 
 mod automap;
+mod automap_explain;
 mod automap_live;
 mod custom_rows;
 mod layers;

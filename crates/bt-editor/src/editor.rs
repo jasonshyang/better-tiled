@@ -361,6 +361,7 @@ impl Editor {
             self.follow_document(doc);
         }
         effects.extend(self.sync_live());
+        self.sync_explanations();
         effects
     }
 

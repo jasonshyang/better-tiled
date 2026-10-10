@@ -800,3 +800,97 @@ fn a_run_that_does_nothing_says_which_layers_it_reads_are_empty() {
     assert_eq!(last.idle.len(), 1);
     assert_eq!(last.idle[0].empty_layers, ["ground"]);
 }
+
+#[test]
+fn the_explain_tool_explains_a_run_now_the_last_run_or_each_live_run() {
+    use bt_automap::{AttemptOutcome, Writer};
+    use bt_editor::ExplainedRun;
+
+    let (scratch, map) = folder_with_rules("bt-editor-automap-explain", 6);
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(
+        &mut editor,
+        Intent::ExplainCell {
+            doc,
+            cell: IVec2::new(1, 0),
+        },
+    );
+    let [now] = editor.cell_explanations(doc) else {
+        panic!("one explanation");
+    };
+    assert_eq!(now.of, ExplainedRun::RunNow);
+    let top = now
+        .explanation
+        .layers
+        .iter()
+        .find(|l| l.layer == "top")
+        .unwrap();
+    assert!(top.before.is_empty());
+    assert_eq!(top.after.tile().0, 6, "the flower a run would place");
+    assert!(matches!(
+        now.explanation.writes[0].by,
+        Writer::Rule { position, .. } if position == IVec2::new(1, 0)
+    ));
+    assert!(matches!(
+        now.explanation.attempts[0].outcome,
+        AttemptOutcome::Applied { .. }
+    ));
+
+    // Right after AutoMap ran, that run is explained, on the map before it.
+    apply(&mut editor, Intent::Run(ActionId::AutoMap));
+    let [last] = editor.cell_explanations(doc) else {
+        panic!("one explanation");
+    };
+    assert_eq!(last.of, ExplainedRun::LastRun);
+    let top = last
+        .explanation
+        .layers
+        .iter()
+        .find(|l| l.layer == "top")
+        .unwrap();
+    assert!(top.before.is_empty(), "before the run");
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+
+    // With AutoMap layers on, each run, in the map's layer names.
+    apply(&mut editor, Intent::Run(ActionId::LiveAutoMap));
+    let [live] = editor.cell_explanations(doc) else {
+        panic!("one explanation per run");
+    };
+    assert_eq!(live.of, ExplainedRun::Live(0));
+    assert!(live.explanation.layers.iter().any(|l| l.layer == "top"));
+}
+
+#[test]
+fn an_explanation_says_which_condition_failed() {
+    use bt_automap::{AttemptOutcome, Condition};
+
+    let (scratch, map) = folder_with_rules("bt-editor-automap-explain-fail", 6);
+    write_tiles_map(
+        scratch.path(),
+        "a.tmx",
+        UVec2::new(3, 2),
+        &[("ground", "0 1 0\n0 0 0"), ("top", ". . .\n. . .")],
+    );
+    let (mut editor, doc) = open(&scratch, &map);
+    apply(
+        &mut editor,
+        Intent::ExplainCell {
+            doc,
+            cell: IVec2::new(1, 0),
+        },
+    );
+    let [now] = editor.cell_explanations(doc) else {
+        panic!("one explanation");
+    };
+    let attempt = &now.explanation.attempts[0];
+    assert_eq!(attempt.outcome, AttemptOutcome::NoMatch);
+    let check = &attempt.checks[0];
+    assert_eq!(check.layer, "ground");
+    assert_eq!(check.condition, Condition::AnyOf);
+    assert!(!check.holds);
+    assert_eq!(
+        check.found.tile().0,
+        1,
+        "tile 1 is not the sand the rule reads"
+    );
+}

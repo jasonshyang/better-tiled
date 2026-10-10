@@ -10,6 +10,7 @@ mod reading;
 mod rules;
 mod saving;
 
+pub use explaining::{CellExplanation, ExplainedRun};
 pub use job::{RulesJob, RulesLoaded};
 pub use live::LiveEdit;
 pub(crate) use rules::AutoMapState;
