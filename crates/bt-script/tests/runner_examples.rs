@@ -172,6 +172,20 @@ fn the_sewers_automap_layers_started_by_a_script_make_the_result_from_what_was_p
             .is_some_and(|p| !p.is_empty())
     );
 
+    // Shapes read the map as it shows: the floor the rules made is there to name, and goes
+    // once what the rules read is cleared.
+    let script = parse_script(
+        "define floor = area where sewer-tileset:12\nclear all layer set\ndefine \
+                      gone = area where sewer-tileset:12",
+    )
+    .unwrap();
+    let shapes = run_script(&script, &input, &mut loader).unwrap();
+    assert_eq!(
+        notes(&shapes),
+        ["line 3: define gone: the area has no cells"],
+        "the first area has the rules' floor, the second none"
+    );
+
     // An object the rules placed can't be edited.
     let placed: Vec<ObjectId> = object_ids(&started.shown)
         .into_iter()
