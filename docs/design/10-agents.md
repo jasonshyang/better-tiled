@@ -1,10 +1,11 @@
 # Agents — `bt-script` and `apps/bt`
 
-*2026-10-09. The design of the command line for coding agents: the `bt` program, the script
-language behind `bt edit`, the names, shapes and feet that let an agent speak of a map without
-tile ids, the typed reports, the checks, and the guide that is the only documentation an agent
-gets. The high-level design (`00-high-level-design.md`, §11) states the goals and the design
-rules; this doc says how they are kept.*
+*2026-10-09; as built at the end of M4 (§17), 2026-10-11. The design of the command line for
+coding agents: the `bt` program, the script language behind `bt edit`, the names, shapes and
+feet that let an agent speak of a map without tile ids, the typed reports, the checks, and the
+guide that is the only documentation an agent gets. The high-level design
+(`00-high-level-design.md`, §11) states the goals and the design rules; this doc says how they
+are kept.*
 
 ## 1. Scope
 
@@ -532,3 +533,75 @@ cells count); a definition lasts one script unless it is in a `--with` file.
 | The packs | a chamber built by script on the Highlands pack reads as it looks in `view`; the AutoMap rules reach their output through bindings; AutoMap layers keep what was painted and the file gets what the rules make |
 | Guide | every command and option named in the guide exists and vice versa; the example script runs |
 | Agents | a manual gate before a release: fresh Opus agents, one brief and `bt guide`, on each kind of map above; results checked with `check` and renders, never by the agent's own report |
+
+## 17. As built at M4
+
+M4 built `bt-script`, `apps/bt` and the editor's side of §13 (`11-live-link.md`, §14). Every
+command of §4.1 runs but `godot`, which comes with the Godot export (M5). The decisions taken
+while building are in `decisions.md` (2026-10-11: the script language and its reports; names,
+shapes and feet; running scripts; looking and knowing; `bt edit` and edits through the live
+link; hidden edges).
+
+`bt-script`, module by module:
+
+| Module | What it holds |
+|---|---|
+| `report` | `Report`, `Section`, `Line` (`problem:`, `warning:`, `note:`), `Outcome` (a `SCHEMA` like `bt.check/1`, and `report()`), `to_json`, `to_json_pretty`, `from_json` |
+| `words`, `tally`, `property_text`, `layer_tree`, `rule_words` | the words reports share: cells, regions, points, counts capped with "and N more", values as scripts write them, layers top first, rule maps' layer names and near misses |
+| `script/` | the parser: `parse_script`, `parse_definitions`, `split_do`, `Op` and its parts, `Located`; `parse_area`, `parse_cell`, `parse_region`… for command-line shapes |
+| `names`, `context`, `error` | `Names` (§5), `Context` with `Selection` and `last`, the crate's `Error` with `NameKind` |
+| `grid`, `shapes`, `feet`, `ground` | sides and floods per orientation; `area_cells`; feet and standing cells; `GroundUnder`: what an object stands on |
+| `run/` | §8: `RunInput::builder(map, path)` (seed, selection, AutoMap layers, definitions, rules read, view) and `run_script` giving `EditResult { painted, shown, setup, layers, setup_changed, outcome }` or `RunError`; `defined_names` for `--with` |
+| `changes/`, `edit_report`, `diff` | `MapChanges::between`; `EditOutcome` (`bt.edit/1`) with `Saved`; `DiffOutcome` |
+| `check`, `hidden_edges`, `opacity` | `CheckOutcome` and `Problem`; `made_by`; opaque edges over other ground; `EdgeMeter` |
+| `info`, `at`, `objects`, `view` (+`symbols`, `view_ids`, `view_corners`), `catalog` (+`catalog_sprites`, `catalog_tiles`, `sheet`, `tile_pictures`), `regions`, `explain_text`, `create`, `picture` | the Look and Know outcomes of §10 |
+| `export`, `resolved/` | `ExportOutcome`; the resolved JSON (`ResolvedRequest`, `RESOLVED_FORMAT` "bt resolved map 1", `RESOLVED_SCHEMA`) |
+| `history` | the versions `bt undo` restores (§12) |
+
+`apps/bt`: `cli` (the table), `run` (a command's arguments, folders and the editors, found once
+when first needed), `exit` (`Status`, `Printed` with a failure for a command that did part of what
+was asked), `output`, `folders`, `load` (`LoadedMap`, `MapCopy`), `link` (`Link`, `OpenMap`),
+`script_input` (a script's input from a loaded map; the names of `--with`), `record` (a map's
+AutoMap record: written by `edit`, kept for and put back by `undo`, taken out by `new --force`),
+`picture_file` (PNGs written atomically over the one there), `commands/*` and `guide.md`.
+
+Where it differs from the text above, or says more:
+
+- **Dependencies.** `bt-script` also uses `glam`, `serde`, `serde_json` and `thiserror`.
+  `apps/bt` depends on `bt-script`, `bt-live`, `bt-tmx`, `bt-render`, `bt-image` (pictures),
+  `bt-automap` (a map's rules for `info`, `explain` and AutoMap layers), `bt-project` (AutoMap
+  records), `bt-core` and `bt-utils`; `bt-godot` comes with M5.
+- **§4.2.** Usage errors include `bt edit`'s: several maps without `--do`; `--out`, `--render`
+  or `--mark` with several maps; a script on a terminal. `bt new` over a file without `--force`
+  is a refusal (exit 3, `bt.refused/1`). A command that did part of what was asked (`bt edit`
+  of several maps) prints what it did, then the failure, and exits 1.
+- **§4.3.** A map with unsaved changes in the editor comes with what was painted under its
+  AutoMap layers, rebuilt from the record the editor sends with the map (§13). The project file
+  a map's AutoMap record is written to is the one found above the map, else the one next to the
+  `.tiled-project` that applies.
+- **§8.** As `decisions.md` says ("Running scripts as built"): a builder and one call instead of
+  `Runner::new` and `run(op)`; the runner fills the problems the edit made and the view, so both
+  doors report the same.
+- **§9.** `EditOutcome` also holds the editor's sentence for `--mark` and the picture of
+  `--render`; with `--json`, several maps print an array.
+- **§10.** Pictures of grids other than orthogonal are framed on the region's own cells and keep
+  the shifted rows shifted when the region starts on an odd row or column. `bt render --marks`
+  draws each mark in the colour the editor drew it in. `bt explain` without rules named takes
+  the `rules.txt` beside the map, else the project's rules file; rules named are found from the
+  map's folder. `bt export MAP OUT.png` draws the whole map at its own size without rulers.
+  `--resolved` refuses an oblique map with exit 1 and leaves AutoMap's rule tiles out, with a
+  warning; it applies Tiled's export options itself (`bt-tmx` keeps its own pass to itself).
+- **§11.** Seams on staggered maps pair corners as Tiled's own filler does, so the staggered
+  isometric example lists 110 seams, which the picture shows as grass tips at diamond corners.
+- **§13.** `bt edit --render` asks the editor for the edited map as text; `--mark` adds its mark
+  to the map's marks. In the window the script runs on the connection's thread
+  (`11-live-link.md`, §14).
+- **§14.** The guide's example test builds the kind of map the example was written for from the
+  Highlands pack (mirrored into a scratch folder; `bt new` with the pack's terrain, platform and
+  sprite tilesets), runs the example's commands as written, and requires the edit to make
+  nothing `check` points out and `check` to be clean.
+
+Tests: `bt-script` 156 unit tests and 40 integration tests (`tests/runner_*.rs` on synthetic
+tilesets, Tiled's examples and the Highlands pack; `tests/reports.rs`); `apps/bt` 51, every
+command on fixtures and Tiled's examples, `bt edit` on files and against a stand-in editor, the
+guide's tests; the end-to-end tests of the live link are in `apps/better-tiled`.

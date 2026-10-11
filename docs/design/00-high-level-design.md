@@ -176,8 +176,8 @@ layer 0     bt-utils
 | `bt-live` | `bt-utils` |
 | `bt-godot` | `bt-core`, `bt-image`, `bt-project` |
 | `bt-editor` | `bt-core`, `bt-tmx`, `bt-image`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
-| `bt-script` | `bt-core`, `bt-tmx`, `bt-image`, `bt-render`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
-| `apps/bt` | `bt-script`, `bt-godot`, `bt-live`, `bt-tmx`, `bt-render` |
+| `bt-script` | `bt-utils`, `bt-core`, `bt-tmx`, `bt-image`, `bt-render`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
+| `apps/bt` | `bt-script`, `bt-godot`, `bt-live`, `bt-tmx`, `bt-render`, `bt-image` (pictures), `bt-automap` (a map's rules), `bt-project` (AutoMap records), `bt-core`, `bt-utils` |
 | `apps/better-tiled` | everything but `bt-test-data` |
 
 `bt-test-data` is a dev-dependency of any crate whose tests read the git-ignored corpora.
