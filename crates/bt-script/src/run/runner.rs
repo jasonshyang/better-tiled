@@ -10,8 +10,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_automap::RuleSet;
 use bt_automap::layers::{AutoLayers, Setup};
+use bt_automap::{RuleSet, Severity};
 use bt_core::{LayerId, Map, ObjectId};
 use bt_tmx::Loader;
 use bt_utils::IRect;
@@ -395,6 +395,21 @@ impl<'l> Runner<'l> {
         )?)
     }
 
+    /// The cells of `area` on the map as it shows, noting for `verb` when there are none.
+    pub(super) fn cells_noted(
+        &mut self,
+        area: &Area,
+        verb: &str,
+    ) -> Result<Vec<IVec2>, RunFailure> {
+        let cells = self.cells_of(area)?;
+        if cells.is_empty() {
+            self.note(format!(
+                "{verb}: the shape has no cells (outside the map, or nothing matched)"
+            ));
+        }
+        Ok(cells)
+    }
+
     /// The objects `target` stands for, of what was painted. On a map with AutoMap layers, an
     /// object the rules placed is refused with the ways out.
     pub(super) fn objects_of(&mut self, target: &ObjectRef) -> Result<Vec<ObjectId>, RunFailure> {
@@ -437,6 +452,15 @@ impl<'l> Runner<'l> {
         self.note_strips_still_empty();
         self.shown_stale = true;
         self.refresh_shown();
+        if let Some(auto) = &self.auto {
+            let problems: Vec<String> = auto
+                .layers
+                .problems()
+                .filter(|problem| problem.severity() != Severity::Note)
+                .map(|problem| format!("AutoMap layers: {}", problem.text))
+                .collect();
+            self.warnings.extend(problems);
+        }
         let painted = Arc::new(self.map);
         let (shown, setup, layers) = match self.auto {
             Some(auto) => (

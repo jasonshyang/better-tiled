@@ -38,8 +38,10 @@ impl Runner<'_> {
                 continue;
             }
             for part in parts {
+                // A material's part paints on its own layer, as `paint` does; a terrain on the
+                // legend's.
                 for found in self.names.material(&part.terrain)? {
-                    let layer = part.layer.as_ref().or(found.layer.as_ref()).cloned();
+                    let layer = found.layer.as_ref().or(part.layer.as_ref()).cloned();
                     self.paint_cells(&found.terrain, &cells, layer.as_ref(), false)?;
                 }
             }

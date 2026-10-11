@@ -46,7 +46,7 @@ impl Runner<'_> {
                 refuse_sprite_options_for_pieces(flip, options)?;
                 let feet: Vec<IVec2> = match placement {
                     Placement::At(points) => points.iter().map(|p| p.floor().as_ivec2()).collect(),
-                    Placement::In(area) => self.cells_of(area)?,
+                    Placement::In(area) => self.cells_noted(area, "place")?,
                     Placement::Rect { .. } => {
                         return Err(RunFailure::refused(
                             "a piece goes by its foot cell: place PIECE at X,Y",
@@ -67,7 +67,7 @@ impl Runner<'_> {
                     Ok(())
                 }
                 Placement::In(area) => {
-                    let cells = self.cells_of(area)?;
+                    let cells = self.cells_noted(area, "place")?;
                     let mut rng = self.rng();
                     let feet: Vec<DVec2> = cells
                         .iter()
@@ -105,7 +105,7 @@ impl Runner<'_> {
             Placeables::Groups(groups) => groups,
         };
         let mut rng = self.rng();
-        let mut cells = self.cells_of(area)?;
+        let mut cells = self.cells_noted(area, "scatter")?;
         let allowed: HashSet<IVec2> = cells.iter().copied().collect();
         shuffle(&mut cells, &mut rng);
         let wanted = wanted_of(amount, cells.len());

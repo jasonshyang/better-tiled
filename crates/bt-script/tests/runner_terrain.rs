@@ -257,7 +257,7 @@ fn painting_over_another_sets_tiles_says_where() {
     let texts: Vec<String> = notes(&result);
     assert!(
         texts.iter().any(|t| t.contains("paint stone: painted over")
-            && t.ends_with("of “Land”: paint each terrain set on a layer of its own")),
+            && t.contains("of “Land”: paint each terrain set on a layer of its own (at 1,1 2,1 ")),
         "{texts:?}"
     );
 }

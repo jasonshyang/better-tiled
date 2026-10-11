@@ -42,7 +42,7 @@ impl Runner<'_> {
             return Ok(());
         };
         let mut rng = self.rng();
-        let mut cells = self.cells_of(area)?;
+        let mut cells = self.cells_noted(area, &format!("object {kind}"))?;
         shuffle(&mut cells, &mut rng);
         let wanted = usize::try_from(*count).unwrap_or(usize::MAX);
         let mut placed: Vec<DVec2> = Vec::new();

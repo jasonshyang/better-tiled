@@ -19,6 +19,10 @@ use super::error::RunFailure;
 use super::runner::Runner;
 use crate::names::{NamedTerrain, Names};
 use crate::script::{Area, LayerRef};
+use crate::words::cells_text;
+
+/// The most cells a note lists.
+const CELLS_LISTED: usize = 12;
 
 impl Runner<'_> {
     /// `paint TERRAIN SHAPE [layer L]`, or with `erase` `erase TERRAIN SHAPE [layer L]`.
@@ -111,15 +115,27 @@ impl Runner<'_> {
             });
             (missing, pushed_text)
         };
+        let replaced_cells: Vec<IVec2> = {
+            let mut cells: Vec<IVec2> = replaced.iter().flat_map(|r| r.cells.clone()).collect();
+            cells.sort_by_key(|cell| (cell.y, cell.x));
+            cells
+        };
         let replaced = replaced_text(&replaced);
         if let Some(text) = missing {
             self.note(format!("{verb} {}: {text}", terrain.name));
         }
-        if let Some(text) = pushed_text {
-            self.note(text);
+        if let (Some(text), Some(first)) = (pushed_text, pushed.first()) {
+            self.note(format!(
+                "{text} (at {})",
+                cells_text(&first.cells, CELLS_LISTED)
+            ));
         }
         if let Some(text) = replaced {
-            self.note(format!("{verb} {}: {text}", terrain.name));
+            self.note(format!(
+                "{verb} {}: {text} (at {})",
+                terrain.name,
+                cells_text(&replaced_cells, CELLS_LISTED)
+            ));
         }
         for cell in report.invalid {
             if !self.unfilled.contains(&cell) {

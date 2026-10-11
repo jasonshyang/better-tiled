@@ -223,7 +223,7 @@ impl Runner<'_> {
         spacing: f64,
     ) -> Result<(), RunFailure> {
         let mut rng = self.rng();
-        let mut cells = self.cells_of(area)?;
+        let mut cells = self.cells_noted(area, "scatter")?;
         shuffle(&mut cells, &mut rng);
         let wanted = wanted_of(amount, cells.len());
         let bounds = map_cells(&self.map);
