@@ -106,7 +106,8 @@ impl<'a> InfoRequest<'a> {
         self
     }
 
-    /// The AutoMap rules that apply to the map.
+    /// The AutoMap rules that apply to the map. A rule map is described by its own rules
+    /// instead, whatever rules file lists it.
     pub fn rules(mut self, rules: MapRules<'a>) -> InfoRequest<'a> {
         self.rules = Some(rules);
         self
@@ -515,10 +516,13 @@ pub(crate) fn object_kind(map: &Map, names: &Names, object: &bt_core::MapObject)
     object.kind_name().to_owned()
 }
 
-/// The AutoMap part of `bt info`: the rules the caller found, else the map's own rules when it is
-/// a rule map.
+/// The AutoMap part of `bt info`: a rule map's own rules (whatever rules file lists it), else
+/// the rules the caller found for the map.
 fn rules_info(request: &InfoRequest<'_>) -> Option<RulesInfo> {
     let map = request.map;
+    if is_rule_map(map) {
+        return Some(rule_map_info(request));
+    }
     match &request.rules {
         Some(MapRules::Layers {
             setup,
@@ -526,7 +530,6 @@ fn rules_info(request: &InfoRequest<'_>) -> Option<RulesInfo> {
             notes,
         }) => Some(layers_rules_info(map, setup, borrowed(rules), notes)),
         Some(MapRules::File { path, rules }) => Some(file_rules_info(map, path, borrowed(rules))),
-        None if is_rule_map(map) => Some(rule_map_info(request)),
         None => None,
     }
 }
@@ -1226,6 +1229,16 @@ mod tests {
             "{:?}",
             rules_info.notes
         );
+        // The rules.txt beside a rule map lists it: the rule map is told by its own rules.
+        let beside = replace_rules(&tiles);
+        let path = PathBuf::from("/rules/rules.txt");
+        let listed = InfoOutcome::from_request(
+            &InfoRequest::new(&rule_map, &names, "rules.tmx").rules(MapRules::File {
+                path: &path,
+                rules: Ok(&beside),
+            }),
+        );
+        assert_eq!(listed.automap.unwrap().kind, RulesKind::RuleMap);
     }
 
     #[test]

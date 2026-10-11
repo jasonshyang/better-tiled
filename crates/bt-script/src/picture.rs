@@ -280,7 +280,7 @@ impl RenderOutcome {
         if rulers {
             ruler_vectors(&mut vectors, &map, region, world, origin, scale);
         }
-        let picture = Render::of(Arc::new(map.clone()))
+        let picture = Render::of(Arc::new(map))
             .view(origin, size.as_uvec2())
             .scale(scale)
             .background(source.background_color.unwrap_or(BACKDROP))

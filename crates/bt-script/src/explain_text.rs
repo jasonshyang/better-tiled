@@ -1313,4 +1313,93 @@ mod tests {
         let text = explained.report().text();
         assert!(text.contains("set has rules-sewers:3"), "{text}");
     }
+
+    #[test]
+    fn rules_are_grouped_by_what_came_of_them_each_once_at_its_best() {
+        let rule = |index: usize| RuleRef {
+            rule_map: 0,
+            rule: index,
+        };
+        let check = |holds: bool, tile: Option<u32>| ConditionCheck {
+            input_set: 0,
+            layer: "set".into(),
+            layer_present: true,
+            at: IVec2::ZERO,
+            condition: Condition::AnyOf,
+            tiles: vec![MatchCell {
+                tile: tile.map(|id| bt_automap::TableTile {
+                    tileset: 0,
+                    tile: bt_core::TileId(id),
+                    flip: bt_core::Flip::empty(),
+                }),
+                mask: bt_core::Flip::all(),
+            }],
+            found: Cell::EMPTY,
+            before: Cell::EMPTY,
+            holds,
+        };
+        let attempt = |index: usize, outcome: AttemptOutcome, matched: bool, checks| RuleAttempt {
+            rule: rule(index),
+            position: IVec2::new(i32::try_from(index).unwrap(), 0),
+            outcome,
+            matched,
+            checks,
+        };
+        let applied = AttemptOutcome::Applied {
+            alternative: None,
+            locked: Vec::new(),
+        };
+        let explanation = Explanation {
+            cell: IVec2::ZERO,
+            layers: Vec::new(),
+            writes: vec![bt_automap::CellWrite {
+                layer: "set".into(),
+                before: Cell::EMPTY,
+                after: Cell::EMPTY,
+                by: Writer::Rule {
+                    rule: rule(0),
+                    position: IVec2::ZERO,
+                },
+            }],
+            attempts: vec![
+                // Rule 0 wrote the cell; tried elsewhere too.
+                attempt(0, applied, true, Vec::new()),
+                attempt(
+                    0,
+                    AttemptOutcome::NoMatch,
+                    false,
+                    vec![check(false, Some(1))],
+                ),
+                // Rule 1 matched but its Probability left it out.
+                attempt(1, AttemptOutcome::SkippedByProbability, true, Vec::new()),
+                // Rule 2: a tile of its holds and another fails.
+                attempt(
+                    2,
+                    AttemptOutcome::NoMatch,
+                    false,
+                    vec![check(true, Some(3)), check(false, Some(4))],
+                ),
+                // Rule 3 needs a tile where the layer is empty.
+                attempt(
+                    3,
+                    AttemptOutcome::NoMatch,
+                    false,
+                    vec![check(false, Some(5))],
+                ),
+            ],
+            applied: vec![vec![1, 0, 0, 0]],
+            unnamed: Vec::new(),
+            added_tilesets: Vec::new(),
+            problems: Vec::new(),
+        };
+        let groups = Groups::of(&explanation);
+        let rules_of = |list: &[&RuleAttempt]| list.iter().map(|a| a.rule.rule).collect::<Vec<_>>();
+        assert_eq!(rules_of(&groups.matched), [1]);
+        assert_eq!(rules_of(&groups.close), [2]);
+        assert_eq!(rules_of(&groups.others), [3]);
+        assert_eq!(
+            others_reason(&groups.others),
+            "they need tiles on set, which is empty here"
+        );
+    }
 }
