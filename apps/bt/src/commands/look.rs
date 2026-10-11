@@ -4,12 +4,13 @@ use anyhow::Context as _;
 use bt_automap::RuleSet;
 use bt_core::{LayerId, Map, ObjectId};
 use bt_script::{
-    CellOutcome, EditorCopy, InfoOutcome, InfoRequest, LayerRef, MapRules, Names, ObjectsOutcome,
+    CellOutcome, EditorCopy, InfoOutcome, InfoRequest, MapRules, Names, ObjectsOutcome,
     ObjectsRequest, parse_cell, parse_region,
 };
 use bt_utils::paths::display_name;
 
 use crate::cli::{AtArgs, MapArg, ObjectsArgs};
+use crate::commands::layers::layer_ref;
 use crate::exit::{Printed, Status};
 use crate::load::{LoadedMap, MapSource, load_map};
 use crate::output::printed;
@@ -125,7 +126,7 @@ pub(crate) fn objects(run: &Run, args: &ObjectsArgs) -> anyhow::Result<Printed> 
         request = request.of_type(kind.clone());
     }
     if let Some(layer) = &args.layer {
-        let id: LayerId = names.object_layer(map, &LayerRef::Name(layer.clone()))?;
+        let id: LayerId = names.object_layer(map, &layer_ref(layer))?;
         request = request.on_layer(id);
     }
     if !args.within.is_empty() {

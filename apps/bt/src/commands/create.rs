@@ -16,6 +16,7 @@ use crate::cli::NewArgs;
 use crate::exit::{Printed, Status};
 use crate::load::load_map;
 use crate::output::printed;
+use crate::record::{put_back_record, record_json};
 use crate::run::Run;
 
 /// What a command answers when it would write over a file it was not told to: refused (exit 3),
@@ -51,6 +52,7 @@ pub(crate) fn new_map(run: &Run, args: &NewArgs) -> anyhow::Result<Printed> {
         .map(|other| load_map(other, run))
         .transpose()?;
     let mut loader = Loader::builder().build();
+    let mut warnings: Vec<String> = Vec::new();
     let request = match (&other, size, tile) {
         (Some(other), _, _) => {
             let request = NewRequest::like(&other.map, &other.path, &path);
@@ -60,11 +62,12 @@ pub(crate) fn new_map(run: &Run, args: &NewArgs) -> anyhow::Result<Printed> {
             }
         }
         (None, Some(size), Some(tile)) => {
-            let tilesets = args
-                .tilesets
-                .iter()
-                .map(|file| external_tileset(&mut loader, file))
-                .collect::<anyhow::Result<Vec<TilesetRef>>>()?;
+            let mut tilesets = Vec::new();
+            for file in &args.tilesets {
+                let read = external_tileset(&mut loader, file)?;
+                warnings.extend(read.warnings);
+                tilesets.push(read.tileset);
+            }
             NewRequest::sized(&path, size, tile)
                 .tilesets(tilesets)
                 .layers(args.layers.clone())
@@ -83,8 +86,29 @@ pub(crate) fn new_map(run: &Run, args: &NewArgs) -> anyhow::Result<Printed> {
         };
         return printed(&refused, run.cli.json, Status::Refused);
     }
-    WriteRequest::for_map(&created.map, &path).write()?;
-    printed(&created.outcome, run.cli.json, Status::Done)
+    let had_record = args.force && record_json(&path, &run.folders)?.is_some();
+    let written = WriteRequest::for_map(&created.map, &path).write()?;
+    let mut outcome = created.outcome;
+    let written = written.iter().map(|w| format!("writing the map: {w}"));
+    for warning in warnings.into_iter().chain(written) {
+        outcome = outcome.with_warning(warning);
+    }
+    if had_record {
+        // The map that was there had AutoMap layers; what was painted under them is not the
+        // new map's.
+        put_back_record(&path, None, &run.folders).with_context(|| {
+            format!(
+                "{} was written, but the AutoMap record of the map that was there could not be \
+                 taken out of its project file",
+                display_name(&args.map)
+            )
+        })?;
+        outcome = outcome.with_warning(
+            "the map that was there had AutoMap layers: their record is gone from its project \
+             file with it",
+        );
+    }
+    printed(&outcome, run.cli.json, Status::Done)
 }
 
 /// A size option, `WxH` in positive whole numbers.
@@ -107,16 +131,32 @@ fn new_map_path(map: &Path) -> anyhow::Result<PathBuf> {
     Ok(folder.join(name))
 }
 
+/// A tileset file read for a new map, and what reading it warned about.
+struct ReadTileset {
+    /// The tileset as the new map refers to it.
+    tileset: TilesetRef,
+    /// The warnings, as the report says them.
+    warnings: Vec<String>,
+}
+
 /// The tileset file `file`, read with `loader`, as the new map refers to it: written relative
 /// to the map's folder.
-fn external_tileset(loader: &mut Loader, file: &Path) -> anyhow::Result<TilesetRef> {
+fn external_tileset(loader: &mut Loader, file: &Path) -> anyhow::Result<ReadTileset> {
     let unreadable = || format!("the tileset {} can't be read", file.display());
     let path = std::fs::canonicalize(file).with_context(unreadable)?;
     let loaded = loader.load_tileset(&path).with_context(unreadable)?;
-    Ok(TilesetRef {
-        file: Some(FileRef::new("", path)),
-        first_gid: None,
-        tileset: loaded.value,
+    let warnings = loaded
+        .warnings
+        .iter()
+        .map(|warning| format!("reading {}: {warning}", file.display()))
+        .collect();
+    Ok(ReadTileset {
+        tileset: TilesetRef {
+            file: Some(FileRef::new("", path)),
+            first_gid: None,
+            tileset: loaded.value,
+        },
+        warnings,
     })
 }
 
@@ -316,5 +356,50 @@ mod tests {
         assert_eq!(read.tilesets[0].tileset.name, "Desert");
         let ground = read.layers[0].as_tile_layer().unwrap();
         assert_eq!(ground.cells().count(), 0, "emptied");
+    }
+
+    #[test]
+    fn a_map_written_over_takes_its_automap_record_along() {
+        let scratch = Scratch::new("bt-new-record").unwrap();
+        let Some(sewers) = crate::commands::testing::sewers_with_automap_layers(&scratch) else {
+            return;
+        };
+        let project = sewers.parent().unwrap().join("better-tiled.json");
+        assert!(
+            std::fs::read_to_string(&project)
+                .unwrap()
+                .contains("sewers.tmx")
+        );
+        let folders = crate::folders::Folders {
+            home: None,
+            data: Some(scratch.join("data")),
+            locks: Some(scratch.join("locks")),
+            recovery: None,
+        };
+        let run = crate::run::Run::of_args(
+            &[
+                "new",
+                arg(&sewers),
+                "--size",
+                "4x4",
+                "--tile",
+                "16x16",
+                "--force",
+            ],
+            folders,
+        );
+        let printed = crate::run::run(&run).unwrap();
+        assert!(
+            printed
+                .text
+                .starts_with("warning: the map that was there had AutoMap layers"),
+            "{}",
+            printed.text
+        );
+        assert!(
+            !std::fs::read_to_string(&project)
+                .unwrap()
+                .contains("sewers.tmx")
+        );
     }
 }

@@ -124,6 +124,9 @@ pub struct NewOutcome {
     pub tilesets: Vec<String>,
     /// The layers the other map filled with one tile, emptied too.
     pub refill: Vec<Refill>,
+    /// What reading the tilesets, writing the map or its project file warned about, as the
+    /// caller says it.
+    pub warnings: Vec<String>,
 }
 
 /// A layer the other map filled with one tile: a backdrop to fill again.
@@ -213,6 +216,7 @@ impl NewOutcome {
             layers,
             tilesets,
             refill,
+            warnings: Vec::new(),
         };
         Ok(Created { map, outcome })
     }
@@ -299,6 +303,15 @@ fn add_layers(map: &mut Map, specs: &[String]) -> Result<(), Error> {
     Ok(())
 }
 
+impl NewOutcome {
+    /// This outcome with a warning from reading the tilesets, writing the map or its project
+    /// file.
+    pub fn with_warning(mut self, warning: impl Into<String>) -> NewOutcome {
+        self.warnings.push(warning.into());
+        self
+    }
+}
+
 impl Outcome for NewOutcome {
     const SCHEMA: &'static str = "bt.new/1";
 
@@ -342,6 +355,9 @@ impl Outcome for NewOutcome {
             )));
         }
         let mut report = Report::new();
+        for warning in &self.warnings {
+            report.add_line(Line::warning(warning.clone()));
+        }
         report.add_section(section);
         report
     }
