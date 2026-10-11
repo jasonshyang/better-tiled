@@ -91,6 +91,21 @@ fn the_sewers_rules_beside_the_map_run_once() {
     // `set=Set` binds the rules' name to the map's layer.
     let bound = edit(&renamed, &path, &mut loader, "automap set=Set").unwrap();
     assert_eq!(matches_noted(&bound), matches_noted(&result));
+    // Rules the caller read from that file are used as they are, not read again.
+    let none = Arc::new(bt_automap::RuleSet::builder().build());
+    let input = RunInput::builder(Arc::new(map.clone()), &path)
+        .rules_read(examples.join("sewer_automap/rules.txt"), none)
+        .build();
+    let script = parse_script("automap").unwrap();
+    let reused = run_script(&script, &input, &mut loader).unwrap();
+    assert_eq!(matches_noted(&reused), 0);
+    assert!(
+        notes(&reused)
+            .iter()
+            .any(|n| n.contains("automap: nothing to run")),
+        "{:?}",
+        notes(&reused)
+    );
 }
 
 #[test]
@@ -375,6 +390,48 @@ fn the_highlands_automap_layers_run_on_the_layers_bound_and_keep_what_was_painte
             .any(|n| n.ends_with("automap layers: the rules read the layer walls, which is empty")),
         "{texts:?}"
     );
+}
+
+#[test]
+fn isometric_and_staggered_maps_are_painted_and_take_objects_by_their_cells() {
+    let Some(examples) = bt_test_data::test_data("reference/tiled/examples") else {
+        return;
+    };
+    for (file, rect) in [
+        ("isometric_grass_and_water.tmx", IVec2::new(2, 2)),
+        ("isometric_staggered_grass_and_water.tmx", IVec2::new(4, 6)),
+    ] {
+        let path = examples.join(file);
+        let (map, mut loader) = read(&path);
+        let script = format!(
+            "paint water rect {},{} 3x3 layer \"Tile Layer 1\"\nlayer add things objects\nobject \
+             spawn at {}.5,{}.5",
+            rect.x,
+            rect.y,
+            rect.x + 1,
+            rect.y + 1
+        );
+        let result = edit(&map, &path, &mut loader, &script).unwrap();
+        let names = Names::of(&result.shown);
+        let tiles = result.shown.layers[0].as_tile_layer().unwrap();
+        for dy in 0..3 {
+            for dx in 0..3 {
+                let at = rect + IVec2::new(dx, dy);
+                let terrain = names.terrain_covering(&result.shown, tiles.cell(at));
+                assert_eq!(
+                    terrain.map(|t| t.name.as_str()),
+                    Some("water"),
+                    "{file}: {at}"
+                );
+            }
+        }
+        let spawn = &objects(&result.shown, "things")[0];
+        assert_eq!(
+            standing_in(&result.shown, spawn),
+            rect + IVec2::ONE,
+            "{file}"
+        );
+    }
 }
 
 /// Every object id of a map.
