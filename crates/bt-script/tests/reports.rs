@@ -73,6 +73,61 @@ fn objects_moved_and_changed_are_said_with_their_places() {
     assert_eq!(
         text,
         "level.tmx: 3 operations\n  design: -1 object: #2 spawn at 4.5,1.5\n  design: moved 1 \
-         object: #1 spawn 1.5,1.5 → 3.5,1.5\n  design: changed 1 object: #1 spawn wave=2\n"
+         object: #1 spawn 1.5,1.5 → 3.5,1.5\n  design: changed 1 object: #1 spawn wave=2\nno new \
+         seams or hidden edges, and no objects on other ground\n"
     );
+}
+
+#[test]
+fn an_edit_says_the_seams_it_made_and_shows_the_changed_area_when_asked() {
+    let level = level("bt-script-report-made");
+    let water = corners([2, 2, 2, 2]).tile().0;
+    let script = bt_script::parse_script(&format!("tile ground:{water} 5,3 layer ground")).unwrap();
+    let input = bt_script::RunInput::builder(std::sync::Arc::new(level.map.clone()), &level.path)
+        .view(None, false)
+        .build();
+    let result = bt_script::run_script(&script, &input, &mut bt_tmx::Loader::default()).unwrap();
+    let made = result.outcome.made.clone().unwrap();
+    assert_eq!(made.len(), 1, "{made:?}");
+    assert!(
+        made[0].starts_with("new: ground: 4 terrain seams"),
+        "{made:?}"
+    );
+    let view = result.outcome.view.clone().unwrap();
+    assert!(view.starts_with("the changed area"), "{view}");
+    let text = result.outcome.report().text();
+    assert!(
+        text.starts_with("problem: new: ground: 4 terrain seams"),
+        "{text}"
+    );
+    assert!(text.contains(&view), "{text}");
+    assert!(!text.contains("no new seams"), "{text}");
+}
+
+#[test]
+fn definitions_name_areas_for_commands_that_read_shapes() {
+    let level = level("bt-script-report-defined");
+    let definitions = bt_script::parse_definitions("define pond = area rect 2,2 3x2").unwrap();
+    let input = bt_script::RunInput::builder(std::sync::Arc::new(level.map.clone()), &level.path)
+        .definitions(definitions)
+        .build();
+    let names = bt_script::defined_names(&input, &mut bt_tmx::Loader::default()).unwrap();
+    let area = bt_script::parse_area("where pond").unwrap();
+    let cells =
+        bt_script::area_cells(&level.map, &names, &bt_script::Context::new(1), &area).unwrap();
+    assert_eq!(cells.len(), 6);
+    let painting = bt_script::parse_definitions("paint water all");
+    let refused = match painting {
+        Ok(script) => {
+            let input =
+                bt_script::RunInput::builder(std::sync::Arc::new(level.map.clone()), &level.path)
+                    .definitions(script)
+                    .build();
+            bt_script::defined_names(&input, &mut bt_tmx::Loader::default())
+                .err()
+                .map(|error| error.to_string())
+        }
+        Err(error) => Some(error.to_string()),
+    };
+    assert!(refused.is_some(), "a definitions file holds define lines");
 }

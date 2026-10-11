@@ -19,9 +19,10 @@ use bt_utils::rng::Rng;
 use glam::{IVec2, UVec2};
 
 use super::error::{RunError, RunFailure};
-use super::input::{RulesRead, RunInput};
+use super::input::{ChangedView, RulesRead, RunInput};
 use super::result::EditResult;
 use crate::changes::{MapChanges, Resized, changed_cells};
+use crate::check::made_by;
 use crate::context::Context;
 use crate::edit_report::{EditOutcome, LineNote};
 use crate::feet::Feet;
@@ -30,6 +31,7 @@ use crate::names::Names;
 use crate::report::LineKind;
 use crate::script::{Area, Located, ObjectRef, Op, Script};
 use crate::shapes::area_cells;
+use crate::view::{ViewOutcome, ViewRequest};
 
 /// The most characters of an operation a label holds.
 const LABEL_LENGTH: usize = 70;
@@ -166,6 +168,20 @@ impl<'l> Runner<'l> {
 
     /// Runs the `--with` definitions, then the script, then says what it did.
     pub(super) fn run(mut self, script: &Script, input: &RunInput) -> Result<EditResult, RunError> {
+        self.run_definitions(input)?;
+        for located in &script.ops {
+            self.step(located)?;
+        }
+        Ok(self.finish(script, input))
+    }
+
+    /// The names of the map and what the definitions defined.
+    pub(super) fn into_names(self) -> Names {
+        self.names
+    }
+
+    /// Runs the `--with` definitions, which hold define lines and seeds only.
+    pub(super) fn run_definitions(&mut self, input: &RunInput) -> Result<(), RunError> {
         if let Some(definitions) = &input.definitions {
             self.in_definitions = true;
             for located in &definitions.ops {
@@ -191,10 +207,7 @@ impl<'l> Runner<'l> {
             self.script_seed = input.seed;
             self.ordinal = 0;
         }
-        for located in &script.ops {
-            self.step(located)?;
-        }
-        Ok(self.finish(script, input))
+        Ok(())
     }
 
     /// Runs one operation.
@@ -490,6 +503,22 @@ impl<'l> Runner<'l> {
         let cells = sorted_cells(cells);
         let painted_changed = painted_changes.as_ref().is_some_and(|p| !p.is_empty());
         let changed = !changes.is_empty() || painted_changed || self.auto_changed;
+        let made = made_by(&moved_shown, &shown, &cells)
+            .lines()
+            .into_iter()
+            .map(|line| line.text)
+            .collect();
+        let view = match input.view.filter(|_| !cells.is_empty()) {
+            Some(asked) => match changed_view(&shown, &self.names, &cells, asked) {
+                Ok(view) => Some(view),
+                Err(error) => {
+                    self.warnings
+                        .push(format!("the changed area can't be shown as text: {error}"));
+                    None
+                }
+            },
+            None => None,
+        };
         let outcome = EditOutcome {
             map: bt_utils::paths::display_name(&self.path),
             label: label(script),
@@ -502,8 +531,8 @@ impl<'l> Runner<'l> {
             cells,
             changed,
             warnings: self.warnings,
-            made: None,
-            view: None,
+            made: Some(made),
+            view,
             saved: None,
         };
         EditResult {
@@ -555,6 +584,22 @@ impl<'l> Runner<'l> {
             });
         }
     }
+}
+
+/// The area around `cells` on `shown` as text, as `asked`.
+fn changed_view(
+    shown: &Map,
+    names: &Names,
+    cells: &[IVec2],
+    asked: ChangedView,
+) -> Result<String, crate::error::Error> {
+    let mut request = ViewRequest::new(shown, names)
+        .around(cells)
+        .runs(asked.runs);
+    if let Some(by) = asked.by {
+        request = request.by(by);
+    }
+    Ok(ViewOutcome::from_request(&request)?.text)
 }
 
 /// Whether an operation may change the map (definitions and seeds do not).

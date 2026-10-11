@@ -94,7 +94,8 @@ pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
 };
 pub use run::{
-    DEFAULT_SEED, EditResult, RunError, RunFailure, RunInput, RunInputBuilder, run_script,
+    DEFAULT_SEED, EditResult, RunError, RunFailure, RunInput, RunInputBuilder, defined_names,
+    run_script,
 };
 pub use script::{
     Amount, Area, Assignment, Binding, CopySource, Drawing, Flip, Geometry, IdRange, LayerOp,

@@ -27,6 +27,7 @@ pub use result::EditResult;
 
 use bt_tmx::Loader;
 
+use crate::names::Names;
 use crate::script::Script;
 
 /// Runs `script` on a copy of `input`'s map, reading the maps and rules it names through
@@ -39,4 +40,12 @@ pub fn run_script(
     loader: &mut Loader,
 ) -> Result<EditResult, RunError> {
     runner::Runner::new(input, loader).run(script, input)
+}
+
+/// The names of `input`'s map once its `--with` definitions have run: what `bt areas`, `reach`,
+/// `mark` and `render` read shapes with. Nothing the definitions did to the map is kept.
+pub fn defined_names(input: &RunInput, loader: &mut Loader) -> Result<Names, RunError> {
+    let mut runner = runner::Runner::new(input, loader);
+    runner.run_definitions(input)?;
+    Ok(runner.into_names())
 }

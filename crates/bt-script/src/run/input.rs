@@ -1,7 +1,8 @@
 //! What a script runs on (`10-agents.md`, §8; `11-live-link.md`, §9.2): the map as painted and
 //! where its file is, the script's seed, what the editor has selected, the map's AutoMap layers,
-//! the definitions of a `--with` file, and rules the caller has read for the map already. `bt`
-//! builds it from a file, the editor from the base of an external edit.
+//! the definitions of a `--with` file, rules the caller has read for the map already, and whether
+//! the report shows the changed area as text. `bt` builds it from a file, the editor from the
+//! base of an external edit.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use bt_core::Map;
 
 use crate::context::Selection;
 use crate::script::Script;
+use crate::view::ViewBy;
 
 /// The seed a script draws from unless the caller gives one.
 pub const DEFAULT_SEED: u64 = 1;
@@ -26,6 +28,7 @@ pub struct RunInput {
     pub(crate) automap: Option<AutoMapInput>,
     pub(crate) definitions: Option<Script>,
     pub(crate) rules_read: Option<RulesRead>,
+    pub(crate) view: Option<ChangedView>,
 }
 
 /// A map's AutoMap layers going into a script.
@@ -37,6 +40,15 @@ pub(crate) struct AutoMapInput {
     pub(crate) rules: Arc<RuleSet>,
     /// The map as it shows now: what the rules made of what was painted.
     pub(crate) shown: Arc<Map>,
+}
+
+/// The changed area as text in the report (`--view`).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ChangedView {
+    /// What a character stands for; the view's own choice when none.
+    pub(crate) by: Option<ViewBy>,
+    /// Each row's runs after it.
+    pub(crate) runs: bool,
 }
 
 /// Rules the caller has read for the map, and the file they came from.
@@ -60,6 +72,7 @@ impl RunInput {
                 automap: None,
                 definitions: None,
                 rules_read: None,
+                view: None,
             },
         }
     }
@@ -131,6 +144,13 @@ impl RunInputBuilder {
             path: path.into(),
             rules,
         });
+        self
+    }
+
+    /// The report shows the changed area as text (`--view`): `by` what a character stands for
+    /// (the view's own choice when none), with each row's runs when `runs`.
+    pub fn view(mut self, by: Option<ViewBy>, runs: bool) -> RunInputBuilder {
+        self.input.view = Some(ChangedView { by, runs });
         self
     }
 
