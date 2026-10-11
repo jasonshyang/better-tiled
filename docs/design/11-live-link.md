@@ -233,8 +233,8 @@ the way, and the rest of `bt editor`'s output stands.
 
 ## 14. As built at M4
 
-M4 built the crate; the editor's server and handler, the editor core's external edits and
-`bt`'s commands over the link come next, on this API. What exists:
+M4 built the crate, the editor's server and handler, the editor core's external edits and
+`bt`'s commands over the link. The crate:
 
 | Module | What it holds |
 |---|---|
@@ -304,6 +304,38 @@ holds every open socket until it runs its program, which kept another test's clo
 listening; an exited process is an id no system gives. Another user's folder is `/`, when it is
 root's and the tests are not run as root.
 
-Not here yet: the editor's handler and jobs (`06-application.md`, §11), the external edits
-(`05-editor-core.md`, §17), `bt`'s routing and its `editor`, `mark`, `open` and `save`
-(`10-agents.md`, §13), the end-to-end tests, and `RememberExport`.
+**The window's side** (`apps/better-tiled`, `live/` and `app/live.rs`):
+
+| Module | What it holds |
+|---|---|
+| `live` | `LiveLink`: the listener, started and stopped by the preference "Let bt work with the open maps" (`General.live_link`) and started again when its socket vanished; the jobs the connections asked for |
+| `live/handler` | `LiveHandler`: each request becomes a job for the window (`Status`, `Snapshot`, `Undo`, `Mark`, `Open`, `Save`, `Screenshot`), or the edit flow |
+| `live/edit` | the edit flow of §9.2 on the connection's thread, against a `Window` (prepare a base, apply a result), so its reruns are tested with a scripted window |
+| `live/jobs` | `LiveJob` and `Answered`: what the window is asked and what it answers, a base and an apply among them |
+| `app/live` | the jobs done in `logic` each frame; held jobs for an edit or an undo during a stroke, a map being opened, a screenshot arriving |
+
+- **The edit flow.** The handler parses the script and the prelude (whose errors say `--with
+  file, line N`) and the view's `by` before asking the window anything. The base comes with the
+  editor's tilesets (unsaved edits included, put into the script's loader), the selection, the
+  rules the editor read (passed as rules already read; read again through the loader when the
+  editor has none for the AutoMap layers' file yet) and the map as it shows. A run that panics
+  answers "the script crashed inside the editor". The report's `saved` says `in_editor`, a dry
+  run or nothing changed; `bt` replaces the map's path in it with the path as typed. `Apply`
+  carries the changed area: once it lands the canvas outlines it for three seconds, dark under
+  light and fading, and the status bar flashes `bt: LABEL`.
+- **`bt`'s side** (`apps/bt`): `Link` finds the editors once per command, when one first needs
+  them; `load` reads the editor's copy of a map with unsaved changes (`MapCopy`), and a file an
+  editor that did not answer may hold unsaved (its recovery snapshot names the map) is left
+  alone. `edit`, `undo`, `mark`, `open`, `save`, `editor` and `diff MAP` go through the link;
+  `bt edit --mark` adds its mark to the map's marks.
+- **End to end** (`apps/better-tiled/src/app/live_tests.rs`, the real window stepped by
+  `egui_kittest`, `bt`'s client on a thread): the status of the open maps and their unsaved
+  changes; marks replace, add, move and clear and never switch the map shown; open, save and
+  nothing to undo; the preference stops and starts the listener; an edit lands as one undo step
+  that `bt undo` takes back, with its label flashed; a dry run sends the cells it would change
+  and the map, and a failing script leaves the editor alone; `selection` is what the person
+  selected, and their edit after `bt`'s keeps `bt undo` off; a map with AutoMap layers is
+  edited as what was painted. `live/edit` tests a conflict's rerun and the three runs' limit;
+  `apps/bt` tests `bt edit` routed to an editor (a stand-in server) with `--mark`.
+
+Not here yet: `RememberExport`, which comes with the Godot export (M5).

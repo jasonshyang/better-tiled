@@ -1,7 +1,8 @@
 # The application — `apps/better-tiled`
 
 *2026-10-09; the M1 part as built at the end of M1 (§1.1), the M2 part at the end of M2
-(§1.2) and the M3 part at the end of M3 (§1.3), all 2026-10-10. The design of the window:
+(§1.2) and the M3 part at the end of M3 (§1.3), all 2026-10-10, and the M4 part at the end of
+M4 (§1.4), 2026-10-11. The design of the window:
 tabs, menus, panels, dialogs, tools and the canvas, built on `bt-editor` (`05-editor-core.md`)
 and `bt-render` (`03-rendering.md`) with eframe and egui. The high-level design
 (`00-high-level-design.md`, §9) states the rule: the application holds no map logic; if it needs
@@ -205,6 +206,32 @@ M3 brought the rules into the window. What it added:
   the editor; tests use a scratch folder. Tests: `app/automap_tests.rs` (⌘M and the panel, Live
   bound from the panel, the Explain tool) and `app/m3_tests.rs`, the milestone's measure on the
   Highlands pack.
+
+### 1.4 As built at M4
+
+M4 added the live server of §11 (`11-live-link.md`, §14, has the module table):
+
+- **The listener** (`live/`): started in `logic` while the preference "Let bt work with the
+  open maps" (`General.live_link`, on by default, in Preferences ▸ General) is on, stopped when
+  it is turned off, and started again within ten seconds when its socket vanished; a listener
+  that cannot start says why once, as a warning. `Startup::live_folder` is where it listens:
+  the user's live folder, none in checks, a folder of the test's own in tests.
+- **Jobs** (`app/live.rs`, in `logic`, so they are answered while the window is hidden): the
+  status of every open document in `bt`'s words (the tool and its brush, the selection as runs,
+  the cells in view and under the pointer of the map shown, the last six undo labels, the
+  marks, the World tool and where the keys go); a snapshot of a map as it shows, with its dirty
+  tilesets; a base for an edit and its result applied, waiting out a stroke or drag; `bt undo`
+  of the last external edit; marks, focusing the view only on the map shown; `bt open`,
+  answered once the document is there; `bt save` through `Intent::SaveDocument`, an unwritten
+  tileset reported by name; a screenshot, answered when its picture arrives, refused while the
+  window is minimised.
+- **The canvas** draws the marks (each tinted and outlined in its colour, labelled above its
+  first row's left end) and, for three seconds after an edit of `bt`'s lands, the changed area's
+  outline fading; the status bar flashes `bt: LABEL`.
+
+Tests: `app/live_tests.rs`, eight end-to-end tests through a socket of the test's own (listed in
+`11-live-link.md`, §14); `TestWindow::with_live_link` and `ask_bt`, which steps the window while
+`bt`'s client waits on a thread.
 
 ## 2. Startup
 

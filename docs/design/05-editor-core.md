@@ -1,7 +1,8 @@
 # Editor core — `bt-editor`
 
 *2026-10-09; the M1 part as built at the end of M1 (§1.1), the M2 part at the end of M2
-(§1.2) and the M3 part at the end of M3 (§1.3), all 2026-10-10. The design of the crate
+(§1.2) and the M3 part at the end of M3 (§1.3), all 2026-10-10, and the M4 part at the end of
+M4 (§1.4), 2026-10-11. The design of the crate
 that is the editor without a window: what is open, how it changes, how it relates to the files
 on disk, what the user can do to it, and what the editor remembers between runs. The high-level
 design (`00-high-level-design.md`, §8) states the shape: an asset store, documents as views on
@@ -159,6 +160,34 @@ rules changed, recovered work; the three explanations and a failed condition).
 The crate now depends on `bt-terrain` (`decisions.md`, 2026-10-10): §1's first version kept the
 terrain to three ids and left the solver to the window, which could not make the transaction
 the editor makes for every tool.
+
+### 1.4 As built at M4
+
+M4 added §17, the live link's side of the editor, in `external.rs`:
+
+- `document_at(path)`, the document showing a map by its canonical path.
+- `prepare_external_edit(doc) -> Option<ExternalBase>`: the document, the map's version and
+  path, the map as painted and as it shows, the AutoMap layers' setup, the rules the editor
+  read with their file (`BaseRules`), the custom types, the external tilesets it has open with
+  their unsaved edits (`KnownTileset`, so a script reading another map gets the editor's copy),
+  and the selected cells and objects. `None` for a document that is no map.
+- `apply_external_edit(ExternalEdit { doc, base_version, painted, setup, label })`: one
+  transaction labelled by the script, refused during a stroke or drag (`Busy`) and when the
+  version moved on (`Conflict`); external tilesets the result uses that the editor does not
+  have open are opened with it. It returns the effects of `after_changes`, the epilogue every
+  intent runs (AutoMap layers derived again, notices).
+- `external_undo(doc) -> ExternalUndone { undo, effects }`, `undo` being `Undone { label,
+  earlier }`, `AlreadyUndone { label }` or `Nothing`; `NotLatest { edit, latest }` names the
+  person's edit since. The editor keeps the map each external edit left, by identity; a closed
+  document forgets its external edits and marks.
+- `set_marks(doc, marks, add)` and `marks(doc)`: `Mark { label, cells, color }`, a label marked
+  again moving its mark, colours taken in turn from `MARK_COLORS` (5), an empty list without
+  `add` clearing them. `is_stroking()` says a gesture is under way. `Intent::SaveDocument(doc)`
+  saves a document whether or not it is current, for `bt save`.
+
+Tests: `tests/external.rs` (one step labelled by the script and taken back; a conflict and a
+stroke refused; `bt undo` only while latest, and the one before after it; marks replace, add,
+move and clear).
 
 ## 2. The editor
 
@@ -590,9 +619,9 @@ into the painted map), Re-roll (a new seed) and binding changes are transactions
 The live link runs a script on a copy of the current state and hands the result back:
 
 ```
-prepare_external_edit(doc) -> ExternalBase { version, map, shown_map, setup, rules, types, selection }
-apply_external_edit(doc, base_version, map, setup, label) -> Result<(), VersionConflict>
-external_undo(doc) -> Result<(), NotLatest>
+prepare_external_edit(doc) -> Option<ExternalBase>
+apply_external_edit(ExternalEdit) -> Result<Vec<Effect>, ExternalEditError>
+external_undo(doc) -> Result<ExternalUndone, ExternalUndoError>
 ```
 
 An edit applies as one transaction labelled by the script when the map's version is still the
