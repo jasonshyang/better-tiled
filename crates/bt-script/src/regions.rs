@@ -16,7 +16,7 @@ use crate::grid::{self, Nearest, sides};
 use crate::names::Names;
 use crate::report::{Line, Outcome, Report, Section};
 use crate::shapes::map_cells;
-use crate::words::{capped_list, cell_text, cells_text, region_text};
+use crate::words::{RectJson, capped_list, cell_text, cells_text, region_text};
 
 /// The areas the text lists unless asked for all of them.
 const AREAS_SHOWN: usize = 25;
@@ -91,16 +91,6 @@ pub enum GridAxis {
     X,
     /// A row: cells of one `y`.
     Y,
-}
-
-/// How a rectangle of cells is written in JSON.
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "IRect")]
-struct RectJson {
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
 }
 
 impl AreasOutcome {

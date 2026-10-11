@@ -9,11 +9,14 @@
 //! `bt-edit`, `bt-terrain` and `bt-automap`, which port Tiled's editor code, and is
 //! GPL-3.0-or-later with them.
 
+mod changes;
 mod context;
+mod diff;
 mod error;
 mod export;
 mod feet;
 pub mod grid;
+mod ground;
 mod history;
 mod names;
 mod regions;
@@ -22,10 +25,16 @@ mod script;
 mod shapes;
 mod words;
 
+pub use changes::{
+    CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved,
+    PropertyChange, Resized, TerrainCells,
+};
 pub use context::{Context, Selection};
+pub use diff::DiffOutcome;
 pub use error::{Error, NameKind};
 pub use export::{ExportFormat, ExportOutcome};
 pub use feet::{Feet, pixel_to_point, point_to_pixel, standing_cell};
+pub use ground::{GroundUnder, StandsOn};
 pub use history::{
     EditToKeep, History, HistoryError, KEPT_PER_MAP, KeptEdit, UndoOutcome, Undone, fingerprint,
 };
@@ -48,4 +57,7 @@ pub use script::{
     parse_region, parse_script, parse_size, split_do,
 };
 pub use shapes::{area_cells, map_cells, object_cells, shape_cells};
-pub use words::{capped_list, cell_text, cells_text, number_text, point_text, region_text};
+pub use words::{
+    capped_list, cell_text, cells_text, id_ranges_text, number_text, point_text, quoted_word,
+    region_text, value_text,
+};
