@@ -16,6 +16,8 @@ pub(crate) fn run(cli: &Cli, folders: &Folders) -> anyhow::Result<Printed> {
         Command::Guide => Ok(Printed::done(GUIDE)),
         Command::Export(args) => commands::export::export(cli, args, folders.home.as_deref()),
         Command::Undo(args) => commands::undo::undo(cli, args, folders),
+        Command::Areas(args) => commands::know::areas(cli, args, folders.home.as_deref()),
+        Command::Reach(args) => commands::know::reach(cli, args, folders.home.as_deref()),
         other => bail!("{} is not built yet", command_name(other)),
     }
 }
