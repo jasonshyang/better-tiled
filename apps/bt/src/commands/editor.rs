@@ -10,7 +10,7 @@ use bt_live::{
     DocStatus, KeyboardFocus, MarkSpec, Request, Status, cells_from_runs, runs_from_cells,
 };
 use bt_script::{
-    Context, Line, Names, Outcome, Report, Section, Selection, area_cells, capped_list, cell_text,
+    Context, Line, Outcome, Report, Section, Selection, area_cells, capped_list, cell_text,
     parse_area, region_text,
 };
 use bt_utils::IRect;
@@ -287,14 +287,11 @@ pub(crate) fn mark(run: &Run, args: &MarkArgs) -> anyhow::Result<Printed> {
             focus: false,
         }
     } else {
-        if args.with.is_some() {
-            bail!("--with is not built yet");
-        }
         let Some(written) = &args.shape else {
             bail!("bt mark needs a shape, or --clear");
         };
-        let loaded = crate::load::load_map(&path, run)?;
-        let names = Names::of(&loaded.map);
+        let mut loaded = crate::load::load_map(&path, run)?;
+        let names = crate::script_input::shape_names(&mut loaded, args.with.as_deref(), None)?;
         let context = Context::new(crate::commands::know::DEFAULT_SEED).with_selection(Selection {
             cells: cells_from_runs(&open.document.selection),
             objects: open
