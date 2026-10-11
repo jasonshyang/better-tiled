@@ -15,7 +15,7 @@ mod probe;
 mod store;
 
 pub use decode::{DecodedImage, decode_bytes, decode_file, is_map_file};
-pub use encode::write_png;
+pub use encode::{encode_png, write_png};
 pub use error::Error;
 pub use key::{ColorKey, ImageInput, ImageKey, ImageRequest};
 pub use measure::{alpha_bounds, bottom_center};

@@ -13,6 +13,7 @@ mod guide_tests;
 mod link;
 mod load;
 mod output;
+mod picture_file;
 mod record;
 mod run;
 mod script_input;

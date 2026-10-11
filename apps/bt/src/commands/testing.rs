@@ -33,6 +33,13 @@ pub(crate) fn examples() -> Option<PathBuf> {
     bt_test_data::test_data("reference/tiled/examples")
 }
 
+/// Makes the file at `path` read-only, as version control locks a file.
+pub(crate) fn lock(path: &Path) {
+    let mut permissions = std::fs::metadata(path).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(path, permissions).unwrap();
+}
+
 /// A 10×6 map written as `pond.tmx` in `folder`, with the pictures of its tilesets beside it:
 /// grass with a pond of water at 3,2 4x2 on `ground` (a corner set “Land” of the tileset
 /// `ground`), tile 2 of `things` at 1,0 and 1,1 on `deco` above it, and a spawn point standing in

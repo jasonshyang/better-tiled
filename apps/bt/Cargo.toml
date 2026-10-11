@@ -17,6 +17,8 @@ anyhow.workspace = true
 # A map's AutoMap layers, read back from its project file when it is loaded.
 bt-automap.workspace = true
 bt-core.workspace = true
+# The pictures bt writes (bt render, bt catalog --sheet), encoded as PNG.
+bt-image.workspace = true
 # The live link: maps open in the running editor.
 bt-live.workspace = true
 # A map's AutoMap record in better-tiled.json, kept and put back by bt edit and bt undo.

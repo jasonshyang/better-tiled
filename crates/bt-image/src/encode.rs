@@ -1,4 +1,5 @@
-//! Writing images: PNG files, made new and never written over another file.
+//! Writing images: PNG files, made new and never written over another file, and the PNG bytes of
+//! an image for a caller that writes its files its own way.
 
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write as _};
@@ -38,8 +39,8 @@ pub fn write_png(path: &Path, image: &DecodedImage) -> Result<(), Error> {
     Ok(())
 }
 
-/// The PNG bytes of `image`, which `path` names in errors.
-fn encode_png(path: &Path, image: &DecodedImage) -> Result<Vec<u8>, Error> {
+/// The PNG bytes of `image`, for the file at `path`, which errors name.
+pub fn encode_png(path: &Path, image: &DecodedImage) -> Result<Vec<u8>, Error> {
     let expected = u64::from(image.width) * u64::from(image.height) * 4;
     if u64::try_from(image.rgba.len()).ok() != Some(expected) {
         return Err(Error::Write {
