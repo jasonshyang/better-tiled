@@ -9,7 +9,7 @@ use crate::wangid::{CORNER_LANES, EDGE_LANES};
 const ALL_LANES: [usize; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
 
 /// The lanes a set of `kind` labels: the four corners, the four edges, or all eight.
-pub(crate) fn kind_lanes(kind: WangSetType) -> &'static [usize] {
+pub fn kind_lanes(kind: WangSetType) -> &'static [usize] {
     match kind {
         WangSetType::Corner => &CORNER_LANES,
         WangSetType::Edge => &EDGE_LANES,

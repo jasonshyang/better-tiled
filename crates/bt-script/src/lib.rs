@@ -10,6 +10,7 @@
 //! GPL-3.0-or-later with them.
 
 mod changes;
+mod check;
 mod context;
 mod diff;
 mod error;
@@ -28,6 +29,10 @@ mod words;
 pub use changes::{
     CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved,
     PropertyChange, Resized, TerrainCells,
+};
+pub use check::{
+    CheckOutcome, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt, Problem, Seam,
+    StandingGroup, ZoneCover, made_by, seams,
 };
 pub use context::{Context, Selection};
 pub use diff::DiffOutcome;

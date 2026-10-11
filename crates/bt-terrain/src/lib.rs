@@ -42,6 +42,8 @@ pub use feedback::{
     Pattern, PushedBack, ReplacedSet, TerrainName, fill_note, missing_text, pushed_back,
     pushed_back_text, replaced_sets, replaced_text,
 };
+pub use lanes::kind_lanes;
 pub use paint::{fill, paint, preview_fill, preview_paint, write_preview};
 pub use request::{BrushTarget, FillRequest, PaintRequest, Preview, Report};
 pub use terrain::Terrain;
+pub use topology::Topology;

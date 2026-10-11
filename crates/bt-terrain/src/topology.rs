@@ -27,16 +27,18 @@ pub(crate) struct CellLane {
     pub(crate) lane: usize,
 }
 
-/// How a map's cells neighbour each other across lanes.
+/// How a map's cells neighbour each other across lanes, as the terrain fill sees them; `bt
+/// check` finds seams with it.
 #[derive(Clone, Debug)]
-pub(crate) struct Topology {
+pub struct Topology {
     geometry: MapGeometry,
     hex: bool,
     axis: StaggerAxis,
 }
 
 impl Topology {
-    pub(crate) fn of(map: &Map) -> Topology {
+    /// The topology of `map`'s grid.
+    pub fn of(map: &Map) -> Topology {
         let geometry = map.geometry();
         Topology {
             hex: geometry.is_hex_grid(),
@@ -55,8 +57,8 @@ impl Topology {
         &self.geometry
     }
 
-    /// The cells across each lane of `p`, in lane order.
-    pub(crate) fn around(&self, p: IVec2) -> [IVec2; LANE_COUNT] {
+    /// The cells across each lane of `p`, in lane order (clockwise from the top).
+    pub fn around(&self, p: IVec2) -> [IVec2; LANE_COUNT] {
         if !self.hex {
             return AROUND.map(|offset| p + offset);
         }
