@@ -179,7 +179,8 @@ signs are the ground; capital letters are objects, marked where they stand. A le
 
 `bt render` numbers the cells along the top and left and draws a grid line every 5 cells
 (`--grid`: every cell; `--clean`: neither). It is at most 2048 pixels a side unless `--scale`
-says otherwise (up to 8). `--highlight` outlines cells: a region, or any shape as in scripts
+says otherwise (up to 8); a small map is drawn up to 4 times larger, so its cells can be told
+apart. `--highlight` outlines cells: a region, or any shape as in scripts
 (`--highlight "where water containing 12,10"`; with `--with FILE`, the names it defines too); a
 shape with no cells is an error. `--layers` draws only those layers. `--marks` draws the marks
 the editor has on the map, so the map must be open there.
@@ -199,8 +200,8 @@ are written as in scripts, and which cells count is yours to say.
 - `bt reach MAP 3,4 30,20 --through "all minus where wall"` says whether a way leads from one
   to the other, moving only through the cells of `--through` (the ends may be outside it), and
   gives the shortest, and the cells every way passes through (a single pass, a door). Without
-  one, it says how far you get and what closes the way. FROM and TO can be shapes too
-  (`"rect 0,0 20x2"`: any of those cells).
+  one, it says how far you get and what closes the way. It exits 0 either way, saying yes or
+  no. FROM and TO can be shapes too (`"rect 0,0 20x2"`: any of those cells).
 
 **Why AutoMap puts (or doesn't put) a tile somewhere.** `bt explain MAP X,Y` runs the AutoMap
 rules on the map as it is (changing nothing) and says what the run does at that cell. It takes

@@ -211,8 +211,8 @@ mod tests {
         let replaced = decode_file(&out, None).unwrap();
         assert_eq!(
             (replaced.width, replaced.height),
-            (160, 96),
-            "{}",
+            (640, 384),
+            "a small map is drawn four times larger: {}",
             clean.text
         );
         let json = bt(&["render", map, arg(&out), "--grid", "--json"]).unwrap();

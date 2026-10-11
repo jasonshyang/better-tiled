@@ -1,7 +1,8 @@
 //! `bt render` (`10-agents.md`, §10.3): a numbered picture of the map through `bt-render`'s
 //! headless path, so what an agent sees can be told apart by cell. Cell numbers run along the top
 //! and left, with a grid line every five cells (every cell with `grid`, neither when `clean`);
-//! the picture is at most 2048 pixels a side unless a scale says otherwise (up to 8); cells of a
+//! the picture is at most 2048 pixels a side unless a scale says otherwise (up to 8), and a small
+//! map is drawn up to 4 times larger in whole steps; cells of a
 //! highlight (a shape, or what an edit changed) are outlined in red, and marks numbered in their
 //! colours. Maps that are not orthogonal are drawn in their own projection with their cells
 //! outlined and `x,y` written inside every fifth cell. Shapes take their classes' colours from
@@ -33,6 +34,9 @@ const MOST_SIDE: f64 = 2048.0;
 
 /// The largest scale.
 const MOST_SCALE: f64 = 8.0;
+
+/// The most a small map is enlarged without a scale given.
+const MOST_ENLARGED: f64 = 4.0;
 
 /// Behind cells without tiles, unless the map has a background colour of its own.
 const BACKDROP: Color = Color::rgb(48, 48, 52);
@@ -141,6 +145,20 @@ impl<'a> RenderRequest<'a> {
     }
 }
 
+/// The scale of a picture none was given for, whose longest side is `longest` pixels: at most
+/// [`MOST_SIDE`] pixels a side, and a small map drawn larger in whole steps (up to
+/// [`MOST_ENLARGED`] times), so its cells and their numbers can be told apart.
+fn default_scale(longest: f64) -> f64 {
+    if longest > MOST_SIDE {
+        return MOST_SIDE / longest;
+    }
+    let mut scale = 1.0;
+    while scale < MOST_ENLARGED && longest * (scale + 1.0) <= MOST_SIDE {
+        scale += 1.0;
+    }
+    scale
+}
+
 /// Keeps the rows (or columns) of a staggered or hexagonal map shifted as they were after the
 /// map was cropped from `origin`: cropping an odd number of rows (or columns) along the stagger
 /// axis away makes the other ones the shifted ones.
@@ -247,9 +265,7 @@ impl RenderOutcome {
             DRect::from_min_size(bounds.min().as_dvec2(), bounds.size().as_dvec2())
         };
         let longest = world.size().max_element().max(1.0);
-        let scale = request
-            .scale
-            .unwrap_or_else(|| (MOST_SIDE / longest).min(1.0));
+        let scale = request.scale.unwrap_or_else(|| default_scale(longest));
         let rulers = orthogonal && request.grid != GridLines::Clean;
         let margin = if rulers {
             ruler_margin(region)
@@ -698,7 +714,9 @@ mod tests {
             rendered.outcome
         );
         let clean = RenderOutcome::from_request(
-            &RenderRequest::new(&map, "clean.png").grid(GridLines::Clean),
+            &RenderRequest::new(&map, "clean.png")
+                .grid(GridLines::Clean)
+                .scale(1.0),
             device,
         )
         .unwrap();
@@ -741,6 +759,7 @@ mod tests {
         let rendered = RenderOutcome::from_request(
             &RenderRequest::new(&map, "zones.png")
                 .grid(GridLines::Clean)
+                .scale(1.0)
                 .custom_types(Arc::new(types)),
             device,
         )
@@ -815,6 +834,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(part.outcome.size, UVec2::new(352, 80));
+    }
+
+    #[test]
+    fn a_small_map_is_drawn_larger_in_whole_steps_and_a_large_one_fits() {
+        assert_eq!(default_scale(287.0), 4.0, "hexagonal-mini: four times");
+        assert_eq!(default_scale(800.0), 2.0);
+        assert_eq!(default_scale(1430.0), 1.0);
+        assert_eq!(default_scale(4096.0), 0.5);
     }
 
     #[test]

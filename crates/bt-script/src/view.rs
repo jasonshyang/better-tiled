@@ -853,16 +853,17 @@ impl Layout {
         " ".repeat(self.label_width + 2)
     }
 
-    /// The column rulers: tens and units for one character a cell, else the first cell of
-    /// every tenth character.
+    /// The column rulers: tens and units for one character a cell (the tens over the first
+    /// column and every tenth, whenever a column past 9 shows), else the first cell of every
+    /// tenth character.
     fn write_rulers(&self, text: &mut String) {
         let pad = self.pad();
         if self.step == 1 {
-            if self.cols > 10 {
+            if self.region.x < 0 || self.region.x + self.cols > 10 {
                 let tens: String = (0..self.cols)
                     .map(|c| {
                         let x = self.region.x + c;
-                        if x.rem_euclid(10) == 0 {
+                        if c == 0 || x.rem_euclid(10) == 0 {
                             digit((x / 10).unsigned_abs() % 10)
                         } else {
                             ' '
@@ -1002,6 +1003,33 @@ pub(crate) mod tests {
             .object_layer("design", vec![tree])
             .build()
             .unwrap()
+    }
+
+    #[test]
+    fn columns_past_nine_have_their_tens_even_in_a_narrow_view() {
+        let atlas = bt_test_data::fixtures::Atlas::builder()
+            .name("plain")
+            .build_embedded()
+            .unwrap();
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::new(14, 1))
+            .tileset(atlas.tileset)
+            .tile_layer("floor", &["1"; 14].join(" "))
+            .build()
+            .unwrap();
+        let names = Names::of(&map);
+        let view = ViewOutcome::from_request(
+            &ViewRequest::new(&map, &names)
+                .region(IRect::from_min_size(IVec2::new(8, 0), IVec2::new(5, 1))),
+        )
+        .unwrap();
+        let lines: Vec<&str> = view.text.lines().collect();
+        assert_eq!(
+            lines[1].trim(),
+            "0 1",
+            "the tens of 8 and of 10: {}",
+            view.text
+        );
+        assert_eq!(lines[2].trim(), "89012", "{}", view.text);
     }
 
     #[test]
