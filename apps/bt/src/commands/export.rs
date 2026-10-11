@@ -1,16 +1,21 @@
-//! `bt export`: a map or tileset in another of Tiled's formats, or a map as the resolved JSON
-//! for other programs, and that JSON's schema (`10-agents.md`, §10.8).
+//! `bt export`: a map or tileset in another of Tiled's formats, a map as a picture or as the
+//! resolved JSON for other programs, and that JSON's schema (`10-agents.md`, §10.8).
 
 use std::path::Path;
 
 use anyhow::{Context, bail};
-use bt_script::{ExportFormat, ExportOutcome, RESOLVED_SCHEMA, ResolvedRequest};
+use bt_script::{
+    ExportFormat, ExportOutcome, GridLines, RESOLVED_SCHEMA, RenderOutcome, RenderRequest,
+    ResolvedRequest,
+};
 use bt_tmx::{ExportOptions, Format, Loader, WriteRequest};
 
 use crate::cli::ExportArgs;
+use crate::commands::render::device;
 use crate::exit::{Printed, Status};
 use crate::load::load_map;
 use crate::output::printed;
+use crate::picture_file::write_picture;
 use crate::run::Run;
 
 /// Runs `bt export`.
@@ -26,7 +31,7 @@ pub(crate) fn export(run: &Run, args: &ExportArgs) -> anyhow::Result<Printed> {
     }
     let extension = extension_of(out);
     if extension == "png" {
-        bail!("pictures are not built yet");
+        return export_picture(run, args, input, out);
     }
     let Some(format) = Format::from_path(out) else {
         bail!(
@@ -119,6 +124,43 @@ fn export_resolved(run: &Run, input: &Path, out: &Path) -> anyhow::Result<Printe
         format: ExportFormat::Resolved,
         options: Vec::new(),
         warnings,
+    };
+    printed(&outcome, run.cli.json, Status::Done)
+}
+
+/// Draws the map at `input` to the PNG `out`: the whole map at its own size, without rulers or
+/// a grid, as Tiled's Export As Image does; Tiled's export options do not apply to it.
+fn export_picture(
+    run: &Run,
+    args: &ExportArgs,
+    input: &Path,
+    out: &Path,
+) -> anyhow::Result<Printed> {
+    if args.embed_tilesets || args.detach_templates || args.resolve_types || args.minimize {
+        bail!(
+            "--embed-tilesets, --detach-templates, --resolve-types and --minimize are for \
+             Tiled's formats, not for a picture"
+        );
+    }
+    if is_tileset(input)? {
+        bail!(
+            "a picture is drawn of a map, and {} is a tileset",
+            input.display()
+        );
+    }
+    let loaded = load_map(input, run)?;
+    let request = RenderRequest::new(&loaded.map, out.display().to_string())
+        .custom_types(std::sync::Arc::clone(loaded.loader.custom_types()))
+        .grid(GridLines::Clean)
+        .scale(1.0);
+    let rendered = RenderOutcome::from_request(&request, device()?)?;
+    write_picture(out, &rendered.picture)?;
+    let outcome = ExportOutcome {
+        input: input.to_path_buf(),
+        out: out.to_path_buf(),
+        format: ExportFormat::Picture,
+        options: Vec::new(),
+        warnings: loaded.warnings.iter().map(ToString::to_string).collect(),
     };
     printed(&outcome, run.cli.json, Status::Done)
 }
@@ -320,5 +362,36 @@ mod tests {
             "{error:#}"
         );
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "{}");
+    }
+
+    #[test]
+    fn a_picture_is_the_whole_map_at_its_own_size_and_takes_no_export_options() {
+        if let Err(error) = bt_render::HeadlessDevice::acquire() {
+            bt_test_data::missing("a GPU adapter", &error.to_string());
+            return;
+        }
+        let scratch = Scratch::new("bt-export-picture").unwrap();
+        let map = write_map(scratch.path());
+        let out = scratch.join("a.png");
+        let printed = run(&["export", map.to_str().unwrap(), out.to_str().unwrap()]).unwrap();
+        assert_eq!(
+            printed.text,
+            format!("wrote {} as a picture of the map\n", out.display())
+        );
+        let picture = bt_image::decode_file(&out, None).unwrap();
+        assert_eq!(
+            (picture.width, picture.height),
+            (48, 32),
+            "3x2 tiles of 16 px"
+        );
+        let error = run(&[
+            "export",
+            map.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--minimize",
+        ])
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("not for a picture"), "{error}");
     }
 }

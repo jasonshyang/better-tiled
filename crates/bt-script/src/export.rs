@@ -20,6 +20,8 @@ pub enum ExportFormat {
     JavaScript,
     /// The resolved JSON for other programs (`--resolved`): `.json`.
     Resolved,
+    /// A plain picture of the map, at its own size, without rulers: `.png`.
+    Picture,
 }
 
 impl ExportFormat {
@@ -30,6 +32,7 @@ impl ExportFormat {
             ExportFormat::Json => "Tiled's JSON".to_owned(),
             ExportFormat::JavaScript => "Tiled's JavaScript".to_owned(),
             ExportFormat::Resolved => format!("the resolved JSON ({RESOLVED_FORMAT})"),
+            ExportFormat::Picture => "a picture of the map".to_owned(),
         }
     }
 }
