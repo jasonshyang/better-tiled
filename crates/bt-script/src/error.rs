@@ -278,6 +278,22 @@ pub enum Error {
         /// The grid: `hexagonal`, `staggered`.
         orientation: &'static str,
     },
+    /// `--run N` on a map without AutoMap layers.
+    #[error(
+        "--run {run} goes with maps that have AutoMap layers, and this one has none (bt info MAP says)"
+    )]
+    RunWithoutLayers {
+        /// The run asked for.
+        run: usize,
+    },
+    /// `--run N` past the AutoMap layers' runs.
+    #[error("--run {run}: the map's AutoMap layers have {runs} runs, 1 to {runs}")]
+    NoSuchRun {
+        /// The run asked for.
+        run: usize,
+        /// How many runs there are.
+        runs: usize,
+    },
 }
 
 /// What a name stands for, in the messages of [`Error`].
