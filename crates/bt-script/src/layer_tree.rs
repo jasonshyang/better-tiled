@@ -1,7 +1,7 @@
 //! The map's layers as reports list them: top first, as the editor's Layers panel shows them,
 //! each group before the layers in it, with how deep in groups it is.
 
-use bt_core::{Layer, Map};
+use bt_core::{Layer, LayerId, Map};
 
 /// A layer and how many groups it is in.
 #[derive(Clone, Copy, Debug)]
@@ -25,9 +25,35 @@ pub(crate) fn layers_top_first(map: &Map) -> Vec<LayerAt<'_>> {
     out
 }
 
+/// Whether the layer `id` is `group` or inside it.
+pub(crate) fn is_in(map: &Map, id: LayerId, group: LayerId) -> bool {
+    map.layer_path(id).is_some_and(|path| path.contains(&group))
+}
+
+/// Whether the layer is shown: it and every group it is in are visible.
+pub(crate) fn is_shown(map: &Map, id: LayerId) -> bool {
+    map.effective_layer(id).is_some_and(|layer| layer.visible)
+}
+
+/// The layers a view draws, the top one first: those `wanted` names and the layers in them, or
+/// every layer shown when it names none.
+pub(crate) fn chosen_layers<'m>(map: &'m Map, wanted: &[LayerId]) -> Vec<&'m Layer> {
+    layers_top_first(map)
+        .into_iter()
+        .map(|at| at.layer)
+        .filter(|layer| {
+            if wanted.is_empty() {
+                is_shown(map, layer.id)
+            } else {
+                wanted.iter().any(|&chosen| is_in(map, layer.id, chosen))
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use bt_core::{LayerId, LayerKind};
+    use bt_core::LayerKind;
     use bt_test_data::fixtures::MapBuilder;
     use glam::UVec2;
 
@@ -67,5 +93,13 @@ mod tests {
                 ("ground".to_owned(), 0)
             ]
         );
+        let b = layers_top_first(&map)[2].layer.id;
+        assert!(is_in(&map, b, LayerId(10)));
+        assert!(is_shown(&map, b));
+        let chosen: Vec<&str> = chosen_layers(&map, &[LayerId(10)])
+            .iter()
+            .map(|layer| layer.name.as_str())
+            .collect();
+        assert_eq!(chosen, ["group", "b", "a"]);
     }
 }

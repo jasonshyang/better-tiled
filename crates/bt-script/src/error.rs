@@ -249,6 +249,35 @@ pub enum Error {
         /// The shape as written.
         written: String,
     },
+
+    // What the Look and Know commands refuse.
+    /// A view one character a square of no cells.
+    #[error("--step is a whole number above 0")]
+    ZeroStep,
+    /// A view too large to write a number or the corners of each of its cells.
+    #[error(
+        "{what} shows at most {}x{} cells, and this is {}x{}: narrow it with --region X,Y WxH",
+        most.x,
+        most.y,
+        size.x,
+        size.y
+    )]
+    ViewTooLarge {
+        /// The option: `--ids`, `--corners`.
+        what: &'static str,
+        /// The most cells across and down it shows.
+        most: IVec2,
+        /// The cells asked for.
+        size: IVec2,
+    },
+    /// `--corners` on a grid whose cells do not share corners as squares do.
+    #[error(
+        "--corners reads the corners squares share, and this map is {orientation}: bt view MAP and bt at MAP X,Y show its terrains"
+    )]
+    CornersNotSquare {
+        /// The grid: `hexagonal`, `staggered`.
+        orientation: &'static str,
+    },
 }
 
 /// What a name stands for, in the messages of [`Error`].

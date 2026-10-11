@@ -32,7 +32,11 @@ mod rule_words;
 mod run;
 mod script;
 mod shapes;
+mod symbols;
 mod tally;
+mod view;
+mod view_corners;
+mod view_ids;
 mod words;
 
 pub use at::{CellLayer, CellOutcome, CellTile, LanesOf};
@@ -82,7 +86,5 @@ pub use script::{
 };
 pub use shapes::{area_cells, map_cells, object_cells, shape_cells};
 pub use tally::NameCount;
-pub use words::{
-    capped_list, cell_text, cells_text, id_ranges_text, number_text, point_text, quoted_word,
-    region_text, value_text,
-};
+pub use view::{ViewBy, ViewOutcome, ViewRequest};
+pub use words::{capped_list, cell_text, cells_text, id_ranges_text, number_text, point_text, quoted_word, region_text, value_text};
