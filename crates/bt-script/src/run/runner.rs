@@ -535,6 +535,7 @@ impl<'l> Runner<'l> {
             view,
             saved: None,
             marked: None,
+            picture: None,
         };
         EditResult {
             painted,

@@ -6,11 +6,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context as _, anyhow, bail};
-use bt_core::Color;
+use bt_core::{Color, CustomTypes, Map};
 use bt_live::{MarkSpec, cells_from_runs};
 use bt_render::HeadlessDevice;
 use bt_script::{Context, GridLines, PictureMark, RenderOutcome, RenderRequest, parse_region};
 use bt_utils::paths::display_name;
+use glam::IVec2;
 
 use crate::cli::RenderArgs;
 use crate::commands::know::{DEFAULT_SEED, shape_cells};
@@ -73,15 +74,44 @@ pub(crate) fn render(run: &Run, args: &RenderArgs) -> anyhow::Result<Printed> {
     if args.marks {
         request = request.marks(editor_marks(run, &loaded.path)?);
     }
-    let device = HeadlessDevice::acquire().map_err(|error| {
+    let rendered = RenderOutcome::from_request(&request, device()?)?;
+    write_picture(&args.out, &rendered.picture)?;
+    printed(&rendered.outcome, run.cli.json, Status::Done)
+}
+
+/// The GPU pictures are drawn on, or why there is none.
+pub(crate) fn device() -> anyhow::Result<&'static HeadlessDevice> {
+    HeadlessDevice::acquire().map_err(|error| {
         anyhow!(
             "the picture can't be drawn: bt render draws on the GPU, and {error} (bt view MAP \
              shows the map as text without one)"
         )
-    })?;
-    let rendered = RenderOutcome::from_request(&request, device)?;
-    write_picture(&args.out, &rendered.picture)?;
-    printed(&rendered.outcome, run.cli.json, Status::Done)
+    })
+}
+
+/// A picture of `map` with `changed` outlined in red, written to `out`: the cells of `region`
+/// (as written on the command line; the whole map when empty) at `scale`, for `bt edit
+/// --render`.
+pub(crate) fn draw_change(
+    map: &Map,
+    custom_types: Arc<CustomTypes>,
+    out: &Path,
+    region: &[String],
+    scale: Option<f64>,
+    changed: &[IVec2],
+) -> anyhow::Result<RenderOutcome> {
+    let mut request = RenderRequest::new(map, out.display().to_string())
+        .custom_types(custom_types)
+        .highlight(changed.to_vec());
+    if !region.is_empty() {
+        request = request.region(parse_region(&region.join(" ")).map_err(anyhow::Error::msg)?);
+    }
+    if let Some(scale) = scale {
+        request = request.scale(scale);
+    }
+    let rendered = RenderOutcome::from_request(&request, device()?)?;
+    write_picture(out, &rendered.picture)?;
+    Ok(rendered.outcome)
 }
 
 /// The grid lines `--grid` and `--clean` ask for: a line every five cells unless they say

@@ -12,6 +12,7 @@ use glam::IVec2;
 use serde::{Deserialize, Serialize};
 
 use crate::changes::MapChanges;
+use crate::picture::RenderOutcome;
 use crate::report::{Line, LineKind, Outcome, Report, Section};
 use crate::words::{cells_text, rect_option_json};
 
@@ -56,6 +57,8 @@ pub struct EditOutcome {
     pub saved: Option<Saved>,
     /// What the editor said of the cells it outlined for `--mark`.
     pub marked: Option<String>,
+    /// The picture of the result with the change outlined, for `--render`.
+    pub picture: Option<RenderOutcome>,
 }
 
 /// A note on how an operation was carried out.
@@ -171,6 +174,12 @@ impl EditOutcome {
         self
     }
 
+    /// This outcome with the picture drawn of its result (`--render`).
+    pub fn with_picture(mut self, picture: RenderOutcome) -> EditOutcome {
+        self.picture = Some(picture);
+        self
+    }
+
     /// This outcome with a warning from reading the map or writing the result.
     pub fn with_warning(mut self, warning: impl Into<String>) -> EditOutcome {
         self.warnings.push(warning.into());
@@ -235,6 +244,11 @@ impl Outcome for EditOutcome {
             let mut section = Section::new();
             section.add_lines(view.lines().map(Line::fact));
             report.add_section(section);
+        }
+        if let Some(picture) = &self.picture {
+            for line in picture.report().text().lines() {
+                report.add_line(Line::fact(line));
+            }
         }
         if let Some(saved) = &self.saved {
             report.add_line(Line::fact(saved.text()));
@@ -320,6 +334,7 @@ mod tests {
             view: None,
             saved: None,
             marked: None,
+            picture: None,
         }
     }
 

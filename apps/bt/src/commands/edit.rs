@@ -3,9 +3,11 @@
 //! another file; otherwise the file is written, its previous bytes kept for `bt undo`, and on a
 //! map with AutoMap layers what was painted kept in its project file. With `--do`, the
 //! operations run on each map given in turn, and the first that fails stops the rest.
+//! `--render` draws the result with the change outlined.
 
 use std::io::{IsTerminal as _, Read as _};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context as _, anyhow};
 use bt_live::{EditRequest, MarkSpec, Request};
@@ -18,9 +20,10 @@ use bt_utils::atomic_write::{WriteMode, write_file};
 use bt_utils::paths::display_name;
 
 use crate::cli::{EditArgs, ViewBy};
+use crate::commands::render::{device, draw_change};
 use crate::exit::{Printed, Status};
 use crate::link::OpenMap;
-use crate::load::{LoadedMap, MapCopy, load_copy};
+use crate::load::{LoadedMap, MapCopy, load_copy, loader_for};
 use crate::record::{put_back_record, record_json, write_layers_record};
 use crate::run::Run;
 use crate::script_input::{definitions_text, read_definitions, script_input};
@@ -41,6 +44,10 @@ struct EditJob {
 pub(crate) fn edit(run: &Run, args: &EditArgs) -> anyhow::Result<Printed> {
     if let Some(problem) = usage_problem(args) {
         return Ok(Printed::stopped("", Status::Usage, problem));
+    }
+    if args.render.is_some() {
+        // Before anything is edited: a picture that can't be drawn fails the command.
+        device()?;
     }
     let job = read_job(args)?;
     let mut done: Vec<EditOutcome> = Vec::new();
@@ -132,16 +139,13 @@ fn read_job(args: &EditArgs) -> anyhow::Result<EditJob> {
 /// Edits one map: in the editor when it is open there and `--out` names no other file, else its
 /// file.
 fn edit_map(run: &Run, args: &EditArgs, job: &EditJob, map: &Path) -> anyhow::Result<EditOutcome> {
-    if args.render.is_some() {
-        anyhow::bail!("bt edit --render is not built yet: bt render draws the map after the edit");
-    }
     let path =
         std::fs::canonicalize(map).with_context(|| format!("{} can't be read", map.display()))?;
     let link = run.link();
     if args.out.is_none()
         && let Some(open) = link.open_map(&path)
     {
-        return edit_in_editor(args, job, &path, map, &open);
+        return edit_in_editor(run, args, job, &path, map, &open);
     }
     if args.in_editor || args.mark.is_some() {
         anyhow::bail!(
@@ -156,6 +160,7 @@ fn edit_map(run: &Run, args: &EditArgs, job: &EditJob, map: &Path) -> anyhow::Re
 /// Runs the script in the editor that has the map open: one undo step, not saved. `typed` is
 /// the map as the command named it, which the report's next commands use.
 fn edit_in_editor(
+    run: &Run,
     args: &EditArgs,
     job: &EditJob,
     path: &Path,
@@ -171,7 +176,7 @@ fn edit_in_editor(
         view: args.view,
         by: args.by.map(|by| view_word(by).to_owned()),
         runs: args.runs,
-        want_map: false,
+        want_map: args.render.is_some(),
         want_cells: args.mark.is_some(),
     };
     let edited = open.ask(&Request::Edit(request))?.into_edited()?;
@@ -199,6 +204,27 @@ fn edit_in_editor(
             format!("outlined in the editor as “{label}”: {}", done.message)
         };
         outcome = outcome.with_marked(marked);
+    }
+    if let (Some(out), Some(text)) = (&args.render, &edited.map) {
+        // The edit is in the editor already: a picture that fails is said, not a failure.
+        let drawn = loader_for(path, run).and_then(|mut loader| {
+            let map = loader
+                .parse_map(text, path)
+                .with_context(|| format!("the editor's {} can't be read", typed.display()))?
+                .value;
+            draw_change(
+                &map,
+                Arc::clone(loader.custom_types()),
+                out,
+                &args.region,
+                args.scale,
+                &outcome.cells,
+            )
+        });
+        outcome = match drawn {
+            Ok(picture) => outcome.with_picture(picture),
+            Err(error) => outcome.with_warning(format!("the picture can't be drawn: {error:#}")),
+        };
     }
     Ok(outcome)
 }
@@ -242,6 +268,17 @@ fn edit_file(
         for note in &layers.notes {
             outcome = outcome.with_warning(format!("AutoMap layers: {}", note.text));
         }
+    }
+    if let Some(out) = &args.render {
+        let picture = draw_change(
+            &result.shown,
+            Arc::clone(loaded.loader.custom_types()),
+            out,
+            &args.region,
+            args.scale,
+            &outcome.cells,
+        )?;
+        outcome = outcome.with_picture(picture);
     }
     if args.dry_run {
         return Ok(outcome.with_saved(Saved::DryRun { in_editor: false }));

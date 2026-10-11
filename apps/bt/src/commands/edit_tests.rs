@@ -567,3 +567,62 @@ fn a_map_open_in_the_editor_is_edited_there_and_mark_outlines_what_changed() {
     assert_eq!(marks[0].label, "pond");
     assert!(!marks[0].runs.is_empty());
 }
+
+#[test]
+fn render_draws_the_result_with_the_change_outlined_dry_run_or_not() {
+    match bt_render::HeadlessDevice::acquire() {
+        Ok(_) => {}
+        Err(error) => {
+            bt_test_data::missing("a GPU adapter", &error.to_string());
+            return;
+        }
+    }
+    let scratch = Scratch::new("bt-edit-render").unwrap();
+    let folders = folders(&scratch);
+    let map = grass_map(&scratch, "a.tmx");
+    let original = std::fs::read(&map).unwrap();
+    let picture = scratch.join("pond.png");
+    let dry = bt(
+        &[
+            "edit",
+            text(&map),
+            "--dry-run",
+            "--render",
+            text(&picture),
+            "--do",
+            "paint water rect 2,2 3x2",
+        ],
+        &folders,
+    )
+    .unwrap();
+    assert!(
+        dry.text.contains(&format!("wrote {} (", picture.display())),
+        "{}",
+        dry.text
+    );
+    assert!(dry.text.contains("cells outlined in red"), "{}", dry.text);
+    assert!(picture.is_file());
+    assert_eq!(
+        std::fs::read(&map).unwrap(),
+        original,
+        "a dry run writes the picture only"
+    );
+    let json = bt(
+        &[
+            "--json",
+            "edit",
+            text(&map),
+            "--render",
+            text(&picture),
+            "--region",
+            "1,1",
+            "5x4",
+            "--do",
+            "paint water rect 2,2 3x2",
+        ],
+        &folders,
+    )
+    .unwrap();
+    let outcome: serde_json::Value = serde_json::from_str(&json.text).unwrap();
+    assert_eq!(outcome["picture"]["region"]["w"], 5, "{}", json.text);
+}

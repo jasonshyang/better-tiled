@@ -144,6 +144,22 @@ pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result
     })
 }
 
+/// A loader for maps of the folder of `path` (an existing map), with the custom types of the
+/// project that applies to it: for maps `bt` gets as text, from the editor.
+pub(crate) fn loader_for(path: &Path, run: &Run) -> anyhow::Result<Loader> {
+    let found = project_of(
+        path,
+        run.cli.project.as_deref(),
+        run.folders.home.as_deref(),
+    )?;
+    let custom_types = Arc::new(
+        found
+            .map(|p| p.project.custom_types.clone())
+            .unwrap_or_default(),
+    );
+    Ok(Loader::builder().custom_types(custom_types).build())
+}
+
 /// The map as the editor that has it open shows it, with its unsaved tilesets.
 fn read_from_editor(
     path: &Path,
