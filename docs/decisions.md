@@ -953,3 +953,20 @@ new, by layer and cell.
 **Instead of:** a terrain covering more than half of the tile below counting as whole.
 **Why:** an opaque edge over an edge of another terrain hides the part of it that differs, which
 is what the check is for.
+
+## 2026-10-11 — Snapshots, marks and pictures as built
+
+**Decided:** a map's snapshot carries its AutoMap layers' record as the project file would keep
+it, the rules file a full path, and `bt` rebuilds what was painted from it with the code that
+reads project files. The editor's status says which colour it drew each mark in; the colours
+live once, in `bt-live`. Pictures of grids other than orthogonal are framed on the region's own
+cells (an infinite map's bounds are whole chunks) and flip the stagger index when the region
+starts on an odd row or column, so the cells keep their places. `bt export OUT.png` is the whole
+map at its own size without rulers or a grid, and Tiled's export options are refused for it.
+`bt new --force` over a map takes the map's AutoMap record out of its project file, with a
+warning. A new file named without a folder is written in the working folder.
+**Instead of:** the snapshot leaving AutoMap layers out; colours guessed from a mark's place;
+pictures framed on chunks; Tiled's export options ignored for a picture; a stale record left
+for the next map of that name.
+**Why:** an agent reading a map the person is editing must see what the person sees, layers
+included; a picture that frames empty chunks or shifts rows misleads the reader it is for.

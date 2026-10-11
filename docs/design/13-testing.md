@@ -201,6 +201,15 @@ randomised tests M3 added: region runs equal full runs and explanations agree wi
 deriving them again. `bt-test-data`'s `workspace_root` is a path without `..`, so a path built
 from it compares equal to the cleaned paths the crates report.
 
+As built at M4, the live-link tests (`app/live_tests.rs`) give the window a folder of its own
+(`LiveFolder`: short, private, under `/tmp`) through `Startup::live_folder` rather than
+`BT_LIVE_DIR`, and ask it with `bt-live`'s client on a thread (`TestWindow::ask_bt`), stepping
+the window until the answer comes. `bt`'s command table is a binary of its own, so `apps/bt`
+tests its routing to the editor against a stand-in server (`bt_live::Server` with the test's
+handler), and the window's edit flow is tested against a scripted window as well
+(`live/edit.rs`: conflicts rerun, three runs at most). The guide's example runs as a test on a
+map built from the Highlands pack (`apps/bt/src/guide_tests.rs`), the automated part of §10.1.
+
 ## 8. External programs
 
 Godot is found through `GODOT`, then the macOS application, then the path, and the version
