@@ -102,6 +102,7 @@ pub(crate) fn run(run: &Run) -> anyhow::Result<Printed> {
         Command::Catalog(args) => commands::catalog::catalog(run, args),
         Command::Explain(args) => commands::explain::explain(run, args),
         Command::Render(args) => commands::render::render(run, args),
+        Command::New(args) => commands::create::new_map(run, args),
         Command::At(args) => commands::look::at(run, args),
         Command::Objects(args) => commands::look::objects(run, args),
         other => bail!("{} is not built yet", command_name(other)),

@@ -3,6 +3,7 @@
 
 pub(crate) mod catalog;
 pub(crate) mod check;
+pub(crate) mod create;
 pub(crate) mod diff;
 pub(crate) mod edit;
 pub(crate) mod editor;
