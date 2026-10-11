@@ -234,3 +234,180 @@ impl Outcome for EditOutcome {
         report
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::changes::{CellChanges, LayerChanges, TerrainCells};
+    use crate::regions::CellsShowing;
+    use crate::report::{from_json, to_json};
+
+    /// An edit that painted a pond: the changes, a note, cells no tile fits.
+    fn pond() -> EditOutcome {
+        let cells = CellChanges {
+            count: 30,
+            bounds: IRect::from_min_size(IVec2::new(2, 1), IVec2::new(6, 5)),
+            became: vec![
+                CellsShowing {
+                    what: "grass/water edges".into(),
+                    cells: 18,
+                },
+                CellsShowing {
+                    what: "water".into(),
+                    cells: 12,
+                },
+            ],
+            placed: 0,
+            cleared: 0,
+            terrains: vec![
+                TerrainCells {
+                    terrain: "grass".into(),
+                    before: 96,
+                    after: 70,
+                },
+                TerrainCells {
+                    terrain: "water".into(),
+                    before: 0,
+                    after: 12,
+                },
+            ],
+        };
+        let ground = LayerChanges {
+            id: 1,
+            name: "ground".into(),
+            kind: "tile layer".into(),
+            new: false,
+            removed: false,
+            renamed_from: None,
+            shown: None,
+            locked: None,
+            cells: Some(cells),
+            objects: None,
+        };
+        EditOutcome {
+            map: "level.tmx".into(),
+            label: "grow the pond".into(),
+            operations: 2,
+            changes: MapChanges {
+                layers: vec![ground],
+                ..MapChanges::default()
+            },
+            painted: None,
+            unfilled: vec![IVec2::new(9, 9)],
+            notes: vec![LineNote {
+                line: 2,
+                in_definitions: false,
+                kind: LineKind::Note,
+                text: "paint water: no tile fits 1 cell: “Land” has no tile that is all water"
+                    .into(),
+            }],
+            cells: vec![IVec2::new(2, 1)],
+            area: Some(IRect::from_min_size(IVec2::new(2, 1), IVec2::new(6, 5))),
+            changed: true,
+            warnings: Vec::new(),
+            made: None,
+            view: None,
+            saved: None,
+        }
+    }
+
+    #[test]
+    fn an_edit_says_what_changed_what_it_left_and_how_it_went() {
+        let outcome = pond().with_made(Vec::new()).with_saved(Saved::File {
+            file: "level.tmx".into(),
+            painted_in: None,
+            undo: Some("bt undo level.tmx".into()),
+        });
+        assert_eq!(
+            outcome.report().text(),
+            "level.tmx: 2 operations\n  ground: 30 cells changed in 2,1 6x5: grass/water edges \
+             ×18, water ×12; grass 96 → 70 cells, water 0 → 12 cells\nwarning: no tile fits 1 \
+             cell, left as they were: 9,9\nnote: line 2: paint water: no tile fits 1 cell: “Land” \
+             has no tile that is all water\nno new seams or hidden edges, and no objects on other \
+             ground\nsaved level.tmx; bt undo level.tmx puts it back\n"
+        );
+    }
+
+    #[test]
+    fn problems_the_edit_made_come_first_and_the_view_follows_the_notes() {
+        let outcome = pond()
+            .with_made(vec!["ground: 1 terrain seam: 9,9|10,9".into()])
+            .with_view("   0123\n 0 ~~~.".into())
+            .with_warning("reading the map: tile 9 of tiles is missing")
+            .with_saved(Saved::InEditor {
+                map: "level.tmx".into(),
+            });
+        let text = outcome.report().text();
+        assert!(
+            text.starts_with("problem: ground: 1 terrain seam: 9,9|10,9\nwarning: reading the map"),
+            "{text}"
+        );
+        assert!(text.contains("\n   0123\n 0 ~~~.\n"), "{text}");
+        assert!(text.ends_with(
+            "applied in the editor as one undo step (bt undo level.tmx takes it back); not saved \
+             yet: bt save level.tmx writes the file\n"
+        ));
+        assert!(!text.contains("no new seams"));
+    }
+
+    #[test]
+    fn where_an_edit_went_is_said_one_way_for_each_door() {
+        let text = |saved: Saved| saved.text();
+        assert_eq!(
+            text(Saved::File {
+                file: "level.tmx".into(),
+                painted_in: Some("better-tiled.json".into()),
+                undo: None,
+            }),
+            "saved level.tmx, and what was painted in better-tiled.json"
+        );
+        assert_eq!(
+            text(Saved::DryRun { in_editor: false }),
+            "dry run: nothing saved"
+        );
+        assert_eq!(
+            text(Saved::DryRun { in_editor: true }),
+            "dry run: the map in the editor is unchanged"
+        );
+        assert_eq!(
+            text(Saved::Unchanged { in_editor: false }),
+            "nothing to save"
+        );
+        assert_eq!(
+            text(Saved::Unchanged { in_editor: true }),
+            "nothing to change in the editor"
+        );
+    }
+
+    #[test]
+    fn nothing_changed_is_said_and_what_was_painted_under_the_rules() {
+        let mut outcome = pond();
+        outcome.changes = MapChanges::default();
+        outcome.unfilled.clear();
+        outcome.notes.clear();
+        outcome.painted = Some(pond().changes);
+        assert_eq!(
+            outcome.report().text(),
+            "level.tmx: 2 operations\n  nothing changed on the map: the rules make the same of \
+             what was painted\n  what was painted (the changes above are what the AutoMap rules \
+             made of it):\n    ground: 30 cells changed in 2,1 6x5: grass/water edges ×18, water \
+             ×12; grass 96 → 70 cells, water 0 → 12 cells\n"
+        );
+    }
+
+    #[test]
+    fn an_outcome_round_trips_through_json_with_its_schema() {
+        let outcome = pond().with_saved(Saved::DryRun { in_editor: true });
+        let json = to_json(&outcome).unwrap();
+        assert!(json.starts_with(r#"{"schema":"bt.edit/1""#), "{json}");
+        assert!(
+            json.contains(r#""area":{"x":2,"y":1,"w":6,"h":5}"#),
+            "{json}"
+        );
+        assert!(
+            json.contains(r#""saved":{"to":"dry_run","in_editor":true}"#),
+            "{json}"
+        );
+        assert_eq!(from_json::<EditOutcome>(&json).unwrap(), outcome);
+    }
+}
