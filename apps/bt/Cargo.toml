@@ -17,6 +17,8 @@ anyhow.workspace = true
 # A map's AutoMap layers, read back from its project file when it is loaded.
 bt-automap.workspace = true
 bt-core.workspace = true
+# The live link: maps open in the running editor.
+bt-live.workspace = true
 # A map's AutoMap record in better-tiled.json, kept and put back by bt edit and bt undo.
 bt-project.workspace = true
 bt-script.workspace = true
@@ -24,6 +26,7 @@ bt-tmx.workspace = true
 bt-utils.workspace = true
 clap = { workspace = true, features = ["derive"] }
 glam.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

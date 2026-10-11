@@ -1,11 +1,9 @@
 //! A command's map (`10-agents.md`, §4.3): the file, read through a loader built with the
 //! project's custom types (`--project FILE`, else the nearest `.tiled-project` above the map),
 //! with its reading warnings, and on a map with AutoMap layers what was painted, rebuilt from
-//! the project file.
-#![expect(
-    dead_code,
-    reason = "the commands that read maps are wired as their library parts land"
-)]
+//! the project file. A map open in an editor with unsaved changes is read from the editor
+//! instead, with its unsaved tilesets; a file an editor that does not answer may hold unsaved
+//! changes to is not read.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,12 +11,20 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 use bt_automap::layers::{Setup, read_from_project};
 use bt_core::{CustomTypes, Map};
+use bt_live::Request;
 use bt_tmx::{Loader, Warning};
+
+use crate::link::OpenMap;
+use crate::run::Run;
 
 /// The extension of Tiled's project files.
 const PROJECT_EXTENSION: &str = "tiled-project";
 
 /// What every command's map comes with.
+#[expect(
+    dead_code,
+    reason = "bt info and bt edit read the rest when they are wired"
+)]
 pub(crate) struct LoadedMap {
     /// The map's canonical path.
     pub(crate) path: PathBuf,
@@ -30,9 +36,24 @@ pub(crate) struct LoadedMap {
     pub(crate) warnings: Vec<Warning>,
     /// The loader the map was read with: maps and rules read later share its tilesets.
     pub(crate) loader: Loader,
+    /// Where it was read from.
+    pub(crate) source: MapSource,
+}
+
+/// Where a command's map was read from.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum MapSource {
+    /// Its file.
+    File,
+    /// The editor with this process id, which has unsaved changes to it.
+    Editor {
+        /// The editor's process id.
+        pid: u32,
+    },
 }
 
 /// What was painted on a map with AutoMap layers, and the layers' setup.
+#[expect(dead_code, reason = "bt edit reads them when it is wired")]
 pub(crate) struct PaintedLayers {
     /// The map as painted.
     pub(crate) painted: Map,
@@ -42,18 +63,20 @@ pub(crate) struct PaintedLayers {
     pub(crate) notes: Vec<String>,
 }
 
-/// Reads the map at `path` with the custom types of `project` (else the nearest project above
-/// the map), and its AutoMap layers from the project file found upward from it, stopping below
-/// `home`.
-pub(crate) fn load_map(
-    path: &Path,
-    project: Option<&Path>,
-    home: Option<&Path>,
-) -> anyhow::Result<LoadedMap> {
+/// Reads the map at `path` as the module's doc says, with the custom types of `--project` (else
+/// the nearest project above the map), and its AutoMap layers from the project file found
+/// upward from it, stopping below the home folder.
+pub(crate) fn load_map(path: &Path, run: &Run) -> anyhow::Result<LoadedMap> {
     let canonical =
         std::fs::canonicalize(path).with_context(|| format!("{} can't be read", path.display()))?;
-    let custom_types = custom_types(&canonical, project, home)?;
+    let home = run.folders.home.as_deref();
+    let custom_types = custom_types(&canonical, run.cli.project.as_deref(), home)?;
+    let link = run.link();
+    link.refuse_unanswered(&canonical, run.folders.recovery.as_deref())?;
     let mut loader = Loader::builder().custom_types(custom_types).build();
+    if let Some(open) = link.open_map(&canonical).filter(|open| open.document.dirty) {
+        return read_from_editor(&canonical, &open, loader);
+    }
     let loaded = loader
         .load_map(&canonical)
         .with_context(|| format!("{} can't be read", path.display()))?;
@@ -74,6 +97,39 @@ pub(crate) fn load_map(
         layers,
         warnings: loaded.warnings,
         loader,
+        source: MapSource::File,
+    })
+}
+
+/// The map as the editor that has it open shows it, with its unsaved tilesets.
+fn read_from_editor(
+    path: &Path,
+    open: &OpenMap<'_>,
+    mut loader: Loader,
+) -> anyhow::Result<LoadedMap> {
+    let text = open
+        .ask(&Request::Snapshot {
+            path: path.to_path_buf(),
+        })?
+        .into_map_text()?;
+    for tileset in &text.tilesets {
+        let parsed = loader
+            .parse_tileset(&tileset.tsx, &tileset.path)
+            .with_context(|| format!("the editor's {} can't be read", tileset.path.display()))?;
+        loader.insert_tileset(&tileset.path, parsed.value)?;
+    }
+    let loaded = loader
+        .parse_map(&text.map, path)
+        .with_context(|| format!("the editor's {} can't be read", path.display()))?;
+    Ok(LoadedMap {
+        path: path.to_path_buf(),
+        map: loaded.value,
+        layers: None,
+        warnings: loaded.warnings,
+        loader,
+        source: MapSource::Editor {
+            pid: open.editor.pid(),
+        },
     })
 }
 
@@ -159,7 +215,7 @@ mod tests {
             r#"{"propertyTypes": [{"id": 1, "name": "Door", "type": "class", "members": [], "useAs": ["object"]}]}"#,
         )
         .unwrap();
-        let loaded = load_map(&map, None, None).unwrap();
+        let loaded = load_map(&map, &Run::for_test(None)).unwrap();
         assert_eq!(loaded.loader.custom_types().types.len(), 1);
         assert_eq!(loaded.path, std::fs::canonicalize(&map).unwrap());
         assert!(loaded.layers.is_none());
@@ -176,9 +232,9 @@ mod tests {
             )
             .unwrap();
         }
-        let error = load_map(&map, None, None).err().unwrap();
+        let error = load_map(&map, &Run::for_test(None)).err().unwrap();
         assert!(error.to_string().contains("several projects"), "{error}");
         let chosen = scratch.join("a.tiled-project");
-        assert!(load_map(&map, Some(&chosen), None).is_ok());
+        assert!(load_map(&map, &Run::for_test(Some(&chosen))).is_ok());
     }
 }

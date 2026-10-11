@@ -250,13 +250,14 @@ pub enum Undone {
         /// Whether the file had been saved since the edit (`--force`).
         forced: bool,
     },
-    /// The editor took the edit back, as one of its own undo steps.
+    /// The editor took the edit back, as one of its own undo steps; its words.
     InEditor {
-        /// The edit's label.
-        label: String,
-        /// How many earlier edits of this run the editor can still take back.
-        earlier: usize,
+        /// What the editor said.
+        message: String,
     },
+    /// Refused: the map has unsaved changes in the editor, and taking an earlier edit of its
+    /// file back would write over them.
+    UnsavedInEditor,
     /// Refused: the file was saved since the edit, and the edit would take that away.
     SavedSince {
         /// The edit's label.
@@ -293,9 +294,10 @@ impl Outcome for UndoOutcome {
                     earlier(*n)
                 )));
             }
-            Undone::InEditor { label, earlier: n } => report.add_line(Line::fact(format!(
-                "took back “{label}” in the editor, as an undo step there; {}",
-                earlier(*n)
+            Undone::InEditor { message } => report.add_line(Line::fact(message.clone())),
+            Undone::UnsavedInEditor => report.add_line(Line::problem(format!(
+                "{map} has unsaved changes in the editor: taking back a bt edit of its file \
+                 would write over them; save or undo them there first"
             ))),
             Undone::SavedSince { label } => report.add_line(Line::problem(format!(
                 "{map} was saved since “{label}”: bt undo would take away what was saved since; \

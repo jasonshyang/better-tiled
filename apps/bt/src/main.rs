@@ -10,6 +10,7 @@ mod exit;
 mod folders;
 #[cfg(test)]
 mod guide_tests;
+mod link;
 mod load;
 mod output;
 mod run;
@@ -46,7 +47,7 @@ fn main() -> ExitCode {
             return status.code();
         }
     };
-    match run::run(&cli, &folders::Folders::from_env()) {
+    match run::run(&run::Run::new(cli, folders::Folders::from_env())) {
         Ok(printed) => {
             let mut out = std::io::stdout().lock();
             if out.write_all(printed.text.as_bytes()).is_err() || out.flush().is_err() {

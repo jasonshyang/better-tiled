@@ -6,13 +6,14 @@ use anyhow::{Context, bail};
 use bt_script::{ExportFormat, ExportOutcome};
 use bt_tmx::{ExportOptions, Format, Loader, WriteRequest};
 
-use crate::cli::{Cli, ExportArgs};
+use crate::cli::ExportArgs;
 use crate::exit::{Printed, Status};
 use crate::load::load_map;
 use crate::output::printed;
+use crate::run::Run;
 
 /// Runs `bt export`.
-pub(crate) fn export(cli: &Cli, args: &ExportArgs, home: Option<&Path>) -> anyhow::Result<Printed> {
+pub(crate) fn export(run: &Run, args: &ExportArgs) -> anyhow::Result<Printed> {
     if args.schema || args.resolved {
         bail!("the resolved JSON is not built yet");
     }
@@ -57,7 +58,7 @@ pub(crate) fn export(cli: &Cli, args: &ExportArgs, home: Option<&Path>) -> anyho
             .with_context(|| format!("{} was not written", out.display()))?;
         warnings.extend(written.iter().map(ToString::to_string));
     } else {
-        let loaded = load_map(input, cli.project.as_deref(), home)?;
+        let loaded = load_map(input, run)?;
         warnings.extend(loaded.warnings.iter().map(ToString::to_string));
         let written = WriteRequest::for_map(&loaded.map, out)
             .format(format)
@@ -87,7 +88,7 @@ pub(crate) fn export(cli: &Cli, args: &ExportArgs, home: Option<&Path>) -> anyho
         .collect(),
         warnings,
     };
-    printed(&outcome, cli.json, Status::Done)
+    printed(&outcome, run.cli.json, Status::Done)
 }
 
 /// Whether `path` is a tileset: `.tsx` and `.tsj` are, a `.json` file when Tiled's `type` says
@@ -117,7 +118,6 @@ mod tests {
     use bt_core::{FileRef, TilesetRef};
     use bt_test_data::Scratch;
     use bt_test_data::fixtures::{Atlas, MapBuilder};
-    use clap::Parser;
     use glam::UVec2;
 
     use super::*;
@@ -145,9 +145,9 @@ mod tests {
     }
 
     fn run(args: &[&str]) -> anyhow::Result<Printed> {
-        let cli = Cli::try_parse_from(std::iter::once("bt").chain(args.iter().copied()))?;
-        match &cli.command {
-            crate::cli::Command::Export(export_args) => export(&cli, export_args, None),
+        let run = Run::of_args(args, crate::folders::Folders::default());
+        match &run.cli.command {
+            crate::cli::Command::Export(export_args) => export(&run, export_args),
             _ => panic!("an export"),
         }
     }

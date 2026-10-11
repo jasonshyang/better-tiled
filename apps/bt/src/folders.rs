@@ -15,6 +15,8 @@ pub(crate) struct Folders {
     pub(crate) data: Option<PathBuf>,
     /// Where project files are locked, when not the runtime folder (tests).
     pub(crate) locks: Option<PathBuf>,
+    /// The editor's recovery folder, whose snapshots name the maps an editor holds unsaved.
+    pub(crate) recovery: Option<PathBuf>,
 }
 
 impl Folders {
@@ -26,6 +28,9 @@ impl Folders {
                 .map(PathBuf::from),
             data: bt_utils::paths::data_dir().ok(),
             locks: None,
+            recovery: bt_utils::paths::data_dir()
+                .ok()
+                .map(|data| data.join("recovery")),
         }
     }
 

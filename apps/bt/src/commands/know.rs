@@ -8,30 +8,31 @@ use bt_script::{
     AreasOutcome, Context, Names, ReachOutcome, ReachRequest, ShapeCells, area_cells, parse_area,
 };
 
-use crate::cli::{AreasArgs, Cli, ReachArgs};
+use crate::cli::{AreasArgs, ReachArgs};
 use crate::exit::{Printed, Status};
 use crate::load::load_map;
 use crate::output::printed;
+use crate::run::Run;
 
 /// The seed of rough shapes when `--seed` gives none: one fixed seed, so a command run twice
 /// gives the same cells.
 pub(crate) const DEFAULT_SEED: u64 = 1;
 
 /// Runs `bt areas`.
-pub(crate) fn areas(cli: &Cli, args: &AreasArgs, home: Option<&Path>) -> anyhow::Result<Printed> {
+pub(crate) fn areas(run: &Run, args: &AreasArgs) -> anyhow::Result<Printed> {
     refuse_definitions(args.with.as_deref())?;
-    let loaded = load_map(&args.map, cli.project.as_deref(), home)?;
+    let loaded = load_map(&args.map, run)?;
     let names = Names::of(&loaded.map);
     let context = Context::new(args.seed.unwrap_or(DEFAULT_SEED));
     let shape = shape_cells(&loaded.map, &names, &context, &args.shape)?;
     let outcome = AreasOutcome::from_cells(&loaded.map, &shape, args.all);
-    printed(&outcome, cli.json, Status::Done)
+    printed(&outcome, run.cli.json, Status::Done)
 }
 
 /// Runs `bt reach`.
-pub(crate) fn reach(cli: &Cli, args: &ReachArgs, home: Option<&Path>) -> anyhow::Result<Printed> {
+pub(crate) fn reach(run: &Run, args: &ReachArgs) -> anyhow::Result<Printed> {
     refuse_definitions(args.with.as_deref())?;
-    let loaded = load_map(&args.map, cli.project.as_deref(), home)?;
+    let loaded = load_map(&args.map, run)?;
     let names = Names::of(&loaded.map);
     let context = Context::new(args.seed.unwrap_or(DEFAULT_SEED));
     let cells = |text: &str| shape_cells(&loaded.map, &names, &context, text);
@@ -40,7 +41,7 @@ pub(crate) fn reach(cli: &Cli, args: &ReachArgs, home: Option<&Path>) -> anyhow:
         request = request.through(cells(through)?);
     }
     let outcome = ReachOutcome::from_request(&loaded.map, &names, &request)?;
-    printed(&outcome, cli.json, Status::Done)
+    printed(&outcome, run.cli.json, Status::Done)
 }
 
 /// The cells of a shape written on the command line, as in scripts.
@@ -73,17 +74,16 @@ mod tests {
     use bt_test_data::Scratch;
     use bt_test_data::fixtures::MapBuilder;
     use bt_tmx::WriteRequest;
-    use clap::Parser;
     use glam::UVec2;
 
     use super::*;
     use crate::cli::Command;
 
     fn run(args: &[&str]) -> anyhow::Result<Printed> {
-        let cli = Cli::try_parse_from(std::iter::once("bt").chain(args.iter().copied()))?;
-        match &cli.command {
-            Command::Areas(areas_args) => areas(&cli, areas_args, None),
-            Command::Reach(reach_args) => reach(&cli, reach_args, None),
+        let run = Run::of_args(args, crate::folders::Folders::default());
+        match &run.cli.command {
+            Command::Areas(areas_args) => areas(&run, areas_args),
+            Command::Reach(reach_args) => reach(&run, reach_args),
             _ => panic!("areas or reach"),
         }
     }

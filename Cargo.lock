@@ -562,6 +562,7 @@ dependencies = [
  "anyhow",
  "bt-automap",
  "bt-core",
+ "bt-live",
  "bt-project",
  "bt-script",
  "bt-test-data",
@@ -569,6 +570,7 @@ dependencies = [
  "bt-utils",
  "clap",
  "glam",
+ "serde",
  "serde_json",
 ]
 
