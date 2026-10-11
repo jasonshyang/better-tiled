@@ -79,7 +79,7 @@ fn read_rules(loaded: &mut LoadedMap) -> Option<FoundRules> {
 
 /// The map a command reads cells of: what was painted with `--painted` on a map with AutoMap
 /// layers, else the map as shown.
-fn shown_or_painted(loaded: &LoadedMap, painted: bool) -> anyhow::Result<&Map> {
+pub(crate) fn shown_or_painted(loaded: &LoadedMap, painted: bool) -> anyhow::Result<&Map> {
     if !painted {
         return Ok(&loaded.map);
     }

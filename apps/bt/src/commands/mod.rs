@@ -7,5 +7,9 @@ pub(crate) mod edit;
 pub(crate) mod editor;
 pub(crate) mod export;
 pub(crate) mod know;
+pub(crate) mod layers;
 pub(crate) mod look;
+#[cfg(test)]
+pub(crate) mod testing;
 pub(crate) mod undo;
+pub(crate) mod view;
