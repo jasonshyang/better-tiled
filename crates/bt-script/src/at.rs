@@ -176,13 +176,15 @@ fn lanes_of(map: &Map, names: &Names, tile: Cell) -> Vec<LanesOf> {
 
 /// A lane and the word for it.
 #[derive(Clone, Copy, Debug)]
-struct LaneWord {
-    lane: Lane,
-    word: &'static str,
+pub(crate) struct LaneWord {
+    /// The lane.
+    pub(crate) lane: Lane,
+    /// Its word: `top-left`, `right`, ….
+    pub(crate) word: &'static str,
 }
 
 /// The lanes a set of `kind` uses, in reading order, with their words.
-fn lanes_in_reading_order(kind: WangSetType) -> Vec<LaneWord> {
+pub(crate) fn lanes_in_reading_order(kind: WangSetType) -> Vec<LaneWord> {
     let lane = |lane, word| LaneWord { lane, word };
     [
         lane(Lane::TopLeft, "top-left"),

@@ -36,6 +36,7 @@ mod picture;
 mod property_text;
 mod regions;
 mod report;
+mod resolved;
 mod rule_words;
 mod run;
 mod script;
@@ -93,6 +94,9 @@ pub use regions::{
 };
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
+};
+pub use resolved::{
+    RESOLVED_FORMAT, RESOLVED_SCHEMA, ResolvedError, ResolvedRequest, ResolvedWarning,
 };
 pub use run::{
     DEFAULT_SEED, EditResult, RunError, RunFailure, RunInput, RunInputBuilder, defined_names,

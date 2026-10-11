@@ -1,0 +1,252 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "bt-resolved-map-1",
+ "title": "bt resolved map 1",
+ "description": "A map resolved for other programs, as `bt export MAP OUT.json --resolved` writes it from an orthogonal, isometric, staggered or hexagonal map (oblique maps are refused). There are no global tile ids, flip bits or firstgids: cells hold keys into `tiles`, flips are booleans, tilesets are written into the file, objects made from templates are written out whole with the properties they inherit (from their class, their tile and their template), and every path is relative to this JSON file. Units are pixels and y grows down. Screen pixels are where things are drawn (Tiled's screen coordinates: cell 0,0 of an orthogonal map starts at 0,0; `map.cell_centres` says where every cell is). Map pixels are Tiled's object coordinates, which are screen pixels on orthogonal, staggered and hexagonal maps; isometric maps project them onto their diamonds (a cell is tile height by tile height map pixels, from the top corner of cell 0,0). Positions are as drawn when the view's centre is at `map.parallax_origin`, where parallax moves nothing. Coordinates within a billionth of a pixel of a millionth are rounded to it, so projecting leaves no noise. The map file stays the source of truth: this is a view of it.",
+ "type": "object",
+ "required": ["format", "map", "tilesets", "tiles", "layers"],
+ "additionalProperties": false,
+ "properties": {
+  "format": {"const": "bt resolved map 1", "description": "The format and its version; a version that reads differently gets a new number."},
+  "map": {"$ref": "#/$defs/map", "description": "The map: its grid, where its cells are on screen, its class and its properties."},
+  "tilesets": {"type": "array", "items": {"$ref": "#/$defs/tileset"}, "description": "The map's tilesets, in the map's order, without AutoMap's rule tiles (they mean something only in rule maps)."},
+  "tiles": {
+   "type": "object",
+   "description": "The tiles the map shows, by key: tile layers' rows hold these keys (0 is an empty cell) and tile objects name one. A key is a tile of a tileset with its flips; the keys mean nothing outside this file.",
+   "patternProperties": {"^[1-9][0-9]*$": {"$ref": "#/$defs/tile"}},
+   "additionalProperties": false
+  },
+  "layers": {"type": "array", "items": {"$ref": "#/$defs/layer"}, "description": "Every layer in the order they are drawn, the bottom one first; a group comes before the layers in it."}
+ },
+ "$defs": {
+  "point": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "[x, y], in pixels."},
+  "cell": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2, "description": "[column, row], whole numbers: of a cell, counted from the top-left of the grid (either can be negative on infinite maps), or of a tile in an atlas image."},
+  "size": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "[width, height], in pixels."},
+  "rect": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[left, top, width, height], in pixels."},
+  "polyline": {"type": "array", "items": {"$ref": "#/$defs/point"}, "minItems": 2, "description": "Points one after the other."},
+  "color": {"type": "string", "pattern": "^#[0-9a-f]{6}([0-9a-f]{2})?$", "description": "#rrggbb, or #rrggbbaa when it is not opaque (alpha last, as CSS and Godot write it)."},
+  "properties": {"type": "object", "additionalProperties": {"$ref": "#/$defs/value"}, "description": "Custom properties by name, with the members of the element's class and what it inherits written out: a value is a string, a number, a boolean, a color (#rrggbb or #rrggbbaa, null for Tiled's empty color), a file path (relative to this JSON file), {\"object\": ID} for an object reference (0 for none), an object of members for a class value, or an array for a list. Enum values are written as Tiled stores them: their name, or their number."},
+  "value": {"description": "A property's value; see properties."},
+  "map": {
+   "type": "object",
+   "description": "The map: its grid and where its cells are on screen, its class and properties.",
+   "required": ["name", "source", "orientation", "render_order", "infinite", "columns", "rows", "origin_cell", "cell_size", "screen_rect", "cell_centres", "parallax_origin", "type", "properties"],
+   "additionalProperties": false,
+   "properties": {
+    "name": {"type": "string", "description": "The map file's name without its extension."},
+    "source": {"type": "string", "description": "The map file, relative to this JSON file."},
+    "orientation": {"enum": ["orthogonal", "isometric", "staggered", "hexagonal"], "description": "The grid: squares; diamonds in a diamond (cell 0,0 at the top corner, x running down-right and y down-left); rows (or columns) of diamonds shifted against each other; or hexagons in shifted rows (or columns)."},
+    "stagger_axis": {"enum": ["x", "y"], "description": "Staggered and hexagonal maps: y when rows are shifted right by half a cell, x when columns are shifted down."},
+    "stagger_index": {"enum": ["odd", "even"], "description": "Staggered and hexagonal maps: whether the odd or the even rows (or columns) are the shifted ones."},
+    "hex_side_length": {"type": "integer", "description": "Hexagonal maps: the length of a hexagon's straight sides along the stagger axis, in pixels."},
+    "render_order": {"enum": ["right-down", "right-up", "left-down", "left-up"], "description": "The order Tiled draws the cells of an orthogonal map in, which decides how tiles larger than a cell overlap: right-down draws rows from the top, each from the left. Other grids are drawn in their own order (isometric maps by diagonals from the top corner, staggered and hexagonal maps by rows from the top)."},
+    "infinite": {"type": "boolean", "description": "Whether the map has no fixed size: its tile layers then hold the area used, which starts at origin_cell."},
+    "columns": {"type": "integer", "description": "How many columns of cells every tile layer's rows hold: the map's width, or the width of the area an infinite map's tiles use (0 when it has none)."},
+    "rows": {"type": "integer", "description": "How many rows of cells every tile layer holds: the map's height, or the height of the area an infinite map's tiles use (0 when it has none)."},
+    "origin_cell": {"$ref": "#/$defs/cell", "description": "The cell that rows[0][0] of every tile layer is: [0, 0] on a finite map, the top-left of the used area on an infinite one."},
+    "cell_size": {"$ref": "#/$defs/size", "description": "Tiled's tile size: the width and height of a cell in pixels. Diamonds and hexagons of neighbouring rows overlap by part of it."},
+    "screen_rect": {"$ref": "#/$defs/rect", "description": "The rectangle on screen the cells cover (Tiled's map bounding rectangle, what a picture of the map shows): it starts at 0,0 on finite maps, and is [0, 0, 0, 0] on an infinite map without tiles."},
+    "cell_centres": {"$ref": "#/$defs/cell_centres"},
+    "parallax_origin": {"$ref": "#/$defs/point", "description": "The point on screen parallax scrolls around: with the view's centre there, a layer of any parallax factor is drawn where this file says."},
+    "background_color": {"$ref": "#/$defs/color", "description": "The color behind the map; absent when it has none."},
+    "type": {"type": "string", "description": "The map's class (Tiled's class); empty for none."},
+    "properties": {"$ref": "#/$defs/properties", "description": "The map's properties, its class's members included."}
+   }
+  },
+  "cell_centres": {
+   "type": "object",
+   "description": "Where the cells are on screen: the centre of cell [c, r] is first + c × column_step + r × row_step, plus odd_rows_shift when r is odd (or odd_columns_shift when c is odd), for every cell, negative ones included. It is the middle of the cell's outline: a square, a diamond or a hexagon.",
+   "required": ["first", "column_step", "row_step"],
+   "additionalProperties": false,
+   "properties": {
+    "first": {"$ref": "#/$defs/point", "description": "The centre of cell [0, 0], in screen pixels."},
+    "column_step": {"$ref": "#/$defs/point", "description": "How far one column further moves a centre (two columns, halved, on maps with stagger_axis x)."},
+    "row_step": {"$ref": "#/$defs/point", "description": "How far one row further moves a centre (two rows, halved, on maps with stagger_axis y)."},
+    "odd_rows_shift": {"$ref": "#/$defs/point", "description": "Staggered and hexagonal maps with stagger_axis y: how far the centres of odd rows are from where the steps put them."},
+    "odd_columns_shift": {"$ref": "#/$defs/point", "description": "Staggered and hexagonal maps with stagger_axis x: how far the centres of odd columns are from where the steps put them."}
+   }
+  },
+  "tileset": {
+   "type": "object",
+   "description": "A tileset of the map: where its tiles come from.",
+   "required": ["name", "tiled_name", "kind", "tile_size", "tile_count", "tile_offset", "type", "properties"],
+   "additionalProperties": false,
+   "properties": {
+    "name": {"type": "string", "description": "The tileset's name as bt names it (TILESET in TILESET:ID): lowercase words joined by -, unique in the map. Tiles name their tileset by it."},
+    "tiled_name": {"type": "string", "description": "The tileset's name in Tiled, which another tileset of the map may share."},
+    "kind": {"enum": ["atlas", "images"], "description": "atlas: the tiles are cut from one image in a grid; images: each tile is an image of its own (bt calls these sprites)."},
+    "image": {"type": "string", "description": "Atlas tilesets: the image the tiles are cut from, relative to this JSON file; absent when the map file embeds it."},
+    "image_size": {"$ref": "#/$defs/size", "description": "Atlas tilesets: the image's size as the tileset file states it."},
+    "tile_size": {"$ref": "#/$defs/size", "description": "The size of a tile in the image (atlas), or of the largest image (images)."},
+    "tile_count": {"type": "integer", "description": "How many tiles the tileset has."},
+    "columns": {"type": "integer", "description": "Atlas tilesets: the columns of tiles in the image."},
+    "rows": {"type": "integer", "description": "Atlas tilesets: the rows of tiles in the image."},
+    "margin": {"type": "integer", "description": "Atlas tilesets: pixels around the tiles at the image's edges."},
+    "spacing": {"type": "integer", "description": "Atlas tilesets: pixels between neighbouring tiles."},
+    "tile_offset": {"$ref": "#/$defs/point", "description": "Pixels the tileset's tiles are drawn moved by, on tile layers; tile objects' box already includes it."},
+    "type": {"type": "string", "description": "The tileset's class; empty for none."},
+    "properties": {"$ref": "#/$defs/properties", "description": "The tileset's properties, its class's members included."}
+   }
+  },
+  "tile": {
+   "type": "object",
+   "description": "A tile of a tileset with its flips: where to draw it from, the names of its sprite and terrains, its class, properties, animation and collision shapes.",
+   "required": ["tileset", "tile_id", "flip_h", "flip_v", "flip_d", "rotated_hex_120", "type", "properties"],
+   "additionalProperties": false,
+   "properties": {
+    "tileset": {"type": "string", "description": "The name of the tile's tileset in tilesets."},
+    "tile_id": {"type": "integer", "description": "The tile's id in its tileset (TILESET:ID)."},
+    "image": {"type": "string", "description": "The image to draw the tile from, relative to this JSON file; absent when the tile has none (its tileset is missing, or the map file embeds the image)."},
+    "source_rect": {"$ref": "#/$defs/rect", "description": "The part of the image the tile is, in the image's pixels."},
+    "atlas": {"$ref": "#/$defs/cell", "description": "Atlas tilesets: the tile's [column, row] in the image."},
+    "flip_h": {"type": "boolean", "description": "Drawn mirrored left to right."},
+    "flip_v": {"type": "boolean", "description": "Drawn mirrored top to bottom."},
+    "flip_d": {"type": "boolean", "description": "Drawn mirrored along its top-left to bottom-right diagonal (x and y swapped), before the mirrors above; on hexagonal maps, turned 60° clockwise instead."},
+    "rotated_hex_120": {"type": "boolean", "description": "Hexagonal maps: drawn turned 120° clockwise, after the mirrors."},
+    "sprite": {"type": "string", "description": "The sprite the tile is, by the name bt gives it (its image file's name, lowercase words joined by -); absent for tiles that are not sprites."},
+    "terrain": {"type": "string", "description": "The terrain covering more than half of the tile (on more than half of the lanes its terrain set uses), by the name bt gives it, as bt view shows the cell; absent when none does."},
+    "terrains": {"type": "array", "items": {"$ref": "#/$defs/terrain_lanes"}, "description": "The terrain on each lane of the tile as it is drawn (its flips applied), for each terrain set that labels it; absent when none does."},
+    "type": {"type": "string", "description": "The tile's class; empty for none."},
+    "properties": {"$ref": "#/$defs/properties", "description": "The tile's properties, its class's members included."},
+    "animation": {"type": "array", "items": {"$ref": "#/$defs/frame"}, "description": "The frames of an animated tile, shown one after the other and again from the first; absent for a still tile."},
+    "collision": {"type": "array", "items": {"$ref": "#/$defs/shape"}, "description": "The tile's collision shapes, in the tile's own pixels from the top-left of its image, unflipped; absent when it has none."}
+   }
+  },
+  "terrain_lanes": {
+   "type": "object",
+   "description": "The terrains on a tile's lanes in one terrain set.",
+   "required": ["set", "lanes"],
+   "additionalProperties": false,
+   "properties": {
+    "set": {"type": "string", "description": "The terrain set, by its name in Tiled."},
+    "lanes": {"$ref": "#/$defs/lanes"}
+   }
+  },
+  "lanes": {
+   "type": "object",
+   "description": "The terrain on each lane the set uses (its corners, its edges, or both), by the name bt gives the terrain; null for a lane with no terrain.",
+   "additionalProperties": false,
+   "properties": {
+    "top-left": {"type": ["string", "null"], "description": "The top-left corner."},
+    "top": {"type": ["string", "null"], "description": "The top edge."},
+    "top-right": {"type": ["string", "null"], "description": "The top-right corner."},
+    "left": {"type": ["string", "null"], "description": "The left edge."},
+    "right": {"type": ["string", "null"], "description": "The right edge."},
+    "bottom-left": {"type": ["string", "null"], "description": "The bottom-left corner."},
+    "bottom": {"type": ["string", "null"], "description": "The bottom edge."},
+    "bottom-right": {"type": ["string", "null"], "description": "The bottom-right corner."}
+   }
+  },
+  "frame": {
+   "type": "object",
+   "description": "A frame of an animated tile: a tile of the same tileset, shown for a while.",
+   "required": ["tile_id", "duration_ms"],
+   "additionalProperties": false,
+   "properties": {
+    "tile_id": {"type": "integer", "description": "The tile shown, in the animated tile's tileset."},
+    "image": {"type": "string", "description": "The image to draw it from, relative to this JSON file."},
+    "source_rect": {"$ref": "#/$defs/rect", "description": "The part of the image it is, in the image's pixels."},
+    "atlas": {"$ref": "#/$defs/cell", "description": "Atlas tilesets: its [column, row] in the image."},
+    "duration_ms": {"type": "integer", "description": "How long it is shown, in milliseconds."}
+   }
+  },
+  "layer": {
+   "type": "object",
+   "description": "A layer, with the settings of the groups holding it applied, and what it holds: rows of tile keys (tile layers), objects (object layers), an image (image layers), or nothing (groups).",
+   "required": ["id", "name", "path", "kind", "visible", "opacity", "offset", "parallax", "blend_mode", "type", "properties"],
+   "additionalProperties": false,
+   "properties": {
+    "id": {"type": "integer", "description": "The layer's id, unique in the map."},
+    "name": {"type": "string", "description": "The layer's name, which another layer may share."},
+    "path": {"type": "string", "description": "The names of the groups holding the layer and its own, joined by /."},
+    "kind": {"enum": ["tiles", "objects", "image", "group"], "description": "What the layer holds: cells, objects, an image, or other layers (which follow it in the list, with paths starting with its own)."},
+    "visible": {"type": "boolean", "description": "Whether it is shown: it and every group holding it."},
+    "opacity": {"type": "number", "description": "Its opacity times the opacities of the groups holding it, from 0 to 1."},
+    "offset": {"$ref": "#/$defs/point", "description": "Screen pixels the layer is drawn moved by, its groups' offsets added: tiles and images are drawn moved by it, and objects' positions and outlines already include it."},
+    "parallax": {"$ref": "#/$defs/point", "description": "How fast the layer scrolls with the view, its groups' factors multiplied in: 1 moves with the map, 0 stays put."},
+    "tint": {"$ref": "#/$defs/color", "description": "The color the layer is multiplied by, its groups' tints multiplied in; absent for none."},
+    "blend_mode": {"enum": ["normal", "add", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion"], "description": "How the layer is drawn over what is below it."},
+    "type": {"type": "string", "description": "The layer's class; empty for none."},
+    "properties": {"$ref": "#/$defs/properties", "description": "The layer's properties, its class's members included."},
+    "filled_cells": {"type": "integer", "description": "Tile layers: how many cells hold a tile."},
+    "rows": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}}, "description": "Tile layers: rows[r][c] is the key in tiles of cell [origin_cell column + c, origin_cell row + r], 0 when the cell is empty. There are map.rows rows of map.columns keys."},
+    "draw_order": {"enum": ["top-down", "list"], "description": "Object layers: top-down draws the objects by their position on screen, the higher first; list draws them in the order listed."},
+    "color": {"$ref": "#/$defs/color", "description": "Object layers: the color its shapes are drawn in when their class has none; absent when it has none."},
+    "objects": {"type": "array", "items": {"$ref": "#/$defs/object"}, "description": "Object layers: its objects, in the order the map lists them."},
+    "image": {"type": "string", "description": "Image layers: the image, relative to this JSON file; absent when the layer has none or the map file embeds it."},
+    "image_size": {"$ref": "#/$defs/size", "description": "Image layers: the image's size as the map file states it; absent when it states none."},
+    "repeat_x": {"type": "boolean", "description": "Image layers: whether the image repeats left and right."},
+    "repeat_y": {"type": "boolean", "description": "Image layers: whether the image repeats up and down."}
+   }
+  },
+  "object": {
+   "type": "object",
+   "description": "An object of an object layer: what it is, its position as Tiled stores it, and where it is drawn on screen.",
+   "required": ["id", "name", "type", "kind", "visible", "opacity", "pos", "rotation", "screen_pos", "properties"],
+   "additionalProperties": false,
+   "properties": {
+    "id": {"type": "integer", "description": "The object's id, unique in the map: what object references name."},
+    "name": {"type": "string", "description": "The object's name; empty for none."},
+    "type": {"type": "string", "description": "What the object is: its class, else its tile's (spawn, exit, tree); empty for none."},
+    "kind": {"enum": ["tile", "rectangle", "ellipse", "point", "capsule", "polygon", "polyline", "text"], "description": "Its shape, or tile for a tile object (a sprite, or another tile placed as an object)."},
+    "template": {"type": "string", "description": "The template file the object was made from, relative to this JSON file; it is written out here with everything it takes from the template."},
+    "visible": {"type": "boolean", "description": "Whether the object is shown."},
+    "opacity": {"type": "number", "description": "The object's opacity, from 0 to 1."},
+    "pos": {"$ref": "#/$defs/point", "description": "The object's position in map pixels (Tiled's x and y), its layer's offset included: the top-left of rectangles, ellipses, capsules and text, the point of points, the origin of polygons' and polylines' points, the anchor of tile objects (bottom-left, bottom-centre on isometric maps, unless their tileset says otherwise). The object turns around it."},
+    "size": {"$ref": "#/$defs/size", "description": "Rectangles, ellipses and capsules: the box's width and height in map pixels. Tile and text objects, which stand upright: the size they are drawn at, in screen pixels (a tile object without a size of its own is drawn at its tile's)."},
+    "rotation": {"type": "number", "description": "Degrees clockwise on screen, around screen_pos."},
+    "points": {"type": "array", "items": {"$ref": "#/$defs/point"}, "description": "Polygons and polylines: their points in map pixels from pos, before the object turns, as Tiled stores them."},
+    "screen_pos": {"$ref": "#/$defs/point", "description": "Where pos is drawn, in screen pixels, its layer's offset included."},
+    "outline": {"$ref": "#/$defs/polyline", "description": "The object as it is drawn, in screen pixels, turned and with its layer's offset: a closed outline (the last point joins the first) for rectangles, ellipses (64 points), capsules, polygons and the boxes of tile and text objects, an open line for polylines. Absent for points, for polygons and polylines of one point, and for rectangles, ellipses and capsules without a size, which Tiled draws as a marker at screen_pos."},
+    "pixel_outline": {"$ref": "#/$defs/polyline", "description": "Isometric maps: the outline in map pixels, where Tiled's object coordinates put what is drawn. On other maps map pixels are screen pixels, and outline is it."},
+    "box": {"$ref": "#/$defs/rect", "description": "Tile and text objects, which stand upright on every grid: the rectangle their image or text is drawn in, in screen pixels from screen_pos, before the object turns (the tile's alignment and its tileset's tile offset applied). Draw it there and turn it around screen_pos by rotation."},
+    "cell": {"$ref": "#/$defs/cell", "description": "Points: the cell the point stands in where it is drawn; a point on a cell's bottom or left edge stands in that cell, as bt reads it."},
+    "tile": {"type": "integer", "description": "Tile objects: the key in tiles of the tile shown, unflipped; absent when its tileset is not one of the map's."},
+    "flip_h": {"type": "boolean", "description": "Tile objects: the tile is drawn mirrored left to right."},
+    "flip_v": {"type": "boolean", "description": "Tile objects: the tile is drawn mirrored top to bottom."},
+    "text": {"$ref": "#/$defs/text"},
+    "properties": {"$ref": "#/$defs/properties", "description": "The object's properties: its class's members, then its tile's properties, then its template's, then its own."}
+   }
+  },
+  "shape": {
+   "type": "object",
+   "description": "A collision shape of a tile, in the tile's pixels.",
+   "required": ["id", "name", "type", "kind", "visible", "opacity", "pos", "rotation", "properties"],
+   "additionalProperties": false,
+   "properties": {
+    "id": {"type": "integer", "description": "The shape's id, unique in its tile."},
+    "name": {"type": "string", "description": "The shape's name; empty for none."},
+    "type": {"type": "string", "description": "The shape's class; empty for none."},
+    "kind": {"enum": ["tile", "rectangle", "ellipse", "point", "capsule", "polygon", "polyline", "text"], "description": "Its shape."},
+    "visible": {"type": "boolean", "description": "Whether the shape is shown."},
+    "opacity": {"type": "number", "description": "The shape's opacity, from 0 to 1."},
+    "pos": {"$ref": "#/$defs/point", "description": "Its position in the tile's pixels: the top-left of boxes, the point of points, the origin of polygons' and polylines' points."},
+    "size": {"$ref": "#/$defs/size", "description": "Rectangles, ellipses, capsules and text: the box's width and height."},
+    "rotation": {"type": "number", "description": "Degrees clockwise, around pos."},
+    "points": {"type": "array", "items": {"$ref": "#/$defs/point"}, "description": "Polygons and polylines: their points from pos, before the shape turns."},
+    "text": {"$ref": "#/$defs/text"},
+    "properties": {"$ref": "#/$defs/properties", "description": "The shape's properties, its class's members included."}
+   }
+  },
+  "text": {
+   "type": "object",
+   "description": "Text objects: the text and how it is set, in its box.",
+   "required": ["string", "font_family", "pixel_size", "color", "wrap", "bold", "italic", "underline", "strikeout", "kerning", "halign", "valign"],
+   "additionalProperties": false,
+   "properties": {
+    "string": {"type": "string", "description": "The text."},
+    "font_family": {"type": "string", "description": "The font family."},
+    "pixel_size": {"type": "integer", "description": "The font size, in pixels."},
+    "color": {"$ref": "#/$defs/color", "description": "The text's color."},
+    "wrap": {"type": "boolean", "description": "Whether lines wrap at the box's width."},
+    "bold": {"type": "boolean", "description": "Bold."},
+    "italic": {"type": "boolean", "description": "Italic."},
+    "underline": {"type": "boolean", "description": "Underlined."},
+    "strikeout": {"type": "boolean", "description": "Struck out."},
+    "kerning": {"type": "boolean", "description": "Whether the font's kerning is used."},
+    "halign": {"enum": ["left", "center", "right", "justify"], "description": "Where lines sit across the box."},
+    "valign": {"enum": ["top", "center", "bottom"], "description": "Where the text sits down the box."}
+   }
+  }
+ }
+}
