@@ -37,6 +37,11 @@ pub struct MapText {
     pub map: String,
     /// The map's external tilesets that have unsaved changes, as TSX text.
     pub tilesets: Vec<TilesetText>,
+    /// The map's AutoMap layers while they are on: their record as the project file would keep
+    /// it (`09-project-file.md`, §6.2), its rules file a full path, from which what was painted
+    /// is rebuilt on `map`. JSON this crate carries without reading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automap: Option<serde_json::Value>,
 }
 
 /// An external tileset as TSX text.
@@ -148,6 +153,7 @@ mod tests {
                 path: PathBuf::from("/maps/t.tsx"),
                 tsx: "<tileset/>".to_owned(),
             }],
+            automap: None,
         });
         assert_eq!(
             serde_json::to_string(&text).unwrap(),

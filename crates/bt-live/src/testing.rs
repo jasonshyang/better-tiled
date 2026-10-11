@@ -121,6 +121,7 @@ pub(crate) fn every_answer() -> Vec<Response> {
                 path: PathBuf::from("/maps/stone.tsx"),
                 tsx: "<tileset name=\"stone\"/>".to_owned(),
             }],
+            automap: Some(serde_json::json!({"rules": "/maps/rules.txt", "seed": 7})),
         }),
         Response::Edited(Edited {
             report: serde_json::json!({

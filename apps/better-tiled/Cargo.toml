@@ -35,6 +35,7 @@ objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSApplication", "NSResponder"] }
 
 [dev-dependencies]
+bt-project.workspace = true
 bt-test-data = { workspace = true, features = ["fixtures"] }
 egui_kittest = { workspace = true, features = ["eframe"] }
 fontdue.workspace = true

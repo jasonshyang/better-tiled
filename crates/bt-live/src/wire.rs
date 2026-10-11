@@ -273,6 +273,7 @@ mod tests {
                 path: OsStr::from_bytes(b"/maps/\xff.tsx").into(),
                 tsx: String::new(),
             }],
+            automap: None,
         });
         let line = String::from_utf8(answer_line(Ok(text))).unwrap();
         assert!(

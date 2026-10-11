@@ -167,6 +167,17 @@ impl Editor {
         Some(painted_record(setup, rules, &painted))
     }
 
+    /// The AutoMap layers of the map document `doc` shows, while they are on, as the project
+    /// file would keep them for the map as it shows, the rules file a full path: what `bt`
+    /// rebuilds what was painted from, beside the map's text.
+    pub fn layers_record(&self, doc: DocumentId) -> Option<AutoMapRecord> {
+        let document = self.documents.get(doc)?;
+        let setup = document.automap.as_ref()?;
+        let save = self.layers_to_save(document.asset())?;
+        let rules = setup.rules.to_string_lossy().into_owned();
+        Some(painted_record(setup, rules, &save.layers))
+    }
+
     /// Where project files are locked while they are written.
     fn lock_folder(&self) -> Result<&Path, String> {
         self.files

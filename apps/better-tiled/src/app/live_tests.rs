@@ -478,4 +478,36 @@ fn a_map_with_automap_layers_is_edited_as_what_was_painted() {
         .and_then(|layer| layer.as_tile_layer())
         .unwrap();
     assert_eq!(set.cells().count(), 0, "the edit cleared what was painted");
+
+    // bt reads the map as it shows and rebuilds what was painted from the record beside it.
+    let text = window
+        .ask_bt(&live, Request::Snapshot { path: map.clone() })
+        .unwrap()
+        .into_map_text()
+        .unwrap();
+    let record: bt_project::AutoMapRecord =
+        serde_json::from_value(text.automap.clone().unwrap()).unwrap();
+    assert!(std::path::Path::new(&record.rules).is_absolute());
+    let shown = bt_tmx::Loader::default()
+        .parse_map(&text.map, &map)
+        .unwrap()
+        .value;
+    let restored = bt_automap::layers::restore(&record, PathBuf::from(&record.rules), &shown);
+    assert!(restored.notes.is_empty(), "{:?}", restored.notes);
+    let editor = window.editor();
+    let painted = editor.map_of(doc).unwrap();
+    for layer in &painted.layers {
+        let (Some(ours), Some(theirs)) = (
+            layer.as_tile_layer(),
+            restored
+                .painted
+                .layer(layer.id)
+                .and_then(|l| l.as_tile_layer()),
+        ) else {
+            continue;
+        };
+        let ours: Vec<_> = ours.cells().collect();
+        let theirs: Vec<_> = theirs.cells().collect();
+        assert_eq!(ours, theirs, "{}", layer.name);
+    }
 }

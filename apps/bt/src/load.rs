@@ -2,16 +2,17 @@
 //! project's custom types (`--project FILE`, else the nearest `.tiled-project` above the map),
 //! with its reading warnings, and on a map with AutoMap layers what was painted, rebuilt from
 //! the project file. A map open in an editor with unsaved changes is read from the editor
-//! instead, with its unsaved tilesets; a file an editor that does not answer may hold unsaved
-//! changes to is not read.
+//! instead, with its unsaved tilesets and what was painted under its AutoMap layers; a file an
+//! editor that does not answer may hold unsaved changes to is not read.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, bail};
-use bt_automap::layers::{Setup, read_from_project};
+use bt_automap::layers::{Setup, read_from_project, restore};
 use bt_core::Map;
 use bt_live::Request;
+use bt_project::AutoMapRecord;
 use bt_tmx::{Loader, Warning};
 
 use crate::link::OpenMap;
@@ -182,10 +183,28 @@ fn read_from_editor(
     let loaded = loader
         .parse_map(&text.map, path)
         .with_context(|| format!("the editor's {} can't be read", path.display()))?;
+    let layers = match &text.automap {
+        Some(record) => {
+            let record: AutoMapRecord =
+                serde_json::from_value(record.clone()).with_context(|| {
+                    format!(
+                        "the editor's AutoMap layers of {} can't be read",
+                        path.display()
+                    )
+                })?;
+            let restored = restore(&record, PathBuf::from(&record.rules), &loaded.value);
+            Some(PaintedLayers {
+                painted: restored.painted,
+                setup: restored.setup,
+                notes: restored.notes,
+            })
+        }
+        None => None,
+    };
     Ok(LoadedMap {
         path: path.to_path_buf(),
         map: loaded.value,
-        layers: None,
+        layers,
         warnings: loaded.warnings,
         loader,
         source: MapSource::Editor {

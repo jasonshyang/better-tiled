@@ -398,10 +398,22 @@ impl App {
             .document(doc)
             .and_then(|d| store.get(d.asset()))
             .is_some_and(|asset| asset.is_dirty());
+        let automap = self
+            .editor
+            .layers_record(doc)
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| {
+                format!(
+                    "the AutoMap layers of {} could not be written: {error}",
+                    display(path)
+                )
+            })?;
         Ok(MapText {
             dirty,
             map: rendered.text,
             tilesets,
+            automap,
         })
     }
 
