@@ -831,3 +831,46 @@ the window's thread; deleting the image on undo.
 **Why:** a set has one kind and a blob's tiles need both; a click is how a tile is chosen in
 this editor; no frame waits on an image; a file written for the user is theirs once written, and
 undoing the step that used it must not destroy it.
+
+## 2026-10-11 — The script language and its reports as built
+
+**Decided:** the parser reads syntax only and gives typed parts; names, layers and objects are
+looked up when the script runs. The shape language and the values (cells, points, sizes,
+regions) read `bt`'s command-line arguments too, so `bt areas MAP SHAPE` takes a shape exactly
+as a script line does. A region written `X,Y,W,H` is refused, since which numbers are corners
+and which sizes would be a guess. `seed N` at the end of a line is that operation's own seed,
+except in `automap layers seed N`, which is an operation. Reports mark their lines `problem:`,
+`warning:` and `note:` in text, and a report puts the sections holding a problem first whatever
+order its outcome built them in. JSON is the outcome itself with a `schema` field first
+(`bt.edit/1`), read back with its schema checked, which is how an edit made in the editor reaches
+`bt`. An unknown option lists the options the command takes.
+**Instead of:** resolving names while parsing; a second parser for command-line shapes; guessing
+a four-number region; unmarked lines; outcomes ordering their own problems; a JSON rendering of
+the report's lines.
+**Why:** a script can define names and add layers before a later line uses them; one grammar
+cannot drift from another; agents act on lines marked as problems and skip prose, so the mark
+and the order are the renderer's to guarantee; the outcome is what tests and the live link read.
+
+## 2026-10-11 — Names, shapes and feet as built
+
+**Decided:** one crate error (`Error` with `NameKind`) serves names, shapes and feet. Layers and
+objects are looked up in the map as it is at each call, by the kind of layer the operation needs,
+so a tile layer and an object layer of one name are not ambiguous. A script's definitions share
+one namespace (a later `define` replaces an earlier one of any kind), are looked up first except
+in grounds, which keep §5's order, and a `define` is refused when the map already uses the name.
+A sprite's opaque pixels are those whose alpha is at least three quarters of its most opaque
+pixel's, so a soft shadow drawn in the same image does not move its foot; an unreadable or
+invisible image is an error, never a default foot. Points on hexagonal and staggered maps are a
+cell and a place in its box (bt-core's tile-to-pixel drops the fraction there). `all` on an
+infinite map is the box of its painted cells. `inside` treats cells beyond a finite map's edge
+as covered. An object too small to hold a cell's centre gives its standing cell, and a polyline
+the cells of a path one wide. A path joins any part of it that touches the rest only at a corner
+by the shortest way along sides. A shape whose box exceeds 2^24 cells is refused. `rough` sums
+five sine waves (the second to the sixth harmonic, phases from the seed). `reach` finds the cells
+every way passes through with one articulation-point search.
+**Instead of:** an error type per module; tabling layers once per script; one namespace per
+kind of definition; a fixed alpha threshold; Tiled's integer tile-to-pixel conversion; chunk
+bounds for `all`; paths that hang together by corners on staggered and hexagonal grids.
+**Why:** a script changes layers and objects as it runs; a name that silently means two things is
+worse than a refusal; a fixed threshold either counts the shadow or misses a translucent sprite;
+a path an agent paints must be one connected strip on every grid.
