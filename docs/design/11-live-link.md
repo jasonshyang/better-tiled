@@ -230,3 +230,80 @@ the way, and the rest of `bt editor`'s output stands.
 | Jobs | a job past its deadline is skipped; an answer sent just before the deadline still arrives (the slack) |
 | Privacy | a folder owned by another user or open to others is refused on both sides |
 | End to end (`apps/better-tiled`) | `bt` on a thread against the real editor stepped by `egui_kittest`: an edit lands as one undo step and `bt undo` takes it back; undo refuses after the person's edit; `selection` and `selected`; marks replace, add, move and clear, and never switch the shown map; a dry run marks the cells it would change; save writes what the editor has and reports an unwritable tileset; a failed or dry run leaves the editor alone; a conflicting apply is refused and the script reruns; a map with AutoMap layers is edited as what was painted; `--remember` sets the export target as an undo step |
+
+## 14. As built at M4
+
+M4 built the crate; the editor's server and handler, the editor core's external edits and
+`bt`'s commands over the link come next, on this API. What exists:
+
+| Module | What it holds |
+|---|---|
+| `dir` | `live_dir()`, `LIVE_DIR_VAR`; sockets named `<pid>.sock`; whether a process is alive (`kill` with no signal) |
+| `protocol` | `PROTOCOL` (1); `Request` with `EditRequest` and `MarkSpec`; `Response` (`Status` with `DocStatus` and `KeyboardFocus`, `MapText` with `TilesetText`, `Edited`, `Done`) and its `into_status`, `into_map_text`, `into_edited`, `into_done`; `Run` with `runs_from_cells` and `cells_from_runs`; `canonical_path` |
+| `wire` | `ask`, `serve` and the server's `Limits` (Unix only) |
+| `client` | `editors(folder) -> Result<Editors, Error>`, `Editors { answered, problems }` with `with_map_open(path)`; `Editor::{status, pid, socket, document, ask}`; `Problem::{OtherVersion, NoAnswer, Failed}` |
+| `server` | `Server::{start, lost}`, `Handler` (a closure is one), `SOCKET_CHECK_INTERVAL` |
+| `jobs` | `Jobs<Kind, Answer>::{new, ask, take}`, `Job { kind, reply }`, `Reply::{deadline, is_overdue, send}`, `JOB_WAIT`, `LONG_JOB_WAIT` |
+| `error` | `Error`; an error converts into its sentence, so a handler's `?` answers with it |
+
+Where it differs from the text above, or says more:
+
+- **Dependencies** are `rustix` instead of `libc` (whether a process is alive, and `poll`), with
+  `glam` for points and `thiserror`. `bt-utils` gained a `serde` feature, which writes `IRect` as
+  `{"x", "y", "w", "h"}`, and `paths::make_private_dir`, the runtime folder's check made public.
+- **The folder.** Both programs call `live_dir()`. A `BT_LIVE_DIR` must be an absolute path
+  (each program would read a relative one against its own working folder), short enough for
+  `<folder>/<pid>.sock` to fit a socket path, and passes the runtime folder's check.
+  `Server::start` and `editors` check the folder they are given too, so one cleaned away is made
+  again. A folder open to others is narrowed to `0700`, as §4 says, and refused only when it
+  stays open: that is what §13's "refused" comes to for it.
+- **Requests.** `Edit` holds an `EditRequest` (`EditRequest::new(path, script)` and struct update
+  for the options), so the handler passes one value on; on the wire it is the same flat object.
+  `seed` is optional and `by` is a string in `bt`'s words, read by `bt-script`. `RememberExport`
+  is left out until the Godot export. Every type refuses fields it does not know, except the
+  `status` request, which every version reads whatever else it carries; `editors` reads an
+  answer's `protocol` before the rest of it.
+- **Answers** are tagged by `"answer"` (`status`, `map_text`, `edited`, `done`) inside
+  `{"ok": …}`, so an answer reads on its own. `Edited.report` is the outcome as JSON
+  (`serde_json::Value`, what `bt-script` writes); `area` and `DocStatus.view` are `IRect`s,
+  `mouse` an `IVec2` written `[x, y]`. Cells are `Run { y, x0, x1 }`, written `[y, x0, x1]`; a
+  run with no cells is refused. `DocStatus` adds `world_tool` and `keyboard` (`map`,
+  `text_field`, `tileset_canvas`, `dialog`) for the document shown. `Status::of_this_process`
+  fills in the version and the process id.
+- **Canonical paths** have one definition, `canonical_path`. A path whose file does not exist
+  resolves its deepest folder that does, so a deleted map open in the editor is still found
+  through `/tmp`.
+- **The wire.** The ten seconds are for the whole request line, however many reads it takes. A
+  client never sends a line over 16 MiB (`Error::TooLarge`) and reads at most 256 MiB of answer,
+  since a snapshot holds a whole map. macOS refuses to set a socket's timeout once the peer has
+  closed; that is taken as no timeout, since reading no longer waits then, or an answer already
+  sent would be lost. A client whose write finds the connection closed still reads the answer.
+- **The client** asks the sockets one at a time; the newest process is the highest process id.
+  A socket nobody listens on whose process runs (its id reused) is kept and named. An editor
+  that answers its status with an error (its window took no job in time) is a
+  `Problem::Failed` with its sentence. `Editor::document` skips tilesets opened on their own.
+- **The server** serves sixteen connections at once and answers one more, unread, that the editor
+  is busy. Its thread waits in `poll` on the socket and on a stop socket, so a dropped server
+  always stops, also once macOS has removed the file and nothing could connect to wake it.
+  `lost()` also says the thread stopped. A dropped server removes its socket only while the file
+  is the one it made (device, inode, change time), so a server started before the old one is
+  dropped keeps its socket. A handler's panic is answered "the editor failed while answering".
+- **Jobs.** An asker stops waiting at the deadline while the job is queued, so five seconds are
+  five; once the window has taken it, five seconds of slack; and at once when the window drops
+  it unanswered (`Error::NotFinished`). `take()` drops overdue jobs; a job kept for a later frame
+  (an edit waiting for a stroke to end) is dropped once `reply.is_overdue()`. `Reply::send`
+  consumes the reply and says whether the asker still waited.
+- **Windows**: `live_dir()` names the folder without checking it, `Server::start` is
+  `Error::Unsupported` and `editors` finds none.
+
+Tests: 57 unit tests on Unix, covering §13's rows but the end to end one; 29 run without Unix
+sockets, two of them only there. Sockets live in short folders of their own
+(`/tmp/btl-<pid>-<n>`, `0700`), tests run in parallel, and waits are shortened through
+parameters (`Limits`, `editors_within`, `Jobs::with_slack`). No test starts a process: a child
+holds every open socket until it runs its program, which kept another test's closed socket
+listening; an exited process is an id no system gives. Another user's folder is `/`, when it is
+root's and the tests are not run as root.
+
+Not here yet: the editor's handler and jobs (`06-application.md`, §11), the external edits
+(`05-editor-core.md`, §17), `bt`'s routing and its `editor`, `mark`, `open` and `save`
+(`10-agents.md`, §13), the end-to-end tests, and `RememberExport`.
