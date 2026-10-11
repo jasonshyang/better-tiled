@@ -6,4 +6,5 @@ pub(crate) mod diff;
 pub(crate) mod editor;
 pub(crate) mod export;
 pub(crate) mod know;
+pub(crate) mod look;
 pub(crate) mod undo;

@@ -83,6 +83,9 @@ pub(crate) fn run(run: &Run) -> anyhow::Result<Printed> {
         Command::Save(args) => commands::editor::save(run, args),
         Command::Diff(args) => commands::diff::diff(run, args),
         Command::Check(args) => commands::check::check(run, args),
+        Command::Info(args) => commands::look::info(run, args),
+        Command::At(args) => commands::look::at(run, args),
+        Command::Objects(args) => commands::look::objects(run, args),
         other => bail!("{} is not built yet", command_name(other)),
     }
 }

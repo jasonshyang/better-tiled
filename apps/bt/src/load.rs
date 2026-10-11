@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, bail};
 use bt_automap::layers::{Setup, read_from_project};
-use bt_core::{CustomTypes, Map};
+use bt_core::Map;
 use bt_live::Request;
 use bt_tmx::{Loader, Warning};
 
@@ -21,10 +21,6 @@ use crate::run::Run;
 const PROJECT_EXTENSION: &str = "tiled-project";
 
 /// What every command's map comes with.
-#[expect(
-    dead_code,
-    reason = "bt info and bt edit read the rest when they are wired"
-)]
 pub(crate) struct LoadedMap {
     /// The map's canonical path.
     pub(crate) path: PathBuf,
@@ -38,6 +34,8 @@ pub(crate) struct LoadedMap {
     pub(crate) loader: Loader,
     /// Where it was read from.
     pub(crate) source: MapSource,
+    /// The project that applies to it, if any.
+    pub(crate) project: Option<Arc<bt_core::Project>>,
 }
 
 /// Where a command's map was read from.
@@ -53,14 +51,13 @@ pub(crate) enum MapSource {
 }
 
 /// What was painted on a map with AutoMap layers, and the layers' setup.
-#[expect(dead_code, reason = "bt edit reads them when it is wired")]
 pub(crate) struct PaintedLayers {
     /// The map as painted.
     pub(crate) painted: Map,
     /// The setup.
     pub(crate) setup: Setup,
     /// Why some of what was painted could not be put back.
-    pub(crate) notes: Vec<String>,
+    pub(crate) notes: Vec<bt_automap::Problem>,
 }
 
 /// Which copy of a map a command reads.
@@ -86,18 +83,26 @@ pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result
     let canonical =
         std::fs::canonicalize(path).with_context(|| format!("{} can't be read", path.display()))?;
     let home = run.folders.home.as_deref();
-    let custom_types = custom_types(&canonical, run.cli.project.as_deref(), home)?;
+    let project = project_of(&canonical, run.cli.project.as_deref(), home)?;
+    let custom_types = Arc::new(
+        project
+            .as_ref()
+            .map(|p| p.custom_types.clone())
+            .unwrap_or_default(),
+    );
     let link = run.link();
     let mut loader = Loader::builder().custom_types(custom_types).build();
     let open = link.open_map(&canonical);
     match (copy, open) {
-        (MapCopy::Editor, Some(open)) => return read_from_editor(&canonical, &open, loader),
+        (MapCopy::Editor, Some(open)) => {
+            return read_from_editor(&canonical, &open, loader, project);
+        }
         (MapCopy::Editor, None) => bail!(
             "{} is not open in the editor",
             bt_utils::paths::display_name(&canonical)
         ),
         (MapCopy::Shown, Some(open)) if open.document.dirty => {
-            return read_from_editor(&canonical, &open, loader);
+            return read_from_editor(&canonical, &open, loader, project);
         }
         (MapCopy::Shown, _) => {
             link.refuse_unanswered(&canonical, run.folders.recovery.as_deref())?;
@@ -112,11 +117,7 @@ pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result
         .map(|restored| PaintedLayers {
             painted: restored.painted,
             setup: restored.setup,
-            notes: restored
-                .notes
-                .iter()
-                .map(|note| note.text.clone())
-                .collect(),
+            notes: restored.notes,
         });
     Ok(LoadedMap {
         path: canonical,
@@ -125,6 +126,7 @@ pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result
         warnings: loaded.warnings,
         loader,
         source: MapSource::File,
+        project,
     })
 }
 
@@ -133,6 +135,7 @@ fn read_from_editor(
     path: &Path,
     open: &OpenMap<'_>,
     mut loader: Loader,
+    project: Option<Arc<bt_core::Project>>,
 ) -> anyhow::Result<LoadedMap> {
     let text = open
         .ask(&Request::Snapshot {
@@ -157,26 +160,27 @@ fn read_from_editor(
         source: MapSource::Editor {
             pid: open.editor.pid(),
         },
+        project,
     })
 }
 
-/// The custom types that apply to the map at `map`: those of `project`, else of the nearest
-/// `.tiled-project` above it (stopping at the repository's top and below `home`), else none.
-fn custom_types(
+/// The project that applies to the map at `map`: `project`, else the nearest `.tiled-project`
+/// above it (stopping at the repository's top and below `home`), else none.
+fn project_of(
     map: &Path,
     project: Option<&Path>,
     home: Option<&Path>,
-) -> anyhow::Result<Arc<CustomTypes>> {
+) -> anyhow::Result<Option<Arc<bt_core::Project>>> {
     let file = match project {
         Some(file) => Some(file.to_path_buf()),
         None => nearest_project(map, home)?,
     };
     let Some(file) = file else {
-        return Ok(Arc::new(CustomTypes::default()));
+        return Ok(None);
     };
     let loaded = bt_tmx::load_project(&file)
         .with_context(|| format!("the project {} can't be read", file.display()))?;
-    Ok(Arc::new(loaded.value.custom_types))
+    Ok(Some(Arc::new(loaded.value)))
 }
 
 /// The nearest `.tiled-project` above `map`. Two in one folder are refused: which one applies
