@@ -116,7 +116,11 @@ impl ScreenshotRun {
         picture: Option<&egui::ColorImage>,
     ) -> DevStep {
         if let Some(picture) = picture {
-            return DevStep::Quit(save_png(picture, &self.path).err());
+            return DevStep::Quit(
+                save_png(picture, &self.path)
+                    .map_err(|error| format!("--screenshot: {error}"))
+                    .err(),
+            );
         }
         if now.duration_since(self.started) > READY_TIMEOUT {
             let what = if self.requested {
@@ -214,7 +218,7 @@ pub(crate) fn screenshot_explain(value: Option<&str>) -> Result<Option<glam::IVe
 }
 
 /// Saves the window's picture as a PNG.
-fn save_png(picture: &egui::ColorImage, path: &std::path::Path) -> Result<(), String> {
+pub(crate) fn save_png(picture: &egui::ColorImage, path: &std::path::Path) -> Result<(), String> {
     let [width, height] = picture.size;
     let rgba: Vec<u8> = picture
         .pixels
@@ -225,12 +229,9 @@ fn save_png(picture: &egui::ColorImage, path: &std::path::Path) -> Result<(), St
     let height = u32::try_from(height).map_err(|_| "the picture is too tall".to_owned())?;
     let image = image::RgbaImage::from_raw(width, height, rgba)
         .ok_or_else(|| "the picture's pixels do not match its size".to_owned())?;
-    image.save(path).map_err(|error| {
-        format!(
-            "--screenshot: {} could not be written: {error}",
-            path.display()
-        )
-    })
+    image
+        .save(path)
+        .map_err(|error| format!("{} could not be written: {error}", path.display()))
 }
 
 /// `--bench` in progress.

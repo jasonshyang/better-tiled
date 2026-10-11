@@ -50,7 +50,7 @@ pub use effect::{
 pub use error::EditError;
 pub use external::{
     BaseRules, ExternalBase, ExternalEdit, ExternalEditError, ExternalUndo, ExternalUndoError,
-    MARK_COLORS, Mark, MarkCells,
+    ExternalUndone, MARK_COLORS, Mark, MarkCells,
 };
 pub use files::{AutotilesJob, ExpandedAutotiles};
 pub use files::{LoadJob, Loaded, NewMap, NewTileset, NewTilesetSource};

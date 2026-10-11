@@ -45,6 +45,9 @@ pub(crate) struct Startup {
     /// Where project files are locked while they are written: the user's runtime folder, shared
     /// with `bt`.
     pub(crate) lock_folder: Option<PathBuf>,
+    /// Where the live link listens for `bt`: none in checks (`--screenshot`, `--bench`) and on
+    /// platforms without it.
+    pub(crate) live_folder: Option<PathBuf>,
     /// This run's process id, which names its recovery snapshots and heartbeat.
     pub(crate) pid: u32,
     outcome: RunOutcome,
@@ -59,6 +62,13 @@ impl Startup {
             Ok(folder) => startup.lock_folder = Some(folder),
             // Saving says so when it needs one: AutoMap layers' painted state is not kept.
             Err(error) => log::warn!("no runtime folder to lock project files in: {error}"),
+        }
+        let checking = startup.screenshot.is_some() || startup.bench;
+        if cfg!(unix) && !checking {
+            match bt_live::live_dir() {
+                Ok(folder) => startup.live_folder = Some(folder),
+                Err(error) => log::warn!("bt cannot work with the open maps: {error}"),
+            }
         }
         Ok(startup)
     }
@@ -112,6 +122,7 @@ impl Startup {
             settings_path,
             recovery_folder: data.join(RECOVERY_FOLDER),
             lock_folder: None,
+            live_folder: None,
             pid: std::process::id(),
             outcome: RunOutcome::default(),
         })

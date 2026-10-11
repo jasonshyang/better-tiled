@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime};
 use bt_editor::{ActionId, DocumentId, Editor, FileRequest, Intent, Notice, Severity};
 use bt_image::ImageStore;
 
+use super::live::HeldJob;
 use super::menu::menu_bar;
 use super::startup::{RunOutcome, Startup};
 use super::status_bar::{StatusInput, status_bar};
@@ -22,6 +23,7 @@ use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun
 use crate::dialogs::{DialogRequest, Modals};
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
+use crate::live::LiveLink;
 use crate::panels::{
     AutoMapPanel, LayersPanel, ObjectsPanel, PropertiesPanel, TerrainsPanel, TileImages,
     TileSource, TilesPanel,
@@ -83,6 +85,10 @@ pub(crate) struct App {
     quit_guard: Arc<QuitGuard>,
     pub(super) dev: Option<DevRun>,
     pub(super) outcome: RunOutcome,
+    /// The live link: `bt` working with the open maps.
+    pub(super) live: LiveLink,
+    /// The live link's jobs waiting to be answered.
+    pub(super) live_held: Vec<HeldJob>,
     title: String,
     started: Instant,
     frame_started: Instant,
@@ -285,6 +291,18 @@ impl App {
         self.workers.inject(intents);
     }
 
+    /// Applies an intent with the frame's others (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn push_intent(&mut self, intent: Intent) {
+        self.intents.push(intent);
+    }
+
+    /// Whether the live link is listening (for the window's tests).
+    #[cfg(test)]
+    pub(crate) fn live_listening(&self) -> bool {
+        self.live.is_listening()
+    }
+
     /// Whether a modal is open (for the window's tests).
     #[cfg(test)]
     pub(crate) fn has_modal(&self) -> bool {
@@ -364,6 +382,11 @@ impl App {
             quit_guard: QuitGuard::new(ctx.clone()),
             dev: None,
             outcome: startup.outcome(),
+            live: LiveLink::new(startup.live_folder.clone(), {
+                let ctx = ctx.clone();
+                move || ctx.request_repaint()
+            }),
+            live_held: Vec::new(),
             title: String::new(),
             started: Instant::now(),
             frame_started: Instant::now(),
@@ -884,6 +907,7 @@ impl eframe::App for App {
         self.intents.push(Intent::Tick { now_ms });
         self.handle_system_quit(ctx);
         self.apply_intents(ctx);
+        self.serve_live_link(ctx);
         for problem in self.writer.take_problems() {
             self.notify(Notice::warning(problem));
         }

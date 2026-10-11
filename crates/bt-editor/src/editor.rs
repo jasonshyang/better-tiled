@@ -224,6 +224,7 @@ impl Editor {
                 self.set_tile_animation(doc, tile, frames)
             }
             Intent::CloseDocument(doc) => self.close_document(doc),
+            Intent::SaveDocument(doc) => self.save(doc),
             Intent::SelectLayer { doc, layer } => {
                 self.select_layer(doc, layer);
                 self.set_inspecting(doc, Inspecting::Layers);

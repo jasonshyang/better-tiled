@@ -98,6 +98,15 @@ pub enum ExternalEditError {
     Edit(#[from] EditError),
 }
 
+/// What `bt undo` did in the editor, and what the window must do after it.
+#[derive(Clone, Debug)]
+pub struct ExternalUndone {
+    /// What was taken back.
+    pub undo: ExternalUndo,
+    /// What the window must do.
+    pub effects: Vec<Effect>,
+}
+
 /// What `bt undo` did in the editor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExternalUndo {
@@ -274,7 +283,16 @@ impl Editor {
 
     /// Takes back the document's latest external edit, only while it is the latest change in
     /// the document.
-    pub fn external_undo(&mut self, doc: DocumentId) -> Result<ExternalUndo, ExternalUndoError> {
+    pub fn external_undo(&mut self, doc: DocumentId) -> Result<ExternalUndone, ExternalUndoError> {
+        let undo = self.take_back_external(doc)?;
+        Ok(ExternalUndone {
+            undo,
+            effects: self.after_changes(),
+        })
+    }
+
+    /// [`Editor::external_undo`] without what follows a change.
+    fn take_back_external(&mut self, doc: DocumentId) -> Result<ExternalUndo, ExternalUndoError> {
         let document = self
             .documents
             .get(doc)

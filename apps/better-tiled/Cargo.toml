@@ -13,8 +13,11 @@ bt-automap.workspace = true
 bt-core.workspace = true
 bt-editor.workspace = true
 bt-image.workspace = true
+bt-live.workspace = true
 bt-render.workspace = true
+bt-script.workspace = true
 bt-terrain.workspace = true
+bt-tmx.workspace = true
 bt-utils.workspace = true
 eframe = { workspace = true, features = ["accesskit", "default_fonts", "wayland", "wgpu", "x11"] }
 egui.workspace = true
@@ -33,7 +36,6 @@ objc2-app-kit = { workspace = true, features = ["NSApplication", "NSResponder"] 
 
 [dev-dependencies]
 bt-test-data = { workspace = true, features = ["fixtures"] }
-bt-tmx.workspace = true
 egui_kittest = { workspace = true, features = ["eframe"] }
 fontdue.workspace = true
 toml.workspace = true

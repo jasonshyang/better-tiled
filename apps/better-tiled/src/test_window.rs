@@ -45,8 +45,18 @@ impl TestWindow {
 
     /// A window in `data` for run `pid` (a later run in the same process is another run).
     pub(crate) fn run_as(data: &Path, pid: u32) -> TestWindow {
+        TestWindow::start(data, pid, None)
+    }
+
+    /// A window in `data` whose live link listens in `live`, for `bt` to ask.
+    pub(crate) fn with_live_link(data: &Path, live: &LiveFolder) -> TestWindow {
+        TestWindow::start(data, std::process::id(), Some(live.path().to_path_buf()))
+    }
+
+    fn start(data: &Path, pid: u32, live: Option<PathBuf>) -> TestWindow {
         let mut startup = Startup::from_folder(Cli::default(), data).unwrap();
         startup.pid = pid;
+        startup.live_folder = live;
         let locks = data.join("locks");
         std::fs::create_dir_all(&locks).unwrap();
         startup.lock_folder = Some(locks);
@@ -59,6 +69,45 @@ impl TestWindow {
         let mut window = TestWindow { harness };
         window.settle();
         window
+    }
+
+    /// Asks the window as `bt` does: finds it in `live` and sends `request`, from another
+    /// thread, while the window runs its frames.
+    pub(crate) fn ask_bt(
+        &mut self,
+        live: &LiveFolder,
+        request: bt_live::Request,
+    ) -> Result<bt_live::Response, String> {
+        let folder = live.path().to_path_buf();
+        let asking = std::thread::spawn(move || -> Result<bt_live::Response, String> {
+            let editors = bt_live::editors(&folder).map_err(|error| error.to_string())?;
+            let editor = editors
+                .answered
+                .into_iter()
+                .next()
+                .ok_or_else(|| "no editor answered".to_owned())?;
+            editor.ask(&request).map_err(|error| error.to_string())
+        });
+        let deadline = Instant::now() + SETTLE_TIMEOUT;
+        while !asking.is_finished() {
+            assert!(Instant::now() < deadline, "bt got no answer in time");
+            self.harness.step();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        self.settle();
+        asking.join().unwrap()
+    }
+
+    /// Applies an intent as a widget would, and waits for what it brings.
+    pub(crate) fn apply(&mut self, intent: bt_editor::Intent) {
+        self.harness.state_mut().push_intent(intent);
+        self.harness.run_steps(2);
+        self.settle();
+    }
+
+    /// Whether the live link is listening.
+    pub(crate) fn is_listening(&self) -> bool {
+        self.harness.state().live_listening()
     }
 
     /// Drops a file on the window and waits until it is open.
@@ -506,5 +555,39 @@ impl TestWindow {
             );
             std::thread::sleep(Duration::from_millis(2));
         }
+    }
+}
+
+/// A folder of its own for a window's live link: short (a socket's path is limited to about a
+/// hundred bytes), private, under `/tmp`, removed when dropped.
+pub(crate) struct LiveFolder {
+    path: PathBuf,
+}
+
+impl LiveFolder {
+    /// A new folder for the test `name`.
+    pub(crate) fn new(name: &str) -> LiveFolder {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let path = PathBuf::from(format!("/tmp/btw-{}-{name}", std::process::id()));
+        if path.exists() {
+            std::fs::remove_dir_all(&path).unwrap();
+        }
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&path)
+            .unwrap();
+        LiveFolder { path }
+    }
+
+    /// The folder.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for LiveFolder {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }

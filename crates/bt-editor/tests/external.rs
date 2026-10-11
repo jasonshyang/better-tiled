@@ -71,14 +71,17 @@ fn an_edit_lands_as_one_step_labelled_by_the_script_and_bt_undo_takes_it_back() 
     );
 
     assert_eq!(
-        editor.external_undo(doc).unwrap(),
+        editor.external_undo(doc).unwrap().undo,
         ExternalUndo::Undone {
             label: "widen the lake".into(),
             earlier: 0
         }
     );
     assert_eq!(ground_tile(&editor, doc, IVec2::ZERO), before);
-    assert_eq!(editor.external_undo(doc).unwrap(), ExternalUndo::Nothing);
+    assert_eq!(
+        editor.external_undo(doc).unwrap().undo,
+        ExternalUndo::Nothing
+    );
 }
 
 #[test]
@@ -138,8 +141,8 @@ fn bt_undo_takes_back_the_latest_external_edit_only() {
         visible: false,
     });
     assert_eq!(
-        editor.external_undo(doc),
-        Err(ExternalUndoError::NotLatest {
+        editor.external_undo(doc).err(),
+        Some(ExternalUndoError::NotLatest {
             edit: "second".into(),
             latest: "Hide Layer".into(),
         })
@@ -153,14 +156,14 @@ fn bt_undo_takes_back_the_latest_external_edit_only() {
     // Once the person's change is undone in the editor, the external edits go back one by one.
     editor.undo(doc).unwrap();
     assert_eq!(
-        editor.external_undo(doc).unwrap(),
+        editor.external_undo(doc).unwrap().undo,
         ExternalUndo::Undone {
             label: "second".into(),
             earlier: 1
         }
     );
     assert_eq!(
-        editor.external_undo(doc).unwrap(),
+        editor.external_undo(doc).unwrap().undo,
         ExternalUndo::Undone {
             label: "first".into(),
             earlier: 0
@@ -177,12 +180,15 @@ fn an_external_edit_undone_in_the_editor_is_said_to_be_undone_already() {
     editor.apply_external_edit(edit).unwrap();
     editor.undo(doc).unwrap();
     assert_eq!(
-        editor.external_undo(doc).unwrap(),
+        editor.external_undo(doc).unwrap().undo,
         ExternalUndo::AlreadyUndone {
             label: "script".into()
         }
     );
-    assert_eq!(editor.external_undo(doc).unwrap(), ExternalUndo::Nothing);
+    assert_eq!(
+        editor.external_undo(doc).unwrap().undo,
+        ExternalUndo::Nothing
+    );
 }
 
 #[test]

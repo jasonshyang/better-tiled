@@ -95,6 +95,8 @@ pub enum Intent {
     SelectDocument(DocumentId),
     /// Close a tab (asking about unsaved work).
     CloseDocument(DocumentId),
+    /// Save a document, current or not: the live link's `bt save`.
+    SaveDocument(DocumentId),
     /// Make a layer current and the only one selected.
     SelectLayer {
         /// The document.

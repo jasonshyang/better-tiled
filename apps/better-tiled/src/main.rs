@@ -9,6 +9,7 @@ mod dev;
 mod dialogs;
 mod files;
 mod focus;
+mod live;
 mod menus;
 mod panels;
 mod platform;
