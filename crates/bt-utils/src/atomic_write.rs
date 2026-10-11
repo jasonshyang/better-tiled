@@ -53,15 +53,19 @@ pub fn write_file(path: &Path, bytes: &[u8], mode: WriteMode) -> Result<(), Erro
     }
 }
 
-/// The file `path` stands for: the file a symbolic link points to, or `path` for a new file.
+/// The file `path` stands for: the file a symbolic link points to, or `path` made absolute for
+/// a new file (a bare file name's folder is the working folder, where its temporary file goes).
 fn resolve_target(path: &Path) -> Result<PathBuf, Error> {
+    let failed = |source| Error::Write {
+        path: path.to_path_buf(),
+        source,
+    };
     match fs::canonicalize(path) {
         Ok(target) => Ok(target),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(path.to_path_buf()),
-        Err(source) => Err(Error::Write {
-            path: path.to_path_buf(),
-            source,
-        }),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            std::path::absolute(path).map_err(failed)
+        }
+        Err(source) => Err(failed(source)),
     }
 }
 
@@ -147,6 +151,14 @@ impl TempFile {
 mod tests {
     use super::*;
     use bt_test_data::Scratch;
+
+    #[test]
+    fn a_new_file_named_without_a_folder_is_in_the_working_folder() {
+        let name = Path::new("bt-utils-no-such-file-anywhere.png");
+        let target = resolve_target(name).unwrap();
+        assert_eq!(target, std::env::current_dir().unwrap().join(name));
+        assert!(target.parent().is_some_and(|dir| dir.is_dir()));
+    }
 
     fn entries(dir: &Path) -> Vec<String> {
         let mut names: Vec<String> = fs::read_dir(dir)
