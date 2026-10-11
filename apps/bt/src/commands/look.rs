@@ -56,13 +56,16 @@ pub(crate) fn info(run: &Run, args: &MapArg) -> anyhow::Result<Printed> {
 }
 
 /// The rules that apply to a map: its AutoMap layers', else the rules file Tiled would find.
-struct FoundRules {
-    path: std::path::PathBuf,
-    rules: Result<RuleSet, String>,
+pub(crate) struct FoundRules {
+    /// The rules file.
+    pub(crate) path: std::path::PathBuf,
+    /// Its rules, or why they can't be read.
+    pub(crate) rules: Result<RuleSet, String>,
 }
 
-/// Reads the rules of the loaded map, through its loader so tilesets are shared.
-fn read_rules(loaded: &mut LoadedMap) -> Option<FoundRules> {
+/// Reads the rules of the loaded map, through its loader so tilesets are shared; none when the
+/// map has no AutoMap layers, no `rules.txt` beside it and no project naming a rules file.
+pub(crate) fn read_rules(loaded: &mut LoadedMap) -> Option<FoundRules> {
     let chosen = loaded
         .layers
         .as_ref()
