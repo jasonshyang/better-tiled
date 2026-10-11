@@ -63,19 +63,46 @@ pub(crate) struct PaintedLayers {
     pub(crate) notes: Vec<String>,
 }
 
+/// Which copy of a map a command reads.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum MapCopy {
+    /// The editor's when it has unsaved changes to the map, else the file.
+    Shown,
+    /// The file, whatever an editor holds.
+    File,
+    /// The editor's, which must have the map open.
+    Editor,
+}
+
 /// Reads the map at `path` as the module's doc says, with the custom types of `--project` (else
 /// the nearest project above the map), and its AutoMap layers from the project file found
 /// upward from it, stopping below the home folder.
 pub(crate) fn load_map(path: &Path, run: &Run) -> anyhow::Result<LoadedMap> {
+    load_copy(path, run, MapCopy::Shown)
+}
+
+/// Reads the copy `copy` of the map at `path`.
+pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result<LoadedMap> {
     let canonical =
         std::fs::canonicalize(path).with_context(|| format!("{} can't be read", path.display()))?;
     let home = run.folders.home.as_deref();
     let custom_types = custom_types(&canonical, run.cli.project.as_deref(), home)?;
     let link = run.link();
-    link.refuse_unanswered(&canonical, run.folders.recovery.as_deref())?;
     let mut loader = Loader::builder().custom_types(custom_types).build();
-    if let Some(open) = link.open_map(&canonical).filter(|open| open.document.dirty) {
-        return read_from_editor(&canonical, &open, loader);
+    let open = link.open_map(&canonical);
+    match (copy, open) {
+        (MapCopy::Editor, Some(open)) => return read_from_editor(&canonical, &open, loader),
+        (MapCopy::Editor, None) => bail!(
+            "{} is not open in the editor",
+            bt_utils::paths::display_name(&canonical)
+        ),
+        (MapCopy::Shown, Some(open)) if open.document.dirty => {
+            return read_from_editor(&canonical, &open, loader);
+        }
+        (MapCopy::Shown, _) => {
+            link.refuse_unanswered(&canonical, run.folders.recovery.as_deref())?;
+        }
+        (MapCopy::File, _) => {}
     }
     let loaded = loader
         .load_map(&canonical)
