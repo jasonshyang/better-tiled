@@ -601,7 +601,8 @@ Where it differs from the text above, or says more:
   sprite tilesets), runs the example's commands as written, and requires the edit to make
   nothing `check` points out and `check` to be clean.
 
-Tests: `bt-script` 156 unit tests and 40 integration tests (`tests/runner_*.rs` on synthetic
-tilesets, Tiled's examples and the Highlands pack; `tests/reports.rs`); `apps/bt` 51, every
+Tests: `bt-script` 158 unit tests and 40 integration tests (`tests/runner_*.rs` on synthetic
+tilesets, Tiled's examples and the Highlands pack; `tests/reports.rs`); `apps/bt` 54, every
 command on fixtures and Tiled's examples, `bt edit` on files and against a stand-in editor, the
-guide's tests; the end-to-end tests of the live link are in `apps/better-tiled`.
+guide's tests; the end-to-end tests of the live link are in `apps/better-tiled`. The agent runs
+and what they changed are in `13-testing.md`, §10.1.

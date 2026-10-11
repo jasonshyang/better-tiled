@@ -1,6 +1,7 @@
 # Testing
 
-*2026-10-09; what M0 to M3 built is as built at the end of M3, 2026-10-10. The rules every
+*2026-10-09; what M0 to M3 built is as built at the end of M3, 2026-10-10, and M4's at the end
+of M4, 2026-10-11. The rules every
 crate's tests follow and the infrastructure they share: the corpora and how they are found, the
 fixtures, the oracle and golden-file policies, randomised tests, the editor harness, external
 programs, performance checks, the gates no test can automate, and continuous integration. Each
@@ -247,6 +248,31 @@ editor. The briefs live in `apps/bt/tests/briefs/`. The gate passes when each re
 `bt check` is clean and a render shows what the brief asked for; the agent's own report is
 never the evidence. Friction the runs show is turned into typed problems or guide text, never
 into a generator.
+
+As built at M4, the gate ran on 2026-10-11 with Opus agents, two at a time. Each got its brief,
+`bt` at a fixed path with its data in a scratch home, the map's folder (a copy of Tiled's
+examples; for the editor, the guide example's `c9.tmx` on a copy of the Highlands pack, open in
+an editor with a live folder of its own) and the instruction to read `bt guide` first. Judged by
+`bt check` and renders: the desert market, the isometric river, the hexagonal range with one
+pass (checked with `bt reach`: every way across crosses the pass), the room of hand-placed walls,
+sticker-knight's new section and, in the editor, the bigger lake with two crossings marked as
+one undo step all pass. The sewers' room is drawn by the rules as asked; its `check` lists only
+objects the map's own rules place with types and properties the examples' project lacks, four
+of them as soon as the rules run on the untouched layout, and `check` now says they are the
+rules'. The first desert run placed `merchant` points the project doesn't define, which only
+`check` caught; once the edit report named every new problem, the rerun chose the project's
+`NPC` and passed. What the runs changed: the edit report names every new problem `check` would
+list; `check` names the objects the rules place; the save line and `bt info` say where the
+project file keeping what was painted is; small maps are drawn larger; a narrow view's column
+ruler has its tens; property values read one way in every report; `bt areas` and `bt mark` take
+a shape's words unquoted; usage errors name the program `bt`; and the guide says how terrains
+that don't border each other are spaced, how `avoid` and its margin count, how paths are as wide
+as they are and wind on isometric maps, which layer `tile` uses, what `under` covers, that
+sprites' types aren't checked, and that `reach` exits 0 either way. Left as they are: `explain`
+says nothing of objects the rules place; `bt` cannot measure a crossing or a jump; a pack tile
+whose picture doesn't match its terrain label (the Highlands' `terrain-highlands:1497`) is found
+only in a picture; the guide (35 KB) is more than some agents' tools show at once, and they read
+it from the saved output.
 
 ### 10.2 Windowed checks
 

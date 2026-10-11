@@ -815,6 +815,19 @@ designs recorded in `decisions.md`, among them the editor core running the terra
 AutoMap layers' runs as the engine's layer-name bindings, `bt-project` below `bt-automap` in the
 crate layers, and two autotile layouts the packs draw every terrain in.
 
+M4 was built on 2026-10-11; `10-agents.md` (§17) and `11-live-link.md` (§14), the M4 parts of
+`05-editor-core.md` and `06-application.md` (their §1.4) and `13-testing.md` are as built. Its
+measure is the agent runs of `13-testing.md`, §10.1: fresh Opus agents, each given a brief and
+`bt guide` and nothing else, built a walled market on the desert, a room on the sewers' AutoMap
+layers, a river on the isometric map, a mountain range with one pass on the hexagonal one, a
+room of hand-placed walls, a new section of sticker-knight's object-only level, and, in the open
+editor, a bigger frozen lake with two crossings marked; `bt check` is clean on each (on the
+sewers it lists only the objects the map's own rules place), and the guide's example runs as a
+test. Building it changed designs recorded in `decisions.md`: a script's input as a builder and
+the runner filling the whole report for both doors, the snapshot carrying a map's AutoMap
+layers, the marks' colours in the editor's status, pictures framed on their region, and what
+the agent runs asked of the reports and the guide.
+
 ## 18. Glossary
 
 - **Asset**: a loaded map, tileset, template, world or project, with a path and a dirty state.

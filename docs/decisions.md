@@ -970,3 +970,19 @@ pictures framed on chunks; Tiled's export options ignored for a picture; a stale
 for the next map of that name.
 **Why:** an agent reading a map the person is editing must see what the person sees, layers
 included; a picture that frames empty chunks or shifts rows misleads the reader it is for.
+
+## 2026-10-11 — What the agent runs changed
+
+**Decided:** the edit report names every new problem `bt check` would list, object problems
+included, with the project's types, so an agent learns at the edit what only `check` used to
+say. `check` names the objects the map's AutoMap rules place, whose types and properties come
+from the rule maps. Sprites' types are not checked against the project: they are the game's.
+The save line and `bt info` name the project file keeping what was painted as the map's folder
+reaches it. A picture without a scale draws a small map up to four times larger, in whole steps.
+A view's column ruler shows the tens whenever a column past 9 is shown. Property values are
+written by one function in every report. `bt areas` and `bt mark` take a shape's words as they
+are. The rest of what the runs found went into the guide.
+**Instead of:** a generator for markets, rivers or passes; a check of sprites' types against a
+project that wasn't written for them; leaving the guide to say what agents had to work out.
+**Why:** the runs are the measure, and each friction an agent met is either a typed fact a
+report should state or a sentence the guide should hold.
