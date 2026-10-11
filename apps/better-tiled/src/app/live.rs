@@ -487,6 +487,7 @@ impl App {
                 .map(|mark| MarkSpec {
                     runs: runs_from_cells(mark.cells.iter().copied()),
                     label: mark.label.clone(),
+                    color: Some(mark.color),
                 })
                 .collect(),
             world_tool: false,

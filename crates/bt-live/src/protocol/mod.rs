@@ -14,7 +14,7 @@ mod status;
 
 use std::path::{Path, PathBuf};
 
-pub use request::{EditRequest, MarkSpec, Request};
+pub use request::{EditRequest, MARK_PALETTE, MarkSpec, Request};
 pub use response::{Done, Edited, MapText, Response, TilesetText};
 pub use run::{Run, cells_from_runs, runs_from_cells};
 pub use status::{DocStatus, KeyboardFocus, Status};

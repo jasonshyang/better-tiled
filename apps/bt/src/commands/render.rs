@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, anyhow, bail};
 use bt_core::{Color, CustomTypes, Map};
-use bt_live::{MarkSpec, cells_from_runs};
+use bt_live::{MARK_PALETTE, MarkSpec, cells_from_runs};
 use bt_render::HeadlessDevice;
 use bt_script::{Context, GridLines, PictureMark, RenderOutcome, RenderRequest, parse_region};
 use bt_utils::paths::display_name;
@@ -23,18 +23,6 @@ use crate::output::printed;
 use crate::picture_file::write_picture;
 use crate::run::Run;
 use crate::script_input::shape_names;
-
-/// The colours the editor gives a map's marks in turn, as its canvas draws them: the first mark
-/// in the first, the sixth in the first again. The live link names a mark's cells and label but
-/// not its colour, so a mark the editor coloured otherwise (one marked again after others were
-/// taken away) is drawn in the colour of its place.
-const MARK_COLORS: [Color; 5] = [
-    Color::rgba(255, 64, 160, 255),
-    Color::rgba(255, 150, 0, 255),
-    Color::rgba(40, 200, 90, 255),
-    Color::rgba(230, 200, 0, 255),
-    Color::rgba(170, 80, 255, 255),
-];
 
 /// Runs `bt render`.
 pub(crate) fn render(run: &Run, args: &RenderArgs) -> anyhow::Result<Printed> {
@@ -145,16 +133,21 @@ fn editor_marks(run: &Run, path: &Path) -> anyhow::Result<Vec<PictureMark>> {
     Ok(marks_drawn(&open.document.marks))
 }
 
-/// The editor's marks as the picture draws them: in their order, in the colours the editor gives
-/// them in turn.
+/// The editor's marks as the picture draws them: in their order, each in the colour the editor
+/// drew it in (a mark that came without one in the colour of its place, as the editor gives
+/// them in turn).
 fn marks_drawn(marks: &[MarkSpec]) -> Vec<PictureMark> {
     marks
         .iter()
-        .zip(MARK_COLORS.iter().cycle())
-        .map(|(mark, &color)| PictureMark {
-            cells: cells_from_runs(&mark.runs),
-            color,
-            label: mark.label.clone(),
+        .enumerate()
+        .map(|(place, mark)| {
+            let index = mark.color.map_or(place, usize::from) % MARK_PALETTE.len();
+            let [r, g, b, a] = MARK_PALETTE.get(index).copied().unwrap_or_default();
+            PictureMark {
+                cells: cells_from_runs(&mark.runs),
+                color: Color::rgba(r, g, b, a),
+                label: mark.label.clone(),
+            }
         })
         .collect()
 }
@@ -307,22 +300,26 @@ mod tests {
     }
 
     #[test]
-    fn marks_are_drawn_in_the_colours_the_editor_gives_them_in_turn() {
-        let marks: Vec<MarkSpec> = (0..6)
+    fn marks_are_drawn_in_the_colours_the_editor_drew_them_in() {
+        let color = |index: usize| {
+            let [r, g, b, a] = MARK_PALETTE[index];
+            Color::rgba(r, g, b, a)
+        };
+        let mut marks: Vec<MarkSpec> = (0..6)
             .map(|n| MarkSpec {
                 runs: vec![CellRun { y: n, x0: 0, x1: 2 }],
                 label: format!("mark {n}"),
+                color: None,
             })
             .collect();
+        marks[2].color = Some(4);
         let drawn = marks_drawn(&marks);
         assert_eq!(drawn.len(), 6);
         assert_eq!(drawn[1].cells, [IVec2::new(0, 1), IVec2::new(1, 1)]);
         assert_eq!(drawn[1].label, "mark 1");
-        assert_eq!(drawn[1].color, MARK_COLORS[1]);
-        assert_eq!(
-            drawn[5].color, MARK_COLORS[0],
-            "the sixth takes the first again"
-        );
+        assert_eq!(drawn[1].color, color(1), "without a colour: its place's");
+        assert_eq!(drawn[2].color, color(4), "the colour the editor drew it in");
+        assert_eq!(drawn[5].color, color(0), "the sixth takes the first again");
     }
 
     #[test]

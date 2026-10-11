@@ -42,6 +42,7 @@ fn mark(label: &str, cells: &[(i32, i32)]) -> MarkSpec {
     MarkSpec {
         runs: runs_from_cells(cells.iter().map(|&(x, y)| IVec2::new(x, y))),
         label: label.to_owned(),
+        color: None,
     }
 }
 

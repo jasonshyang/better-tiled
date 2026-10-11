@@ -41,10 +41,12 @@ pub(crate) fn every_request() -> Vec<Request> {
                         },
                     ],
                     label: "door“s”".to_owned(),
+                    color: None,
                 },
                 MarkSpec {
                     runs: Vec::new(),
                     label: String::new(),
+                    color: None,
                 },
             ],
             add: true,
@@ -89,6 +91,7 @@ pub(crate) fn every_answer() -> Vec<Response> {
                     marks: vec![MarkSpec {
                         runs: vec![Run { y: 5, x0: 5, x1: 6 }],
                         label: "spawn".to_owned(),
+                        color: None,
                     }],
                     world_tool: false,
                     keyboard: Some(KeyboardFocus::Map),

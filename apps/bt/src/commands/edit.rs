@@ -196,6 +196,7 @@ fn edit_in_editor(
                     marks: vec![MarkSpec {
                         runs: cells,
                         label: label.clone(),
+                        color: None,
                     }],
                     add: true,
                     focus: true,

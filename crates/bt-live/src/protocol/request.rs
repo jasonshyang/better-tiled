@@ -111,6 +111,16 @@ impl EditRequest {
     }
 }
 
+/// The colours the editor draws marks in, as RGBA, given in turn: bright, and unlike the
+/// selection's blue. `bt render --marks` draws them in the same.
+pub const MARK_PALETTE: [[u8; 4]; 5] = [
+    [255, 64, 160, 255],
+    [255, 150, 0, 255],
+    [40, 200, 90, 255],
+    [230, 200, 0, 255],
+    [170, 80, 255, 255],
+];
+
 /// Cells `bt mark` outlines, with a label.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -119,6 +129,10 @@ pub struct MarkSpec {
     pub runs: Vec<Run>,
     /// The label shown with the cells; marking a label again moves that mark. Empty for none.
     pub label: String,
+    /// Which of [`MARK_PALETTE`]'s colours the editor drew it in, in a status; none in a
+    /// request, where the editor chooses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<u8>,
 }
 
 #[cfg(test)]
@@ -160,7 +174,8 @@ mod tests {
                 path: PathBuf::from("/maps/a.tmx"),
                 marks: vec![MarkSpec {
                     runs: vec![Run { y: 2, x0: 0, x1: 3 }],
-                    label: "door".to_owned()
+                    label: "door".to_owned(),
+                    color: None,
                 }],
                 add: true,
                 focus: false

@@ -306,6 +306,7 @@ pub(crate) fn mark(run: &Run, args: &MarkArgs) -> anyhow::Result<Printed> {
             marks: vec![MarkSpec {
                 runs: runs_from_cells(cells),
                 label: args.label.clone().unwrap_or_else(|| written.clone()),
+                color: None,
             }],
             add: args.add,
             focus: !args.no_focus,
@@ -450,6 +451,7 @@ mod tests {
             marks: vec![MarkSpec {
                 runs: vec![CellRun { y: 3, x0: 3, x1: 5 }],
                 label: "bridge".into(),
+                color: None,
             }],
             world_tool: false,
             keyboard: Some(KeyboardFocus::Map),

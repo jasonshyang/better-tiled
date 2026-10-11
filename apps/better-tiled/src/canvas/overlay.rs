@@ -54,14 +54,19 @@ pub(crate) struct EditedOutline {
     pub(crate) strength: f32,
 }
 
-/// The colours marks take in turn: bright, and unlike the selection's blue.
-const MARK_PALETTE: [Color; bt_editor::MARK_COLORS as usize] = [
-    Color::rgba(255, 64, 160, 255),
-    Color::rgba(255, 150, 0, 255),
-    Color::rgba(40, 200, 90, 255),
-    Color::rgba(230, 200, 0, 255),
-    Color::rgba(170, 80, 255, 255),
-];
+// The editor gives marks one of the live link's colours in turn.
+const _: () = assert!(bt_live::MARK_PALETTE.len() == bt_editor::MARK_COLORS as usize);
+
+/// The colour of a mark that takes the `index`th of the colours marks take in turn: bright, and
+/// unlike the selection's blue.
+fn mark_color(index: u8) -> Color {
+    let palette = bt_live::MARK_PALETTE;
+    let [r, g, b, a] = palette
+        .get(usize::from(index) % palette.len())
+        .copied()
+        .unwrap_or_default();
+    Color::rgba(r, g, b, a)
+}
 
 /// The most cells a mark tints; beyond them it is outlined only.
 const MOST_TINTED_CELLS: usize = 20_000;
@@ -88,10 +93,7 @@ pub(crate) fn mark_shapes(geometry: &MapGeometry, marks: &[Mark]) -> Vec<MarkSha
         .iter()
         .filter_map(|mark| {
             let first = *mark.cells.first()?;
-            let color = MARK_PALETTE
-                .get(usize::from(mark.color))
-                .copied()
-                .unwrap_or(MARK_PALETTE[0]);
+            let color = mark_color(mark.color);
             let tint = if mark.cells.len() <= MOST_TINTED_CELLS {
                 row_runs(&mark.cells)
                     .into_iter()
@@ -411,14 +413,14 @@ mod tests {
         let label = VectorItem::text(
             TextItem::new("bridge", DVec2::new(16.0, 16.0))
                 .screen_size(MARK_LABEL_PX * 2.0)
-                .color(MARK_PALETTE[1])
+                .color(mark_color(1))
                 .align(HAlign::Left, VAlign::Bottom),
         );
         assert!(drawn.contains(&label));
         let tint =
-            VectorItem::polygon(shapes[0].tint[0].clone()).fill(with_alpha(MARK_PALETTE[1], 56));
+            VectorItem::polygon(shapes[0].tint[0].clone()).fill(with_alpha(mark_color(1), 56));
         assert!(drawn.contains(&tint), "in the mark's colour");
-        assert_ne!(MARK_PALETTE[0], MARK_PALETTE[1]);
+        assert_ne!(mark_color(0), mark_color(1));
     }
 
     #[test]
