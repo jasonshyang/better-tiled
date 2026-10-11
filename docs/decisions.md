@@ -874,3 +874,82 @@ bounds for `all`; paths that hang together by corners on staggered and hexagonal
 **Why:** a script changes layers and objects as it runs; a name that silently means two things is
 worse than a refusal; a fixed threshold either counts the shadow or misses a translucent sprite;
 a path an agent paints must be one connected strip on every grid.
+
+## 2026-10-11 — Running scripts as built
+
+**Decided:** a script's input is a builder (`RunInput::builder(map, path)` with the seed, the
+editor's selection, the map's AutoMap layers, the `--with` definitions, rules the caller has
+read and the `--view` options) and one call runs it (`run_script`), on a copy, all or nothing;
+the runner fills the whole report but where the edit went: the problems the edit made (`check`'s
+`made_by`, so every report says them or that there are none) and the changed area as text. On a
+map with AutoMap layers the runner first runs the rules in full (keeping the ids of what they
+placed) and warns when that differs from the map as given; shapes, `delete objects on` and
+`like` read the map as it shows, refreshed after each change, and edits go to what was painted.
+`erase` empties only the shape's cells holding the terrain. The `--with` definitions draw from
+their own seed and the script starts again from its own. `like`, `name` and `key=value` go to
+the first sprite of each group. `automap` naming rules or bindings on a map with AutoMap layers
+is refused with `automap layers add …` as the way. Jitter keeps a foot in its cell (up to half
+the amount sideways and up). A piece is placed by the cell holding the point and refuses flips,
+layers, names and properties; tile layers a piece or `copy` needs are created, with a note.
+Cells no tile fits are a warning line; notes of replaced and pushed-back terrain list the cells;
+labels are cut at seventy characters; sprites whose foot can't be measured are skipped with a
+warning.
+**Instead of:** `Runner::new` and an operation at a time; the caller computing `made` and the
+view; reading shapes on what was painted; definitions sharing the script's seed.
+**Why:** both doors (a file and the editor) call the same function, so an edit is reported the
+same wherever it ran; an agent reads a map with AutoMap layers as it shows, and paints what the
+person paints; a definitions file must not change a script's randomness by being added.
+
+## 2026-10-11 — Looking and knowing as built
+
+**Decided:** view symbols are given from the map's tilesets and layers, so they hold across
+views and edits: terrains take their hint, then the next free ground symbol in the order of the
+tilesets' terrains (then digits); tiles get symbols over all their tilesets' tiles up to 48,
+else over the tiles the map uses; capitals go per group (sprites per layer, other objects per
+type). Only a tile of no terrain filling nine tenths of the bottom shown tile layer reads as a
+backdrop. Rows are shifted only on maps whose rows are staggered. `--corners` is refused on
+hexagonal and staggered maps, `--ids` stops at 60×100 cells and `--corners` at 160×160, both
+naming `--region`. The catalog without a part lists terrains, sprites and types and one line of
+tiles; more than twelve tiles named by id are listed rather than refused. Edge opacity is
+measured on up to six edge tiles (the outer quarter under each empty lane, opaque from alpha
+128, nine tenths needed). Renders have rulers on orthogonal maps only; other grids are cropped
+to the region. `explain` groups rules as the editor's Explain view does, each once at its best
+position, ten that came close before `--all`. A map holding rule-map layers is described as a
+rule map. A `new` map from a size writes CSV layers; a map like another restarts object ids and
+clears its export settings. `objects` writes each object as a script would make it.
+**Instead of:** symbols by order of first appearance; any filled bottom layer as a backdrop;
+refusing long tile lists.
+**Why:** an agent compares views before and after an edit, so a symbol must not move; the text
+and the picture must agree with what the editor shows.
+
+## 2026-10-11 — bt edit and edits through the live link as built
+
+**Decided:** on a file, `bt edit` keeps the previous bytes for `bt undo`, then writes the map,
+then the AutoMap record, and a step that fails takes back the ones before it; the record goes
+to the project file found above the map, else next to the `.tiled-project` that applies. A map
+open in the editor is edited there unless `--out` names another file; `--in-editor` and
+`--mark` conflict with `--out`. With `--do`, several maps run in turn and the first failure
+stops the rest: what was done is printed, then the failure, exit 1; `--json` prints an array
+for several maps. `--mark` adds its mark to the map's marks and moves the view to it. `--force`
+reads the file when no answering editor has the map. The map's reading warnings and the notes
+of what could not be painted back go to the report's warnings. In the window the script runs on
+the connection's thread on the base the window hands out; a conflict runs it again, three times
+at most; a panic is reported. A landed edit flashes `bt: LABEL` in the status bar and its area
+is outlined for three seconds, dark under light, fading.
+**Instead of:** writing the map before keeping the old one; one transaction across several maps;
+`--mark` replacing the person's other marks.
+**Why:** an undo that was never kept is worse than an edit refused; an agent working through a
+list of maps needs to know which were done; marks are how an agent and a person point at things
+together, so `bt` adds to them.
+
+## 2026-10-11 — Hidden edges as built
+
+**Decided:** an edge tile is a tile one terrain covers on some of its set's lanes and nothing on
+the others; whole ground is a tile one terrain covers on every lane its set uses. `check` lists
+the edge tiles of terrains whose edges measure opaque whose top-most tile below, on the shown
+tile layers under theirs, is not whole ground, grouped by layer, terrain and what is under them
+(`nothing`, `tiles of LAYER`, or the tile in words). The edit report lists the cells that are
+new, by layer and cell.
+**Instead of:** a terrain covering more than half of the tile below counting as whole.
+**Why:** an opaque edge over an edge of another terrain hides the part of it that differs, which
+is what the check is for.
