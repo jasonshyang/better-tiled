@@ -15,6 +15,7 @@ use bt_utils::IRect;
 use bt_utils::text::and_list;
 use glam::{DVec2, IVec2, UVec2};
 
+use super::choices::{pick, short_of_room, shuffle, wanted_of};
 use super::error::RunFailure;
 use super::runner::Runner;
 use crate::feet::standing_cell;
@@ -324,43 +325,4 @@ fn layer_named(map: &Map, name: &str, objects: bool) -> Option<LayerId> {
         }
     });
     exact.or(slugged)
-}
-
-/// One of `items`, at random.
-pub(super) fn pick<T: Clone>(items: &[T], rng: &mut bt_utils::rng::Rng) -> Option<T> {
-    let count = u64::try_from(items.len()).ok()?;
-    let index = usize::try_from(rng.below(count)?).ok()?;
-    items.get(index).cloned()
-}
-
-/// Shuffles `cells` with `rng` (Fisher and Yates).
-pub(super) fn shuffle(cells: &mut [IVec2], rng: &mut bt_utils::rng::Rng) {
-    for i in (1..cells.len()).rev() {
-        let bound = u64::try_from(i + 1).unwrap_or(u64::MAX);
-        if let Some(j) = rng.below(bound).and_then(|j| usize::try_from(j).ok()) {
-            cells.swap(i, j);
-        }
-    }
-}
-
-/// How many `scatter` places: the count, or the density times the cells.
-pub(super) fn wanted_of(amount: Amount, cells: usize) -> usize {
-    match amount {
-        Amount::Count(count) => usize::try_from(count).unwrap_or(usize::MAX),
-        Amount::Density(density) => {
-            let wanted = (density * cells as f64).round();
-            // A density is between 0 and 1, so this is at most the number of cells.
-            if wanted > 0.0 { wanted as usize } else { 0 }
-        }
-    }
-}
-
-/// The note for a scatter that ran out of room.
-pub(super) fn short_of_room(verb: &str, placed: usize, wanted: usize, spacing: f64) -> String {
-    let apart = if spacing > 0.0 {
-        format!(" {} cells apart", crate::words::number_text(spacing))
-    } else {
-        String::new()
-    };
-    format!("{verb} placed {placed} of {wanted} (no room left{apart})")
 }

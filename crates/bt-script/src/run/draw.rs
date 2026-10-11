@@ -7,8 +7,8 @@
 use bt_core::Map;
 use glam::{DVec2, IVec2};
 
+use super::choices::pick;
 use super::error::RunFailure;
-use super::pieces::pick;
 use super::runner::Runner;
 use super::sprites::Placeables;
 use crate::error::{Error, NameKind};

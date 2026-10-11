@@ -83,7 +83,7 @@ impl Runner<'_> {
 }
 
 /// `TILESET:ID` when `ids` name one tile.
-pub(super) fn one_tile_text(ids: &TileIds) -> Option<String> {
+fn one_tile_text(ids: &TileIds) -> Option<String> {
     match ids.ranges.as_slice() {
         [range] if range.first == range.last => Some(format!("{}:{}", ids.tileset, range.first)),
         _ => None,

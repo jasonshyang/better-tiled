@@ -4,6 +4,7 @@
 //! maps after it and the report ([`EditResult`]), and a failure names its line, the operation as
 //! written and what is wrong ([`RunError`]), leaving the caller's map as it was.
 
+mod choices;
 mod choose;
 mod definitions;
 mod draw;

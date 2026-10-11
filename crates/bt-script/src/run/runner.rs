@@ -609,7 +609,7 @@ fn resized(before: &Map, after: &Map, resizes: &[ResizeStep]) -> Option<Resized>
 
 /// The edit's label: the script's first-line comment, else its first operation that changes
 /// the map and how many more follow, cut to a length a history list shows.
-pub(super) fn label(script: &Script) -> String {
+fn label(script: &Script) -> String {
     let name = match &script.label {
         Some(comment) => comment.clone(),
         None => {

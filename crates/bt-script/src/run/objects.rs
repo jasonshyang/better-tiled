@@ -10,9 +10,9 @@ use bt_edit::{add_object, object_mut, remove_objects};
 use bt_utils::text::slug;
 use glam::{DVec2, IVec2};
 
+use super::choices::{short_of_room, shuffle};
 use super::choose::unlocked_in;
 use super::error::RunFailure;
-use super::pieces::{short_of_room, shuffle};
 use super::runner::Runner;
 use super::values::{typed_value, yes_or_no};
 use crate::feet::{pixel_to_point, point_to_pixel, standing_cell};

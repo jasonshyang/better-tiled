@@ -17,8 +17,8 @@ use bt_edit::add_object;
 use bt_utils::rng::Rng;
 use glam::{DVec2, IVec2};
 
+use super::choices::{pick, short_of_room, shuffle, wanted_of};
 use super::error::RunFailure;
-use super::pieces::{pick, short_of_room, shuffle, wanted_of};
 use super::runner::Runner;
 use crate::feet::standing_cell;
 use crate::names::{GroupPart, Piece};
@@ -386,7 +386,7 @@ fn offset_of(part: &GroupPart, flipped: bool) -> DVec2 {
 
 /// A foot in a cell: the middle of its bottom edge, moved at random by up to half the jitter
 /// either way sideways and up to half of it up, so it stays in the cell.
-pub(super) fn foot_in_cell(cell: IVec2, jitter: f64, rng: &mut Rng) -> DVec2 {
+fn foot_in_cell(cell: IVec2, jitter: f64, rng: &mut Rng) -> DVec2 {
     let mut foot = cell.as_dvec2() + DVec2::new(0.5, 1.0);
     if jitter > 0.0 {
         foot.x += (rng.next_f64() - 0.5) * jitter;
