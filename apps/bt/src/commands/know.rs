@@ -22,7 +22,7 @@ pub(crate) fn areas(run: &Run, args: &AreasArgs) -> anyhow::Result<Printed> {
     let mut loaded = load_map(&args.map, run)?;
     let names = shape_names(&mut loaded, args.with.as_deref(), args.seed)?;
     let context = Context::new(args.seed.unwrap_or(DEFAULT_SEED));
-    let shape = shape_cells(&loaded.map, &names, &context, &args.shape)?;
+    let shape = shape_cells(&loaded.map, &names, &context, &args.shape.join(" "))?;
     let outcome = AreasOutcome::from_cells(&loaded.map, &shape, args.all);
     printed(&outcome, run.cli.json, Status::Done)
 }
@@ -93,6 +93,11 @@ mod tests {
                 .starts_with("rect 0,0 2x3 minus 1,1: 5 cells in 1 area"),
             "{}",
             areas.text
+        );
+        let words = run(&["areas", path, "rect", "0,0", "2x3", "minus", "1,1"]).unwrap();
+        assert_eq!(
+            words.text, areas.text,
+            "a shape's words as they are, unquoted"
         );
         let reach = run(&[
             "reach",

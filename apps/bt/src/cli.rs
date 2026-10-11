@@ -193,8 +193,9 @@ pub(crate) enum CatalogWhat {
 pub(crate) struct AreasArgs {
     /// The map.
     pub(crate) map: PathBuf,
-    /// The shape, as in scripts (quote it when it has spaces).
-    pub(crate) shape: String,
+    /// The shape, as in scripts: its words as they are, or quoted as one.
+    #[arg(required = true, num_args = 1.., value_name = "SHAPE")]
+    pub(crate) shape: Vec<String>,
     /// List every area, not the first few.
     #[arg(long)]
     pub(crate) all: bool,
@@ -402,9 +403,9 @@ pub(crate) struct EditorArgs {
 pub(crate) struct MarkArgs {
     /// The map.
     pub(crate) map: PathBuf,
-    /// The cells, as a shape (quote it when it has spaces).
-    #[arg(required_unless_present = "clear")]
-    pub(crate) shape: Option<String>,
+    /// The cells, as a shape: its words as they are, or quoted as one.
+    #[arg(required_unless_present = "clear", num_args = 1.., value_name = "SHAPE")]
+    pub(crate) shape: Vec<String>,
     /// The mark's label.
     #[arg(long, value_name = "TEXT")]
     pub(crate) label: Option<String>,

@@ -295,7 +295,9 @@ that name.
                               saved size while it has nothing)
     where NAME[,NAME]         the cells all of that terrain now (its edge cells don't count), or
                               with one of those tiles (on any layer), or of a defined area
-    under LAYER[,LAYER]       the cells the objects of those layers cover (a level of sprites)
+    under LAYER[,LAYER]       the cells inside the objects of those layers: a sprite's whole
+                              picture, a small object the cell it stands in (a level of sprites;
+                              `define trees = area under props`, then `avoid trees`)
     @NAME or @#ID             the cells inside an object (a zone); @selected: the selected objects'
     selection                 the cells selected in the editor
 

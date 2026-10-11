@@ -287,9 +287,10 @@ pub(crate) fn mark(run: &Run, args: &MarkArgs) -> anyhow::Result<Printed> {
             focus: false,
         }
     } else {
-        let Some(written) = &args.shape else {
+        if args.shape.is_empty() {
             bail!("bt mark needs a shape, or --clear");
-        };
+        }
+        let written = &args.shape.join(" ");
         let mut loaded = crate::load::load_map(&path, run)?;
         let names = crate::script_input::shape_names(&mut loaded, args.with.as_deref(), None)?;
         let context =
