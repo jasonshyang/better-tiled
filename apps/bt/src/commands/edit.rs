@@ -141,7 +141,7 @@ fn edit_map(run: &Run, args: &EditArgs, job: &EditJob, map: &Path) -> anyhow::Re
     if args.out.is_none()
         && let Some(open) = link.open_map(&path)
     {
-        return edit_in_editor(args, job, &path, &open);
+        return edit_in_editor(args, job, &path, map, &open);
     }
     if args.in_editor || args.mark.is_some() {
         anyhow::bail!(
@@ -153,11 +153,13 @@ fn edit_map(run: &Run, args: &EditArgs, job: &EditJob, map: &Path) -> anyhow::Re
     edit_file(run, args, job, &path, map)
 }
 
-/// Runs the script in the editor that has the map open: one undo step, not saved.
+/// Runs the script in the editor that has the map open: one undo step, not saved. `typed` is
+/// the map as the command named it, which the report's next commands use.
 fn edit_in_editor(
     args: &EditArgs,
     job: &EditJob,
     path: &Path,
+    typed: &Path,
     open: &OpenMap<'_>,
 ) -> anyhow::Result<EditOutcome> {
     let request = EditRequest {
@@ -175,6 +177,9 @@ fn edit_in_editor(
     let edited = open.ask(&Request::Edit(request))?.into_edited()?;
     let mut outcome: EditOutcome = serde_json::from_value(edited.report)
         .context("the editor's report of the edit can't be read")?;
+    if let Some(Saved::InEditor { map }) = &mut outcome.saved {
+        *map = typed.display().to_string();
+    }
     if let Some(label) = &args.mark {
         let cells = edited.cells.unwrap_or_default();
         let marked = if cells.is_empty() {

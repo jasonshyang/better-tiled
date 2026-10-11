@@ -48,16 +48,18 @@ impl Link {
         if !cfg!(unix) {
             return Link::none();
         }
-        let folder = match bt_live::live_dir() {
-            Ok(folder) => folder,
-            Err(error) => {
-                return Link {
-                    problems: vec![format!("bt cannot look for running editors: {error}")],
-                    ..Link::none()
-                };
-            }
-        };
-        match bt_live::editors(&folder) {
+        match bt_live::live_dir() {
+            Ok(folder) => Link::in_folder(&folder),
+            Err(error) => Link {
+                problems: vec![format!("bt cannot look for running editors: {error}")],
+                ..Link::none()
+            },
+        }
+    }
+
+    /// The editors listening in `folder`.
+    pub(crate) fn in_folder(folder: &Path) -> Link {
+        match bt_live::editors(folder) {
             Ok(found) => Link {
                 silent: found
                     .problems

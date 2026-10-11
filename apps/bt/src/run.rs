@@ -49,6 +49,19 @@ impl Run {
         Run::offline(cli, folders)
     }
 
+    /// A run of `bt` with `args`, with the editors listening in `live`, with `folders`.
+    #[cfg(test)]
+    pub(crate) fn with_editors_in(args: &[&str], folders: Folders, live: &std::path::Path) -> Run {
+        use clap::Parser;
+        let cli = Cli::try_parse_from(std::iter::once("bt").chain(args.iter().copied()))
+            .unwrap_or_else(|error| panic!("{error}"));
+        Run {
+            cli,
+            folders,
+            link: OnceCell::from(Link::in_folder(live)),
+        }
+    }
+
     /// A run for a test that reads maps with `project`'s types.
     #[cfg(test)]
     pub(crate) fn for_test(project: Option<&std::path::Path>) -> Run {

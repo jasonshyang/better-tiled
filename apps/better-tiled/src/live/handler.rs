@@ -1,11 +1,14 @@
 //! A connection's request turned into jobs for the window (`11-live-link.md`, §8): the
 //! handler runs on the connection's thread, so the window never waits for a connection.
 
-use bt_editor::MarkCells;
+use std::path::Path;
+
+use bt_editor::{ExternalBase, ExternalEdit, ExternalEditError, MarkCells};
 use bt_live::{
     Handler, JOB_WAIT, Jobs, LONG_JOB_WAIT, Request, Response, canonical_path, cells_from_runs,
 };
 
+use super::edit::{Window, edit_in_editor};
 use super::jobs::{Answered, LiveAnswer, LiveJob};
 
 /// Answers `bt`'s requests through the window's jobs.
@@ -23,11 +26,36 @@ impl LiveHandler {
     fn ask(&self, job: LiveJob, wait: std::time::Duration) -> Result<Response, String> {
         match self.jobs.ask(job, wait)?? {
             Answered::Response(response) => Ok(response),
-            Answered::Base(_) | Answered::Applied(_) => {
-                Err("the editor answered another question".to_owned())
-            }
+            Answered::Base(_) | Answered::Applied(_) => Err(another_question()),
         }
     }
+}
+
+impl Window for LiveHandler {
+    fn prepare(&self, path: &Path) -> Result<ExternalBase, String> {
+        let job = LiveJob::Prepare {
+            path: path.to_path_buf(),
+        };
+        match self.jobs.ask(job, JOB_WAIT)?? {
+            Answered::Base(base) => Ok(*base),
+            Answered::Response(_) | Answered::Applied(_) => Err(another_question()),
+        }
+    }
+
+    fn apply(&self, edit: ExternalEdit) -> Result<Result<(), ExternalEditError>, String> {
+        let job = LiveJob::Apply {
+            edit: Box::new(edit),
+        };
+        match self.jobs.ask(job, LONG_JOB_WAIT)?? {
+            Answered::Applied(applied) => Ok(applied),
+            Answered::Response(_) | Answered::Base(_) => Err(another_question()),
+        }
+    }
+}
+
+/// Why an answer is not the one asked for.
+fn another_question() -> String {
+    "the editor answered another question".to_owned()
 }
 
 impl Handler for LiveHandler {
@@ -40,7 +68,7 @@ impl Handler for LiveHandler {
                 },
                 JOB_WAIT,
             ),
-            Request::Edit(_) => Err("bt edit in the editor is not built yet".to_owned()),
+            Request::Edit(edit) => edit_in_editor(self, edit),
             Request::Undo { path } => self.ask(
                 LiveJob::Undo {
                     path: canonical_path(path),

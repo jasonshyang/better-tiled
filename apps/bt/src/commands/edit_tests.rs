@@ -421,3 +421,149 @@ fn a_map_with_automap_layers_keeps_what_was_painted_in_its_project_file() {
         "the record went with the edit: {after}"
     );
 }
+
+/// An editor that has one map open and runs scripts on its file as the editor would, without
+/// landing them anywhere, noting every request.
+#[cfg(unix)]
+struct FakeEditor {
+    map: PathBuf,
+    asked: Arc<std::sync::Mutex<Vec<bt_live::Request>>>,
+}
+
+#[cfg(unix)]
+impl bt_live::Handler for FakeEditor {
+    fn handle(&self, request: &bt_live::Request) -> Result<bt_live::Response, String> {
+        use bt_live::{Request, Response};
+        self.asked.lock().unwrap().push(request.clone());
+        match request {
+            Request::Status => Ok(Response::Status(bt_live::Status {
+                protocol: bt_live::PROTOCOL,
+                pid: std::process::id(),
+                focused: true,
+                documents: vec![bt_live::DocStatus {
+                    path: Some(self.map.clone()),
+                    title: "a.tmx".into(),
+                    active: true,
+                    dirty: false,
+                    tileset: false,
+                    layer: Some("ground".into()),
+                    tool: "Stamp Brush".into(),
+                    brush: None,
+                    selection: Vec::new(),
+                    objects: Vec::new(),
+                    view: None,
+                    mouse: None,
+                    history: Vec::new(),
+                    undo_steps: 0,
+                    marks: Vec::new(),
+                    world_tool: false,
+                    keyboard: None,
+                }],
+            })),
+            Request::Edit(edit) => {
+                let mut loader = bt_tmx::Loader::default();
+                let map = loader.load_map(&self.map).unwrap().value;
+                let script = bt_script::parse_script(&edit.script).unwrap();
+                let input = bt_script::RunInput::builder(Arc::new(map), &self.map).build();
+                let result = bt_script::run_script(&script, &input, &mut loader).unwrap();
+                let outcome = result.outcome.with_saved(Saved::InEditor {
+                    map: self.map.display().to_string(),
+                });
+                Ok(Response::Edited(bt_live::Edited {
+                    report: serde_json::to_value(&outcome).unwrap(),
+                    area: outcome.area,
+                    applied: true,
+                    map: None,
+                    cells: edit
+                        .want_cells
+                        .then(|| bt_live::runs_from_cells(outcome.cells.iter().copied())),
+                }))
+            }
+            Request::Mark { .. } => Ok(Response::Done(bt_live::Done {
+                message: "1 mark on a.tmx; in view already".into(),
+                nothing: false,
+            })),
+            other => Err(format!("not in this test: {other:?}")),
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_map_open_in_the_editor_is_edited_there_and_mark_outlines_what_changed() {
+    use std::os::unix::fs::DirBuilderExt;
+
+    let scratch = Scratch::new("bt-edit-in-editor").unwrap();
+    let folders = folders(&scratch);
+    let map = grass_map(&scratch, "a.tmx");
+    let original = std::fs::read(&map).unwrap();
+    let live = PathBuf::from(format!("/tmp/bte-{}-edit", std::process::id()));
+    if live.exists() {
+        std::fs::remove_dir_all(&live).unwrap();
+    }
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&live)
+        .unwrap();
+    let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let server = bt_live::Server::start(
+        &live,
+        FakeEditor {
+            map: map.clone(),
+            asked: Arc::clone(&asked),
+        },
+    )
+    .unwrap();
+    let run = Run::with_editors_in(
+        &[
+            "edit",
+            text(&map),
+            "--mark",
+            "pond",
+            "--do",
+            "paint water rect 2,2 3x2",
+        ],
+        folders,
+        &live,
+    );
+    let Command::Edit(args) = &run.cli.command else {
+        panic!("an edit")
+    };
+    let printed = edit(&run, args).unwrap();
+    drop(server);
+    let _ = std::fs::remove_dir_all(&live);
+    assert!(
+        printed.text.ends_with(&format!(
+            "applied in the editor as one undo step (bt undo {map} takes it back); not saved \
+             yet: bt save {map} writes the file\noutlined in the editor as “pond”: 1 mark on \
+             a.tmx; in view already\n",
+            map = map.display()
+        )),
+        "{}",
+        printed.text
+    );
+    assert_eq!(
+        std::fs::read(&map).unwrap(),
+        original,
+        "the file is not written"
+    );
+    let asked = asked.lock().unwrap();
+    let edit_request = asked
+        .iter()
+        .find_map(|request| match request {
+            bt_live::Request::Edit(edit) => Some(edit.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(edit_request.script, "paint water rect 2,2 3x2");
+    assert!(edit_request.want_cells && !edit_request.dry_run);
+    let Some(bt_live::Request::Mark { marks, add, .. }) = asked
+        .iter()
+        .find(|request| matches!(request, bt_live::Request::Mark { .. }))
+    else {
+        panic!("a mark: {asked:?}")
+    };
+    assert!(*add, "the mark joins the map's marks");
+    assert_eq!(marks[0].label, "pond");
+    assert!(!marks[0].runs.is_empty());
+}

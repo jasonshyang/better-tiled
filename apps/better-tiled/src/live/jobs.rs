@@ -7,10 +7,6 @@ use bt_live::Response;
 
 /// A job for the window's thread.
 #[derive(Debug)]
-#[expect(
-    dead_code,
-    reason = "an edit's base and result travel once bt edit runs in the editor"
-)]
 pub(crate) enum LiveJob {
     /// The editor's open documents.
     Status,
@@ -67,10 +63,6 @@ pub(crate) type LiveAnswer = Result<Answered, String>;
 
 /// What the window answers.
 #[derive(Debug)]
-#[expect(
-    dead_code,
-    reason = "an edit's base and result travel once bt edit runs in the editor"
-)]
 pub(crate) enum Answered {
     /// An answer for `bt` as it is.
     Response(Response),

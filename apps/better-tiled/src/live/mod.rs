@@ -4,6 +4,7 @@
 //! hidden. The preference "Let bt work with the open maps" starts and stops the listener, and a
 //! listener whose socket vanished (macOS cleans `/tmp`) is started again.
 
+mod edit;
 mod handler;
 mod jobs;
 

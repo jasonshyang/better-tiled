@@ -278,3 +278,200 @@ fn the_preference_stops_and_starts_the_live_link() {
     assert!(window.is_listening());
     assert!(socket.exists());
 }
+
+/// What `bt edit` sends for `script` on `map`.
+fn edit_request(map: &Path, script: &str) -> Request {
+    Request::Edit(bt_live::EditRequest::new(map, script))
+}
+
+/// The report of an edit the editor answered.
+fn edit_report(edited: &bt_live::Edited) -> bt_script::EditOutcome {
+    serde_json::from_value(edited.report.clone()).unwrap()
+}
+
+/// The tile in `cell` of the layer `ground` of the map the window has at `map`.
+fn ground_tile(window: &TestWindow, map: &Path, cell: IVec2) -> Option<u32> {
+    let editor = window.editor();
+    let doc = editor.document_at(map).unwrap();
+    let shown = editor.map_of(doc).unwrap();
+    let tiles = shown
+        .layers
+        .iter()
+        .find(|layer| layer.name == "ground")
+        .and_then(|layer| layer.as_tile_layer())
+        .unwrap();
+    let placed = tiles.cell(cell);
+    (!placed.is_empty()).then(|| placed.tile().0)
+}
+
+#[test]
+fn an_edit_lands_as_one_undo_step_that_bt_undo_takes_back() {
+    let scratch = Scratch::new("window-live-edit").unwrap();
+    let live = LiveFolder::new("edit");
+    let map = write_map(scratch.path(), "a.tmx");
+    let mut window = TestWindow::with_live_link(&scratch.join("data"), &live);
+    window.drop_file(&map);
+    let edited = window
+        .ask_bt(
+            &live,
+            edit_request(
+                &map,
+                "# a corner of fives\ntile tiles:5 rect 0,0 2x2 layer ground",
+            ),
+        )
+        .unwrap()
+        .into_edited()
+        .unwrap();
+    assert!(edited.applied);
+    assert_eq!(
+        edited.area,
+        Some(bt_utils::IRect::from_min_size(IVec2::ZERO, IVec2::splat(2)))
+    );
+    let report = edit_report(&edited);
+    assert_eq!(report.label, "a corner of fives");
+    assert!(
+        matches!(report.saved, Some(bt_script::Saved::InEditor { .. })),
+        "{:?}",
+        report.saved
+    );
+    assert_eq!(report.made, Some(Vec::new()));
+    assert_eq!(ground_tile(&window, &map, IVec2::new(1, 1)), Some(5));
+    let status = window
+        .ask_bt(&live, Request::Status)
+        .unwrap()
+        .into_status()
+        .unwrap();
+    let document = &status.documents[0];
+    assert!(document.dirty, "the edit is not saved");
+    assert_eq!(document.undo_steps, 1, "one step");
+    assert_eq!(
+        document.history.last().map(String::as_str),
+        Some("a corner of fives")
+    );
+
+    let undone = done(window.ask_bt(&live, Request::Undo { path: map.clone() }));
+    assert!(
+        undone.message.starts_with("took back “a corner of fives”"),
+        "{}",
+        undone.message
+    );
+    assert_eq!(ground_tile(&window, &map, IVec2::new(1, 1)), Some(1));
+}
+
+#[test]
+fn a_dry_run_or_a_failing_script_leaves_the_editor_alone() {
+    let scratch = Scratch::new("window-live-dry-run").unwrap();
+    let live = LiveFolder::new("dry");
+    let map = write_map(scratch.path(), "a.tmx");
+    let mut window = TestWindow::with_live_link(&scratch.join("data"), &live);
+    window.drop_file(&map);
+    let mut request = bt_live::EditRequest::new(&map, "tile tiles:5 rect 1,0 2x2 layer ground");
+    request.dry_run = true;
+    request.want_cells = true;
+    request.want_map = true;
+    let edited = window
+        .ask_bt(&live, Request::Edit(request))
+        .unwrap()
+        .into_edited()
+        .unwrap();
+    assert!(!edited.applied);
+    let cells = bt_live::cells_from_runs(&edited.cells.clone().unwrap());
+    assert_eq!(cells.len(), 4, "the cells it would change");
+    assert!(
+        edited
+            .map
+            .as_deref()
+            .is_some_and(|text| text.contains("<map"))
+    );
+    assert_eq!(
+        edit_report(&edited).saved,
+        Some(bt_script::Saved::DryRun { in_editor: true })
+    );
+    let failing = window.ask_bt(&live, edit_request(&map, "paint lava all"));
+    let error = failing.err().unwrap();
+    assert!(error.starts_with("line 1 (paint lava all)"), "{error}");
+    assert_eq!(ground_tile(&window, &map, IVec2::new(1, 0)), Some(1));
+    let status = window
+        .ask_bt(&live, Request::Status)
+        .unwrap()
+        .into_status()
+        .unwrap();
+    assert!(!status.documents[0].dirty && status.documents[0].undo_steps == 0);
+}
+
+#[test]
+fn selection_is_what_the_person_selected_and_their_edit_keeps_bt_undo_off() {
+    let scratch = Scratch::new("window-live-selection").unwrap();
+    let live = LiveFolder::new("selection");
+    let map = write_map(scratch.path(), "a.tmx");
+    let mut window = TestWindow::with_live_link(&scratch.join("data"), &live);
+    window.drop_file(&map);
+    window.apply(bt_editor::Intent::Run(bt_editor::ActionId::SelectAll));
+    let edited = window
+        .ask_bt(
+            &live,
+            edit_request(&map, "tile tiles:7 selection layer ground"),
+        )
+        .unwrap()
+        .into_edited()
+        .unwrap();
+    assert_eq!(edit_report(&edited).cells.len(), 12, "every selected cell");
+
+    // The person edits after bt: bt undo leaves their edit and bt's alone.
+    window.press(egui::Modifiers::NONE, egui::Key::E);
+    window.click_cell(
+        IVec2::new(3, 2),
+        egui::PointerButton::Primary,
+        egui::Modifiers::NONE,
+    );
+    let refused = window
+        .ask_bt(&live, Request::Undo { path: map.clone() })
+        .err()
+        .unwrap();
+    assert!(refused.contains("Erase"), "{refused}");
+    assert_eq!(ground_tile(&window, &map, IVec2::new(0, 0)), Some(7));
+}
+
+#[test]
+fn a_map_with_automap_layers_is_edited_as_what_was_painted() {
+    let Some(examples) = bt_test_data::test_data("reference/tiled/examples") else {
+        return;
+    };
+    let scratch = Scratch::new("window-live-automap-layers").unwrap();
+    let live = LiveFolder::new("layers");
+    let folder = scratch
+        .mirror(&examples.join("sewer_automap"), "sewer_automap")
+        .unwrap();
+    let map = std::fs::canonicalize(folder.join("sewers.tmx")).unwrap();
+    let mut window = TestWindow::with_live_link(&scratch.join("data"), &live);
+    window.drop_file(&map);
+    let started = window
+        .ask_bt(&live, edit_request(&map, "automap layers"))
+        .unwrap()
+        .into_edited()
+        .unwrap();
+    assert!(started.applied);
+    let doc = window.editor().document_at(&map).unwrap();
+    assert!(window.editor().document(doc).unwrap().automap().is_some());
+
+    let cleared = window
+        .ask_bt(&live, edit_request(&map, "clear rect 0,0 31x31 layer set"))
+        .unwrap()
+        .into_edited()
+        .unwrap();
+    assert!(cleared.applied);
+    let report = edit_report(&cleared);
+    assert!(
+        report.painted.as_ref().is_some_and(|p| !p.is_empty()),
+        "what was painted changed"
+    );
+    let editor = window.editor();
+    let painted = editor.map_of(doc).unwrap();
+    let set = painted
+        .layers
+        .iter()
+        .find(|layer| layer.name == "set")
+        .and_then(|layer| layer.as_tile_layer())
+        .unwrap();
+    assert_eq!(set.cells().count(), 0, "the edit cleared what was painted");
+}
