@@ -10,6 +10,9 @@
 //! GPL-3.0-or-later with them.
 
 mod at;
+mod catalog;
+mod catalog_sprites;
+mod catalog_tiles;
 mod changes;
 mod check;
 mod context;
@@ -27,6 +30,7 @@ mod info;
 mod layer_tree;
 mod names;
 mod objects;
+mod opacity;
 mod property_text;
 mod regions;
 mod report;
@@ -34,22 +38,21 @@ mod rule_words;
 mod run;
 mod script;
 mod shapes;
+mod sheet;
 mod symbols;
 mod tally;
+mod tile_pictures;
 mod view;
 mod view_corners;
 mod view_ids;
 mod words;
 
 pub use at::{CellLayer, CellOutcome, CellTile, LanesOf};
-pub use changes::{
-    CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved,
-    PropertyChange, Resized, TerrainCells,
-};
-pub use check::{
-    CheckOutcome, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt, Problem, Seam,
-    StandingGroup, ZoneCover, made_by, seams,
-};
+pub use catalog::{CatalogOutcome, CatalogPart, CatalogRequest, Cataloged, SheetInfo, TerrainEntry, TilesSummary, TypeEntry};
+pub use catalog_sprites::{Partner, Shared, SpriteEntry};
+pub use catalog_tiles::{LayerTiles, SideTiles, TileDetails, TileNeighbours, TilesetTiles};
+pub use changes::{CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved, PropertyChange, Resized, TerrainCells};
+pub use check::{CheckOutcome, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt, Problem, Seam, StandingGroup, ZoneCover, made_by, seams};
 pub use context::{Context, Selection};
 pub use create::{Created, NewOutcome, NewRequest, Refill};
 pub use diff::DiffOutcome;
@@ -71,6 +74,7 @@ pub use names::{
     object_type,
 };
 pub use objects::{ObjectBox, ObjectInfo, ObjectsOutcome, ObjectsRequest};
+pub use opacity::{EdgeMeter, EdgeOpacity};
 pub use regions::{
     AreasOutcome, CellsShowing, ConnectedArea, GridAxis, MapEdge, NoWay, Reach, ReachOutcome,
     ReachRequest, ShapeCells, Way,

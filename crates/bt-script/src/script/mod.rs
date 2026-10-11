@@ -17,6 +17,7 @@ pub use op::{
     SpritePart, TerrainPart,
 };
 pub use parse::{ParseError, parse_definitions, parse_script};
+pub(crate) use refs::named_items;
 pub use refs::{IdRange, LayerRef, Named, ObjectRef, TileIds};
 pub use tokens::split_do;
 pub use values::{parse_cell, parse_extent, parse_point, parse_region, parse_size};

@@ -314,6 +314,43 @@ pub enum Error {
         /// Why.
         why: String,
     },
+    /// Tiles written for `bt catalog MAP tiles` that are not tiles.
+    #[error("tiles {written}: {why}")]
+    NotTiles {
+        /// The tiles as written.
+        written: String,
+        /// What is wrong with them.
+        why: String,
+    },
+    /// More tiles named than `bt catalog MAP tiles TILESET:ID,…` tells about.
+    #[error(
+        "tiles TILESET:ID,… tells about at most {most} tiles, and these are {count}: bt catalog MAP tiles TILESET lists every tile with where it is used"
+    )]
+    TooManyTiles {
+        /// The tiles named.
+        count: usize,
+        /// The most it tells about.
+        most: usize,
+    },
+    /// A sheet scale out of range.
+    #[error("--scale for a sheet is a whole number from 1 to 8, and it is {scale}")]
+    SheetScale {
+        /// The scale given.
+        scale: u32,
+    },
+    /// A sheet larger than is drawn.
+    #[error(
+        "the sheet would be {}x{} px: name one tileset (bt catalog MAP tiles TILESET --sheet OUT.png) or narrow the list with --find",
+        size.x,
+        size.y
+    )]
+    SheetTooLarge {
+        /// Its size in pixels.
+        size: UVec2,
+    },
+    /// A sheet of nothing.
+    #[error("nothing to draw: the list has no terrain, sprite or tile with a picture")]
+    NothingToDraw,
 }
 
 /// What a name stands for, in the messages of [`Error`].
