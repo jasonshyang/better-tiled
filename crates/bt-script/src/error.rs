@@ -351,6 +351,18 @@ pub enum Error {
     /// A sheet of nothing.
     #[error("nothing to draw: the list has no terrain, sprite or tile with a picture")]
     NothingToDraw,
+    /// A picture's scale out of range.
+    #[error("--scale is a number above 0 and at most 8, and it is {scale}")]
+    RenderScale {
+        /// The scale given, as written.
+        scale: String,
+    },
+    /// A picture that could not be drawn.
+    #[error("the picture can't be drawn: {why}")]
+    NoPicture {
+        /// Why: what the renderer said.
+        why: String,
+    },
 }
 
 /// What a name stands for, in the messages of [`Error`].

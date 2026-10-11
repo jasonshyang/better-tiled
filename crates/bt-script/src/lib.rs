@@ -31,6 +31,7 @@ mod layer_tree;
 mod names;
 mod objects;
 mod opacity;
+mod picture;
 mod property_text;
 mod regions;
 mod report;
@@ -48,11 +49,20 @@ mod view_ids;
 mod words;
 
 pub use at::{CellLayer, CellOutcome, CellTile, LanesOf};
-pub use catalog::{CatalogOutcome, CatalogPart, CatalogRequest, Cataloged, SheetInfo, TerrainEntry, TilesSummary, TypeEntry};
+pub use catalog::{
+    CatalogOutcome, CatalogPart, CatalogRequest, Cataloged, SheetInfo, TerrainEntry, TilesSummary,
+    TypeEntry,
+};
 pub use catalog_sprites::{Partner, Shared, SpriteEntry};
 pub use catalog_tiles::{LayerTiles, SideTiles, TileDetails, TileNeighbours, TilesetTiles};
-pub use changes::{CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved, PropertyChange, Resized, TerrainCells};
-pub use check::{CheckOutcome, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt, Problem, Seam, StandingGroup, ZoneCover, made_by, seams};
+pub use changes::{
+    CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved,
+    PropertyChange, Resized, TerrainCells,
+};
+pub use check::{
+    CheckOutcome, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt, Problem, Seam,
+    StandingGroup, ZoneCover, made_by, seams,
+};
 pub use context::{Context, Selection};
 pub use create::{Created, NewOutcome, NewRequest, Refill};
 pub use diff::DiffOutcome;
@@ -75,6 +85,7 @@ pub use names::{
 };
 pub use objects::{ObjectBox, ObjectInfo, ObjectsOutcome, ObjectsRequest};
 pub use opacity::{EdgeMeter, EdgeOpacity};
+pub use picture::{GridLines, MarkDrawn, PictureMark, RenderOutcome, RenderRequest, Rendered};
 pub use regions::{
     AreasOutcome, CellsShowing, ConnectedArea, GridAxis, MapEdge, NoWay, Reach, ReachOutcome,
     ReachRequest, ShapeCells, Way,
@@ -95,4 +106,7 @@ pub use script::{
 pub use shapes::{area_cells, map_cells, object_cells, shape_cells};
 pub use tally::NameCount;
 pub use view::{ViewBy, ViewOutcome, ViewRequest};
-pub use words::{capped_list, cell_text, cells_text, id_ranges_text, number_text, point_text, quoted_word, region_text, value_text};
+pub use words::{
+    capped_list, cell_text, cells_text, id_ranges_text, number_text, point_text, quoted_word,
+    region_text, value_text,
+};
