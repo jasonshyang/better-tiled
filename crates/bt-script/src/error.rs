@@ -3,7 +3,7 @@
 //! one, the way to what was meant.
 
 use bt_core::{LayerId, ObjectId};
-use glam::IVec2;
+use glam::{IVec2, UVec2};
 
 /// The most names an unknown name's message lists in full; with more, it says where the full
 /// list is.
@@ -293,6 +293,26 @@ pub enum Error {
         run: usize,
         /// How many runs there are.
         runs: usize,
+    },
+    /// A new map, or its tiles, of no size.
+    #[error("{what} {}x{}: it must be at least 1x1", size.x, size.y)]
+    ZeroSize {
+        /// The option: `--size`, `--tile`.
+        what: &'static str,
+        /// The size given.
+        size: UVec2,
+    },
+    /// A layer of `bt new --layers` that is not `NAME:tiles` or `NAME:objects`.
+    #[error("--layers {spec}: a layer is NAME:tiles or NAME:objects")]
+    LayerSpec {
+        /// The layer as written.
+        spec: String,
+    },
+    /// A new map that could not be put together.
+    #[error("the new map can't be made: {why}")]
+    NotCreated {
+        /// Why.
+        why: String,
     },
 }
 

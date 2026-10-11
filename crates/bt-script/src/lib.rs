@@ -13,6 +13,7 @@ mod at;
 mod changes;
 mod check;
 mod context;
+mod create;
 mod diff;
 mod edit_report;
 mod error;
@@ -50,6 +51,7 @@ pub use check::{
     StandingGroup, ZoneCover, made_by, seams,
 };
 pub use context::{Context, Selection};
+pub use create::{Created, NewOutcome, NewRequest, Refill};
 pub use diff::DiffOutcome;
 pub use edit_report::{EditOutcome, LineNote, Saved};
 pub use error::{Error, NameKind};
