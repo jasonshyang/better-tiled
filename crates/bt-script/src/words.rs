@@ -19,7 +19,6 @@ pub(crate) struct RectJson {
 }
 
 /// How a rectangle that may be missing is written in JSON: as [`RectJson`], or `null`.
-#[cfg_attr(not(test), expect(dead_code, reason = "the edit report uses it"))]
 pub(crate) mod rect_option_json {
     use super::*;
 

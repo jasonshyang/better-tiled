@@ -14,6 +14,7 @@ mod changes;
 mod check;
 mod context;
 mod diff;
+mod edit_report;
 mod error;
 mod export;
 mod feet;
@@ -28,6 +29,7 @@ mod property_text;
 mod regions;
 mod report;
 mod rule_words;
+mod run;
 mod script;
 mod shapes;
 mod tally;
@@ -44,6 +46,7 @@ pub use check::{
 };
 pub use context::{Context, Selection};
 pub use diff::DiffOutcome;
+pub use edit_report::{EditOutcome, LineNote, Saved};
 pub use error::{Error, NameKind};
 pub use export::{ExportFormat, ExportOutcome};
 pub use feet::{Feet, pixel_to_point, point_to_pixel, standing_cell};
@@ -66,6 +69,9 @@ pub use regions::{
 };
 pub use report::{
     JsonError, Line, LineKind, Outcome, Report, Section, from_json, to_json, to_json_pretty,
+};
+pub use run::{
+    DEFAULT_SEED, EditResult, RunError, RunFailure, RunInput, RunInputBuilder, run_script,
 };
 pub use script::{
     Amount, Area, Assignment, Binding, CopySource, Drawing, Flip, Geometry, IdRange, LayerOp,

@@ -11,7 +11,6 @@ mod objects;
 pub use cells::{CellChanges, TerrainCells};
 pub use objects::{ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved};
 
-#[allow(unused_imports, reason = "the runner names objects as the report does")]
 pub(crate) use objects::object_kind;
 
 use std::collections::{BTreeSet, HashMap};
@@ -343,7 +342,6 @@ fn size_of(map: &Map) -> IVec2 {
 
 /// The cells that differ between two maps, row by row: the cells of tile layers that changed,
 /// and where objects that were added, removed, moved or changed stand (before and after).
-#[cfg_attr(not(test), expect(dead_code, reason = "the edit report uses it"))]
 pub(crate) fn changed_cells(before: &Map, after: &Map, feet: &mut Feet) -> Vec<IVec2> {
     let mut old_layers: HashMap<LayerId, &Layer> = HashMap::new();
     before.for_each_layer(|layer, _| {

@@ -311,6 +311,21 @@ fn objects_the_rules_place_keep_their_ids_from_one_result_to_the_next() {
     assert_eq!(placed[0], (1, 4.0));
     assert!(placed[1].0 > 2, "{placed:?}");
     assert!(third.result().next_object_id > placed[1].0);
+
+    // A result known from elsewhere (the map's file) gives its ids to the next update, though a
+    // fresh run would number the placed objects otherwise.
+    let mut saved = Map::clone(first.result());
+    if let Some(bt_core::LayerKind::Object(objects)) =
+        saved.layer_mut(spawns).map(|layer| &mut layer.kind)
+    {
+        for object in Arc::make_mut(&mut objects.objects) {
+            object.id = ObjectId(object.id.0 + 10);
+        }
+    }
+    saved.next_object_id = 13;
+    let known = AutoLayers::known(Arc::new(painted.clone()), Arc::new(saved));
+    let next = AutoLayers::update(Some(&known), Arc::new(painted), &setup, &rules);
+    assert_eq!(ids(&next), [(11, 4.0), (12, 20.0)]);
 }
 
 #[test]

@@ -133,6 +133,19 @@ impl AutoLayers {
         })
     }
 
+    /// AutoMap layers whose result is known without running them: `result` is what the rules
+    /// made of `painted`, as the map's file holds it or the editor shows it. It stands for the
+    /// layers before a change: [`AutoLayers::update`] from it keeps the ids of the objects the
+    /// rules placed in `result`. The stages before the result and the runs' reports are not
+    /// known, so it has the result as its one stage and no reports.
+    pub fn known(painted: Arc<Map>, result: Arc<Map>) -> AutoLayers {
+        AutoLayers {
+            painted,
+            after: vec![result],
+            reports: Vec::new(),
+        }
+    }
+
     /// The painted map with no run made: its result is what was painted (rules that could not
     /// be read run nothing).
     pub fn painted_only(painted: Arc<Map>) -> AutoLayers {

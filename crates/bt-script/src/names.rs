@@ -484,6 +484,15 @@ impl Names {
     /// What `tile` places, any of them: tiles by id, tile groups (defined, then classes) and
     /// sprites' tiles, with the layer a tile name declares.
     pub fn tiles(&self, map: &Map, named: &[Named]) -> Result<TileGroup, Error> {
+        let mut group = self.tile_choices(map, named)?;
+        let mut seen = std::collections::HashSet::new();
+        group.tiles.retain(|tile| seen.insert(*tile));
+        Ok(group)
+    }
+
+    /// [`Names::tiles`] as `tile` picks from them: a tile written twice is there twice, so it
+    /// comes up twice as often.
+    pub fn tile_choices(&self, map: &Map, named: &[Named]) -> Result<TileGroup, Error> {
         let mut tiles: Vec<Cell> = Vec::new();
         let mut written: Vec<String> = Vec::new();
         let mut declared: Option<Declared> = None;
@@ -519,8 +528,6 @@ impl Names {
                 }
             }
         }
-        let mut seen = std::collections::HashSet::new();
-        tiles.retain(|tile| seen.insert(*tile));
         Ok(TileGroup {
             name: written.join(","),
             tiles,
