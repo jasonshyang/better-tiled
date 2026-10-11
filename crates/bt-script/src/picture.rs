@@ -12,7 +12,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use bt_core::{ClassUsage, Color, CustomTypes, HAlign, LayerId, Map, Orientation, VAlign};
+use bt_core::{
+    ClassUsage, Color, CustomTypes, HAlign, LayerId, Map, Orientation, StaggerAxis, StaggerIndex,
+    VAlign,
+};
 use bt_image::DecodedImage;
 use bt_render::{HeadlessDevice, ObjectStyle, Render, TextItem, VectorItem};
 use bt_utils::text::plural;
@@ -138,6 +141,28 @@ impl<'a> RenderRequest<'a> {
     }
 }
 
+/// Keeps the rows (or columns) of a staggered or hexagonal map shifted as they were after the
+/// map was cropped from `origin`: cropping an odd number of rows (or columns) along the stagger
+/// axis away makes the other ones the shifted ones.
+fn keep_stagger(map: &mut Map, origin: IVec2) {
+    if !matches!(
+        map.orientation,
+        Orientation::Staggered | Orientation::Hexagonal
+    ) {
+        return;
+    }
+    let along = match map.stagger_axis {
+        StaggerAxis::X => origin.x,
+        StaggerAxis::Y => origin.y,
+    };
+    if along.rem_euclid(2) == 1 {
+        map.stagger_index = match map.stagger_index {
+            StaggerIndex::Odd => StaggerIndex::Even,
+            StaggerIndex::Even => StaggerIndex::Odd,
+        };
+    }
+}
+
 /// `bt render MAP OUT.png`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RenderOutcome {
@@ -203,6 +228,7 @@ impl RenderOutcome {
             bt_edit::crop_to(&mut map, region).map_err(|error| Error::NoPicture {
                 why: error.to_string(),
             })?;
+            keep_stagger(&mut map, region.min());
             region.min()
         } else {
             IVec2::ZERO
@@ -215,7 +241,9 @@ impl RenderOutcome {
                 region.size().as_dvec2() * tile,
             )
         } else {
-            let bounds = map.bounding_rect();
+            // The region's own cells: an infinite map's bounds are its chunks'.
+            let bounds =
+                geometry.bounding_rect(IRect::from_min_size(region.min() - shift, region.size()));
             DRect::from_min_size(bounds.min().as_dvec2(), bounds.size().as_dvec2())
         };
         let longest = world.size().max_element().max(1.0);
@@ -760,6 +788,57 @@ mod tests {
         assert_eq!(
             rendered.outcome.region,
             IRect::from_min_size(IVec2::ZERO, IVec2::new(20, 20))
+        );
+    }
+
+    #[test]
+    fn an_infinite_staggered_map_is_framed_on_the_cells_asked_for() {
+        let Some(device) = device() else { return };
+        let Some(examples) = bt_test_data::test_data("reference/tiled/examples") else {
+            return;
+        };
+        let map = bt_tmx::Loader::default()
+            .load_map(&examples.join("isometric_staggered_grass_and_water.tmx"))
+            .unwrap()
+            .value;
+        assert!(map.infinite, "its chunks reach past its tiles");
+        let whole =
+            RenderOutcome::from_request(&RenderRequest::new(&map, "whole.png").scale(1.0), device)
+                .unwrap();
+        // 25 diamonds of 64 px and half of one, 50 rows of 16 px and half a diamond's height.
+        assert_eq!(whole.outcome.size, UVec2::new(1632, 816));
+        let part = RenderOutcome::from_request(
+            &RenderRequest::new(&map, "part.png")
+                .region(IRect::from_min_size(IVec2::new(1, 1), IVec2::new(5, 4)))
+                .scale(1.0),
+            device,
+        )
+        .unwrap();
+        assert_eq!(part.outcome.size, UVec2::new(352, 80));
+    }
+
+    #[test]
+    fn cropping_an_odd_number_of_rows_away_keeps_the_shifted_rows_shifted() {
+        let mut map = MapBuilder::new(UVec2::new(64, 32), UVec2::new(4, 4))
+            .build()
+            .unwrap();
+        map.orientation = Orientation::Staggered;
+        map.stagger_axis = StaggerAxis::Y;
+        map.stagger_index = StaggerIndex::Odd;
+        keep_stagger(&mut map, IVec2::new(1, 2));
+        assert_eq!(
+            map.stagger_index,
+            StaggerIndex::Odd,
+            "two rows: the same rows"
+        );
+        keep_stagger(&mut map, IVec2::new(2, 1));
+        assert_eq!(map.stagger_index, StaggerIndex::Even, "one row: the others");
+        map.stagger_axis = StaggerAxis::X;
+        keep_stagger(&mut map, IVec2::new(3, 0));
+        assert_eq!(
+            map.stagger_index,
+            StaggerIndex::Odd,
+            "columns on a map staggered by x"
         );
     }
 }
