@@ -1,11 +1,12 @@
 //! What `bt export` wrote (`10-agents.md`, §10.8): a map or tileset in another of Tiled's
-//! formats, with Tiled's export options.
+//! formats, with Tiled's export options, or a map as the resolved JSON.
 
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::report::{Line, Outcome, Report};
+use crate::resolved::RESOLVED_FORMAT;
 
 /// The formats `bt export` writes.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,15 +18,18 @@ pub enum ExportFormat {
     Json,
     /// A JSON map wrapped in a JavaScript call: `.js`.
     JavaScript,
+    /// The resolved JSON for other programs (`--resolved`): `.json`.
+    Resolved,
 }
 
 impl ExportFormat {
     /// The format's name in reports.
-    fn name(self) -> &'static str {
+    fn name(self) -> String {
         match self {
-            ExportFormat::Xml => "Tiled's XML",
-            ExportFormat::Json => "Tiled's JSON",
-            ExportFormat::JavaScript => "Tiled's JavaScript",
+            ExportFormat::Xml => "Tiled's XML".to_owned(),
+            ExportFormat::Json => "Tiled's JSON".to_owned(),
+            ExportFormat::JavaScript => "Tiled's JavaScript".to_owned(),
+            ExportFormat::Resolved => format!("the resolved JSON ({RESOLVED_FORMAT})"),
         }
     }
 }
@@ -89,5 +93,25 @@ mod tests {
         let json = to_json(&outcome).unwrap();
         assert!(json.starts_with(r#"{"schema":"bt.export/1""#));
         assert_eq!(from_json::<ExportOutcome>(&json).unwrap(), outcome);
+    }
+
+    #[test]
+    fn a_resolved_export_names_its_format() {
+        let outcome = ExportOutcome {
+            input: PathBuf::from("a.tmx"),
+            out: PathBuf::from("a.json"),
+            format: ExportFormat::Resolved,
+            options: Vec::new(),
+            warnings: Vec::new(),
+        };
+        assert_eq!(
+            outcome.report().text(),
+            "wrote a.json as the resolved JSON (bt resolved map 1)\n"
+        );
+        assert!(
+            to_json(&outcome)
+                .unwrap()
+                .contains(r#""format":"resolved""#)
+        );
     }
 }
