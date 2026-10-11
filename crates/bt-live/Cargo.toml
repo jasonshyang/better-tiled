@@ -16,5 +16,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# Whether the process behind a socket is alive (`process`), and the listener waiting on its
+# socket and on being stopped at once (`event`, with `std` for the standard library's sockets).
+rustix = { workspace = true, features = ["event", "std"] }
+
 [lints]
 workspace = true

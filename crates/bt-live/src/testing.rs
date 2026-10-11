@@ -147,6 +147,11 @@ pub(crate) fn every_answer() -> Vec<Response> {
     ]
 }
 
+/// A process id no process has: above the largest of every system (99999 on macOS, 2^22 on
+/// Linux), so `kill` finds none, as for a process that has exited.
+#[cfg(unix)]
+pub(crate) const NO_PROCESS: u32 = 0x7fff_fff0;
+
 /// A short folder of the test's own under `/tmp`, mode `0700`, removed when dropped. Socket
 /// paths have room for about a hundred bytes, which the system's temporary folder on macOS
 /// nearly fills, so tests' sockets live here instead.
@@ -184,5 +189,90 @@ impl TestFolder {
 impl Drop for TestFolder {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+/// An editor of this protocol listening in `folder` as process `pid`: it answers `Status` with
+/// `focused` and `documents`, and every other request with a [`Done`] naming it.
+#[cfg(unix)]
+pub(crate) fn fake_editor(
+    folder: &std::path::Path,
+    pid: u32,
+    focused: bool,
+    documents: Vec<DocStatus>,
+) -> crate::Server {
+    let socket = crate::dir::socket_path(folder, pid);
+    let handler = move |request: &Request| {
+        Ok(match request {
+            Request::Status => Response::Status(Status {
+                protocol: PROTOCOL,
+                pid,
+                focused,
+                documents: documents.clone(),
+            }),
+            other => Response::Done(Done {
+                message: format!("{other:?}"),
+                nothing: false,
+            }),
+        })
+    };
+    crate::Server::bind(socket, handler, crate::wire::Limits::STANDARD).unwrap()
+}
+
+/// Something listening on `socket` that answers one connection's line with `answer`, as it is.
+#[cfg(unix)]
+pub(crate) fn raw_editor(socket: PathBuf, answer: &'static str) -> std::thread::JoinHandle<()> {
+    use std::io::{BufRead, Write};
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(&stream)
+            .read_line(&mut line)
+            .unwrap();
+        (&stream).write_all(answer.as_bytes()).unwrap();
+    })
+}
+
+/// A socket file at `socket` that no one listens on, as an editor that crashed leaves behind.
+#[cfg(unix)]
+pub(crate) fn dead_socket(socket: &std::path::Path) {
+    drop(std::os::unix::net::UnixListener::bind(socket).unwrap());
+    assert!(socket.exists());
+    // A process being started elsewhere holds a copy of the listener until it runs its program.
+    let started = std::time::Instant::now();
+    while std::os::unix::net::UnixStream::connect(socket).is_ok() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "{} is still listened on",
+            socket.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
+/// A document of a map at `path`, shown or not, with nothing selected.
+#[cfg(unix)]
+pub(crate) fn map_document(path: Option<PathBuf>, active: bool) -> DocStatus {
+    DocStatus {
+        title: path
+            .as_deref()
+            .map_or_else(|| "untitled.tmx".to_owned(), bt_utils::paths::display_name),
+        path,
+        active,
+        dirty: false,
+        tileset: false,
+        layer: Some("Ground".to_owned()),
+        tool: "Stamp Brush".to_owned(),
+        brush: None,
+        selection: Vec::new(),
+        objects: Vec::new(),
+        view: None,
+        mouse: None,
+        history: Vec::new(),
+        undo_steps: 0,
+        marks: Vec::new(),
+        world_tool: false,
+        keyboard: None,
     }
 }

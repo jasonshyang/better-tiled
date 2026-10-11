@@ -8,6 +8,8 @@
 //! listen in the editor's place and feed an agent a false map.
 
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::path::Path;
 use std::path::PathBuf;
 
 use crate::error::Error;
@@ -60,11 +62,45 @@ pub(crate) fn live_dir_from(value: Option<OsString>) -> Result<PathBuf, Error> {
     Ok(folder)
 }
 
+/// The socket the editor with process id `pid` listens on in `folder`.
+#[cfg(unix)]
+pub(crate) fn socket_path(folder: &Path, pid: u32) -> PathBuf {
+    folder.join(format!("{pid}.sock"))
+}
+
+/// The process id an editor's socket is named after, or `None` for a file that is not named as
+/// a socket of the live link (`<digits>.sock`).
+#[cfg(unix)]
+pub(crate) fn socket_pid(socket: &Path) -> Option<u32> {
+    if socket.extension()? != "sock" {
+        return None;
+    }
+    let stem = socket.file_stem()?.to_str()?;
+    if stem.is_empty() || !stem.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    stem.parse().ok()
+}
+
+/// Whether the process `pid` is running: a signal could be sent to it (`kill` with no signal),
+/// or it exists but belongs to someone else. A process that has exited is not, and neither is
+/// an id no process can have.
+#[cfg(unix)]
+pub(crate) fn process_alive(pid: u32) -> bool {
+    let Some(pid) = i32::try_from(pid)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+    else {
+        return false;
+    };
+    match rustix::process::test_kill_process(pid) {
+        Ok(()) => true,
+        Err(error) => error == rustix::io::Errno::PERM,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
-    use std::path::Path;
-
     use super::*;
 
     #[test]
@@ -119,5 +155,39 @@ mod tests {
             error.to_string(),
             format!("{} is not used: it is a symbolic link", link.display())
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sockets_are_named_after_their_process() {
+        let socket = socket_path(Path::new("/tmp/better-tiled-501"), 4242);
+        assert_eq!(socket, PathBuf::from("/tmp/better-tiled-501/4242.sock"));
+        assert_eq!(socket_pid(&socket), Some(4242));
+        for other in [
+            "/tmp/x/4242.lock",
+            "/tmp/x/+12.sock",
+            "/tmp/x/.sock",
+            "/tmp/x/editor.sock",
+            "/tmp/x/99999999999.sock",
+            "/tmp/x/4242",
+        ] {
+            assert_eq!(socket_pid(Path::new(other)), None, "{other}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn running_processes_are_alive_and_others_are_not() {
+        assert!(process_alive(std::process::id()), "this one");
+        assert!(process_alive(1), "the first process, someone else's");
+        // No process is started here: a child holds a copy of every open socket until it runs
+        // its program, which would keep other tests' closed sockets listening. An id above
+        // every system's largest is a process that has exited as far as `kill` can tell.
+        assert!(
+            !process_alive(crate::testing::NO_PROCESS),
+            "no such process"
+        );
+        assert!(!process_alive(0), "no process has id 0");
+        assert!(!process_alive(u32::MAX), "too large an id");
     }
 }

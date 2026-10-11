@@ -52,7 +52,9 @@ pollster = "0.4"
 regex = "1.13"
 rfd = "0.17"
 roxmltree = "0.21"
-# The user id that names the runtime folder (bt-utils, Unix only): no unsafe code of ours.
+# Unix only, so no unsafe code of ours: the user id that names the runtime folder (bt-utils), and
+# whether a process is alive and waiting on the live link's sockets (bt-live, which adds the
+# features it uses).
 rustix = { version = "1.1", default-features = false, features = ["process"] }
 ruzstd = "0.9"
 serde = { version = "1", features = ["derive"] }
