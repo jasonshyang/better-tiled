@@ -85,7 +85,7 @@ fn an_edit_writes_the_file_keeps_the_last_version_and_bt_undo_puts_it_back() {
         "{report}"
     );
     assert!(
-        report.contains("no new seams or hidden edges, and no objects on other ground"),
+        report.contains("no new problems for bt check, and no objects on other ground"),
         "{report}"
     );
     assert!(
@@ -625,4 +625,81 @@ fn render_draws_the_result_with_the_change_outlined_dry_run_or_not() {
     .unwrap();
     let outcome: serde_json::Value = serde_json::from_str(&json.text).unwrap();
     assert_eq!(outcome["picture"]["region"]["w"], 5, "{}", json.text);
+}
+
+#[test]
+fn an_object_of_a_type_the_project_lacks_is_named_by_the_edit() {
+    let scratch = Scratch::new("bt-edit-undefined-type").unwrap();
+    let folders = folders(&scratch);
+    let map = grass_map(&scratch, "a.tmx");
+    std::fs::write(
+        scratch.join("game.tiled-project"),
+        r#"{"propertyTypes": [{"id": 1, "name": "NPC", "type": "class", "members": [], "useAs": ["object"]}]}"#,
+    )
+    .unwrap();
+    let printed = bt(
+        &[
+            "edit",
+            text(&map),
+            "--do",
+            "layer add design objects; object merchant at 2.5,2.5",
+        ],
+        &folders,
+    )
+    .unwrap();
+    assert!(
+        printed
+            .text
+            .starts_with("problem: new: design: #1 has the type merchant, which the project"),
+        "{}",
+        printed.text
+    );
+    let typed = bt(
+        &["edit", text(&map), "--do", "set #1 type=NPC name=merchant"],
+        &folders,
+    )
+    .unwrap();
+    assert!(
+        typed
+            .text
+            .contains("no new problems for bt check, and no objects on other ground"),
+        "{}",
+        typed.text
+    );
+}
+
+#[test]
+fn what_was_painted_is_said_to_be_kept_where_it_is_kept() {
+    let Some(examples) = bt_test_data::test_data("reference/tiled/examples") else {
+        return;
+    };
+    let scratch = Scratch::new("bt-edit-kept-in").unwrap();
+    let folders = folders(&scratch);
+    let folder = scratch
+        .mirror(&examples.join("sewer_automap"), "game/sewer_automap")
+        .unwrap();
+    // The project one folder up: the record goes beside it.
+    std::fs::write(
+        scratch.join("game/game.tiled-project"),
+        r#"{"propertyTypes": []}"#,
+    )
+    .unwrap();
+    let map = folder.join("sewers.tmx");
+    let started = bt(&["edit", text(&map), "--do", "automap layers"], &folders).unwrap();
+    assert!(
+        started
+            .text
+            .contains("and what was painted in ../better-tiled.json"),
+        "{}",
+        started.text
+    );
+    assert!(scratch.join("game/better-tiled.json").is_file());
+    let run = Run::of_args(&["info", text(&map)], folders.clone());
+    let info = crate::run::run(&run).unwrap();
+    assert!(
+        info.text
+            .contains("; ../better-tiled.json keeps what was painted"),
+        "{}",
+        info.text
+    );
 }

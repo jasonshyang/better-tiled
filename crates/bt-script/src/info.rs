@@ -70,6 +70,8 @@ pub enum MapRules<'r> {
         rules: Result<&'r RuleSet, String>,
         /// The entries of the project file that did not apply.
         notes: &'r [Problem],
+        /// The project file keeping what was painted, as the map's folder reaches it.
+        kept_in: Option<&'r str>,
     },
     /// A rules file found for the map: the `rules.txt` beside it, say.
     File {
@@ -229,6 +231,10 @@ pub struct RulesInfo {
     pub writes: Vec<String>,
     /// What keeps them from running, and their other problems and notes.
     pub notes: Vec<RuleNote>,
+    /// For AutoMap layers, the project file keeping what was painted, as the map's folder
+    /// reaches it.
+    #[serde(default)]
+    pub kept_in: Option<String>,
 }
 
 /// A line about rules: a warning, a note, or a fact.
@@ -528,7 +534,12 @@ fn rules_info(request: &InfoRequest<'_>) -> Option<RulesInfo> {
             setup,
             rules,
             notes,
-        }) => Some(layers_rules_info(map, setup, borrowed(rules), notes)),
+            kept_in,
+        }) => {
+            let mut info = layers_rules_info(map, setup, borrowed(rules), notes);
+            info.kept_in = kept_in.map(str::to_owned);
+            Some(info)
+        }
         Some(MapRules::File { path, rules }) => Some(file_rules_info(map, path, borrowed(rules))),
         None => None,
     }
@@ -571,6 +582,7 @@ fn read_rules(kind: RulesKind, rules_file: String, rules: Result<&RuleSet, &str>
         reads: Vec::new(),
         writes: Vec::new(),
         notes: Vec::new(),
+        kept_in: None,
     };
     match rules {
         Ok(rules) => {
@@ -796,6 +808,7 @@ fn rule_map_info(request: &InfoRequest<'_>) -> RulesInfo {
         reads: Vec::new(),
         writes: Vec::new(),
         notes: Vec::new(),
+        kept_in: None,
     };
     if let Some(rule_map) = rules.rule_maps().first() {
         info.reads = rule_map.inputs().to_vec();
@@ -953,9 +966,15 @@ fn rules_section(rules: &RulesInfo) -> Section {
     let heading = match rules.kind {
         RulesKind::Layers => format!(
             "AutoMap layers ({}, {counts}, seed {}): the map is what the rules make of what was \
-             painted, and bt edit changes what was painted (bt view MAP --painted shows it)",
+             painted, and bt edit changes what was painted (bt view MAP --painted shows it){}",
             rules.rules,
-            rules.seed.unwrap_or_default()
+            rules.seed.unwrap_or_default(),
+            rules
+                .kept_in
+                .as_ref()
+                .map_or_else(String::new, |file| format!(
+                    "; {file} keeps what was painted"
+                ))
         ),
         RulesKind::File => format!(
             "AutoMap rules: {} ({counts}) read {} and write {}; the edit step automap runs them",
@@ -1174,6 +1193,7 @@ mod tests {
             setup: &setup,
             rules: Ok(&rules),
             notes: &lost,
+            kept_in: None,
         });
         let outcome = InfoOutcome::from_request(&request);
         let rules_info = outcome.automap.clone().unwrap();

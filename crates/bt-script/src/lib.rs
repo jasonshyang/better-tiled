@@ -62,8 +62,8 @@ pub use changes::{
     PropertyChange, Resized, TerrainCells,
 };
 pub use check::{
-    CheckOutcome, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt, Problem, Seam,
-    StandingGroup, ZoneCover, made_by, seams,
+    CheckOutcome, CheckRequest, GroundChange, GroundCount, LayerGrounds, MadeProblems, ObjectAt,
+    Problem, Seam, StandingGroup, ZoneCover, made_by, seams,
 };
 pub use context::{Context, Selection};
 pub use create::{Created, NewOutcome, NewRequest, Refill};

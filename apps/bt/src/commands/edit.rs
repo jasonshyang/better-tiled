@@ -368,9 +368,13 @@ fn write_result(
             return Err(undo_keeping(error));
         }
     };
+    let folder = target.parent().unwrap_or(target);
     let saved = Saved::File {
         file: typed.display().to_string(),
-        painted_in: painted_in.map(|file| display_name(&file)),
+        painted_in: painted_in.map(|file| {
+            bt_utils::paths::relative_path(folder, &file)
+                .unwrap_or_else(|| file.display().to_string())
+        }),
         undo: before.map(|_| format!("bt undo {}", typed.display())),
     };
     Ok(outcome.with_saved(saved))

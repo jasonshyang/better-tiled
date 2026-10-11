@@ -45,6 +45,59 @@ pub struct CheckOutcome {
     pub problems: Vec<Problem>,
     /// What objects stand on and what zones cover, layer by layer.
     pub layers: Vec<LayerGrounds>,
+    /// The objects the map's AutoMap rules placed, among those the problems name.
+    #[serde(default)]
+    pub placed_by_rules: Vec<u32>,
+}
+
+/// What `bt check` is asked to check: a map, named as the command named it, with what it was
+/// read with.
+#[derive(Clone, Debug)]
+pub struct CheckRequest<'a> {
+    map: &'a Map,
+    name: String,
+    warnings: Vec<String>,
+    types: Option<&'a CustomTypes>,
+    project_file: Option<&'a Path>,
+    placed_by_rules: Vec<u32>,
+}
+
+impl<'a> CheckRequest<'a> {
+    /// `map`, named `name`, with no reading warnings, no project and no AutoMap layers.
+    pub fn new(map: &'a Map, name: impl Into<String>) -> CheckRequest<'a> {
+        CheckRequest {
+            map,
+            name: name.into(),
+            warnings: Vec::new(),
+            types: None,
+            project_file: None,
+            placed_by_rules: Vec::new(),
+        }
+    }
+
+    /// What reading the map warned about.
+    pub fn warnings(mut self, warnings: Vec<String>) -> CheckRequest<'a> {
+        self.warnings = warnings;
+        self
+    }
+
+    /// The project's custom types, which objects' types and properties are checked against.
+    pub fn custom_types(mut self, types: &'a CustomTypes) -> CheckRequest<'a> {
+        self.types = Some(types);
+        self
+    }
+
+    /// The project file holding the map's entry, whose orphaned entries are listed.
+    pub fn project_file(mut self, file: &'a Path) -> CheckRequest<'a> {
+        self.project_file = Some(file);
+        self
+    }
+
+    /// The objects the map's AutoMap rules placed (on a map with AutoMap layers).
+    pub fn placed_by_rules(mut self, objects: Vec<u32>) -> CheckRequest<'a> {
+        self.placed_by_rules = objects;
+        self
+    }
 }
 
 /// A problem `check` points out.
@@ -204,17 +257,14 @@ pub struct ZoneCover {
 }
 
 impl CheckOutcome {
-    /// Checks `map` (named `name`), with the reading `warnings`, the project's custom types and
-    /// the project file holding the map's entry, if any.
-    pub fn of(
-        map: &Map,
-        name: impl Into<String>,
-        warnings: &[String],
-        types: &CustomTypes,
-        project_file: Option<&Path>,
-    ) -> CheckOutcome {
+    /// Checks what `request` asks for.
+    pub fn from_request(request: &CheckRequest<'_>) -> CheckOutcome {
+        let map = request.map;
+        let no_types = CustomTypes::default();
+        let types = request.types.unwrap_or(&no_types);
         let names = Names::of(map);
-        let mut problems: Vec<Problem> = warnings
+        let mut problems: Vec<Problem> = request
+            .warnings
             .iter()
             .map(|text| Problem::Reading { text: text.clone() })
             .collect();
@@ -222,7 +272,7 @@ impl CheckOutcome {
         problems.extend(hidden_edge_problems(map, &names, &mut EdgeMeter::new()));
         let objects = ObjectChecks::run(map, &names, types);
         problems.extend(objects.problems);
-        if let Some(file) = project_file
+        if let Some(file) = request.project_file
             && let Ok(document) = bt_project::ProjectFile::load(file)
         {
             let keys: Vec<String> = document
@@ -237,10 +287,18 @@ impl CheckOutcome {
                 });
             }
         }
+        let named: HashSet<u32> = problems.iter().flat_map(Problem::objects).collect();
+        let placed_by_rules = request
+            .placed_by_rules
+            .iter()
+            .copied()
+            .filter(|id| named.contains(id))
+            .collect();
         CheckOutcome {
-            map: name.into(),
+            map: request.name.clone(),
             problems,
             layers: objects.layers,
+            placed_by_rules,
         }
     }
 
@@ -251,6 +309,22 @@ impl CheckOutcome {
 }
 
 impl Problem {
+    /// The objects the problem names.
+    pub fn objects(&self) -> Vec<u32> {
+        match self {
+            Problem::OutsideMap { object, .. } => vec![object.id],
+            Problem::SameSpot { first, second, .. } => vec![*first, *second],
+            Problem::OverNothing { objects, .. } => objects.iter().map(|o| o.id).collect(),
+            Problem::UndefinedType { object, .. }
+            | Problem::NotAMember { object, .. }
+            | Problem::NoFoot { object, .. } => vec![*object],
+            Problem::Reading { .. }
+            | Problem::Seams { .. }
+            | Problem::HiddenEdges { .. }
+            | Problem::Orphans { .. } => Vec::new(),
+        }
+    }
+
     /// The problem in words: where, then what.
     pub fn text(&self) -> String {
         match self {
@@ -372,6 +446,18 @@ impl Outcome for CheckOutcome {
         ))
         .limited(60);
         problems.add_lines(self.problems.iter().map(|p| Line::problem(p.text())));
+        if !self.placed_by_rules.is_empty() {
+            let ids: Vec<String> = self
+                .placed_by_rules
+                .iter()
+                .map(|id| format!("#{id}"))
+                .collect();
+            problems.add_line(Line::note(format!(
+                "the map's AutoMap rules place {}: their types and properties come from the rule \
+                 maps, and they change only with what the rules read or with the rule maps",
+                capped_list(&ids, LISTED)
+            )));
+        }
         report.add_section(problems);
         let mut grounds = Section::headed(
             "what objects stand on, and what zones cover (odd ones out listed by id):",
@@ -906,10 +992,10 @@ struct EdgeAt {
     cell: IVec2,
 }
 
-/// [`MadeProblems`] of an edit from `before` to `after`, which changed `changed` cells: the
-/// seams and hidden edges `after` has that `before` did not, its other problems, and the objects
-/// standing in changed cells whose ground changed.
-pub fn made_by(before: &Map, after: &Map, changed: &[IVec2]) -> MadeProblems {
+/// [`MadeProblems`] of an edit from `before` to `after`, which changed `changed` cells, with the
+/// project's custom `types`: the seams, hidden edges and object problems `after` has that
+/// `before` did not, and the objects standing in changed cells whose ground changed.
+pub fn made_by(before: &Map, after: &Map, changed: &[IVec2], types: &CustomTypes) -> MadeProblems {
     let old: HashSet<Seam> = seams(before)
         .into_iter()
         .flat_map(|problem| match problem {
@@ -967,7 +1053,38 @@ pub fn made_by(before: &Map, after: &Map, changed: &[IVec2]) -> MadeProblems {
         }
     }
     let changed: HashSet<IVec2> = changed.iter().copied().collect();
-    let (old_names, names) = (Names::of(before), Names::of(after));
+    let old_names = Names::of(before);
+    let names = Names::of(after);
+    let old_objects = ObjectChecks::run(before, &old_names, types).problems;
+    for problem in ObjectChecks::run(after, &names, types).problems {
+        match problem {
+            Problem::OverNothing { layer, objects } => {
+                let was: HashSet<u32> = old_objects
+                    .iter()
+                    .filter_map(|old| match old {
+                        Problem::OverNothing {
+                            layer: old_layer,
+                            objects,
+                        } if *old_layer == layer => Some(objects.iter().map(|o| o.id)),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
+                let new: Vec<ObjectAt> = objects
+                    .into_iter()
+                    .filter(|o| !was.contains(&o.id))
+                    .collect();
+                if !new.is_empty() {
+                    problems.push(Problem::OverNothing {
+                        layer,
+                        objects: new,
+                    });
+                }
+            }
+            other if !old_objects.contains(&other) => problems.push(other),
+            _ => {}
+        }
+    }
     let mut old_ground = GroundUnder::new(before, &old_names);
     let mut ground = GroundUnder::new(after, &names);
     let mut feet = Feet::new();
@@ -1091,7 +1208,7 @@ mod tests {
     }
 
     fn check(map: &Map, types: &CustomTypes) -> CheckOutcome {
-        CheckOutcome::of(map, "a.tmx", &[], types, None)
+        CheckOutcome::from_request(&CheckRequest::new(map, "a.tmx").custom_types(types))
     }
 
     fn no(_: i32, _: i32) -> bool {
@@ -1298,7 +1415,7 @@ mod tests {
         let changed: Vec<IVec2> = (0..3)
             .flat_map(|y| (0..3).map(move |x| IVec2::new(x, y)))
             .collect();
-        let made = made_by(&before, &after, &changed);
+        let made = made_by(&before, &after, &changed, &CustomTypes::default());
         assert!(
             made.problems.is_empty(),
             "the pond fits: {:?}",
@@ -1320,6 +1437,6 @@ mod tests {
             made.lines()[0].text,
             "1 object that stood on grass stands on water now: #1 tree"
         );
-        assert!(made_by(&before, &before, &changed).is_empty());
+        assert!(made_by(&before, &before, &changed, &CustomTypes::default()).is_empty());
     }
 }

@@ -503,7 +503,7 @@ impl<'l> Runner<'l> {
         let cells = sorted_cells(cells);
         let painted_changed = painted_changes.as_ref().is_some_and(|p| !p.is_empty());
         let changed = !changes.is_empty() || painted_changed || self.auto_changed;
-        let made = made_by(&moved_shown, &shown, &cells)
+        let made = made_by(&moved_shown, &shown, &cells, self.loader.custom_types())
             .lines()
             .into_iter()
             .map(|line| line.text)

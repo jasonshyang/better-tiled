@@ -31,7 +31,7 @@ fn a_pond_and_a_tree_are_reported_layer_by_layer_from_the_top() {
         outcome.report().text(),
         "level.tmx: 2 operations\n  props: +1 object #1: #1 tree [pine] at 9.5,6\n  ground: 30 cells \
          changed in 2,1 6x5: grass/water edges ×18, water ×12; grass 96 → 70 cells, water 0 → 12 \
-         cells\nno new seams or hidden edges, and no objects on other ground\nsaved level.tmx; bt \
+         cells\nno new problems for bt check, and no objects on other ground\nsaved level.tmx; bt \
          undo level.tmx puts it back\n"
     );
     assert_eq!(
@@ -74,7 +74,7 @@ fn objects_moved_and_changed_are_said_with_their_places() {
         text,
         "level.tmx: 3 operations\n  design: -1 object: #2 spawn at 4.5,1.5\n  design: moved 1 \
          object: #1 spawn 1.5,1.5 → 3.5,1.5\n  design: changed 1 object: #1 spawn wave=2\nno new \
-         seams or hidden edges, and no objects on other ground\n"
+         problems for bt check, and no objects on other ground\n"
     );
 }
 
@@ -101,7 +101,7 @@ fn an_edit_says_the_seams_it_made_and_shows_the_changed_area_when_asked() {
         "{text}"
     );
     assert!(text.contains(&view), "{text}");
-    assert!(!text.contains("no new seams"), "{text}");
+    assert!(!text.contains("no new problems"), "{text}");
 }
 
 #[test]

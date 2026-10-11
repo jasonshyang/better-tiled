@@ -246,7 +246,7 @@ fn the_example_runs_on_a_map_like_its_own_and_check_is_clean_afterwards() {
             Some("edit") => assert!(
                 printed
                     .text
-                    .contains("no new seams or hidden edges, and no objects on other ground"),
+                    .contains("no new problems for bt check, and no objects on other ground"),
                 "{}",
                 printed.text
             ),

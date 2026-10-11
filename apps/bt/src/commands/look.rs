@@ -1,5 +1,7 @@
 //! `bt info`, `bt at` and `bt objects`: what a map is made of (`10-agents.md`, §10.1).
 
+use std::path::Path;
+
 use anyhow::Context as _;
 use bt_automap::RuleSet;
 use bt_core::{LayerId, Map, ObjectId};
@@ -26,6 +28,10 @@ pub(crate) fn info(run: &Run, args: &MapArg) -> anyhow::Result<Printed> {
     };
     let warnings: Vec<String> = loaded.warnings.iter().map(ToString::to_string).collect();
     let rules = read_rules(&mut loaded);
+    let kept_in = match &loaded.layers {
+        Some(_) => project_file_from_map(&loaded.path, run)?,
+        None => None,
+    };
     let mut request = InfoRequest::new(&loaded.map, &names, display_name(&args.map))
         .warnings(warnings)
         .custom_types(std::sync::Arc::clone(loaded.loader.custom_types()));
@@ -42,6 +48,7 @@ pub(crate) fn info(run: &Run, args: &MapArg) -> anyhow::Result<Printed> {
                 setup: &layers.setup,
                 rules,
                 notes: &layers.notes,
+                kept_in: kept_in.as_deref(),
             });
         }
         (None, Some(found), Some(rules)) => {
@@ -54,6 +61,18 @@ pub(crate) fn info(run: &Run, args: &MapArg) -> anyhow::Result<Printed> {
     }
     let outcome = InfoOutcome::from_request(&request);
     printed(&outcome, run.cli.json, Status::Done)
+}
+
+/// The project file holding the map's entry, as the map's folder reaches it (`../better-tiled.json`);
+/// none when no project file is found for the map.
+pub(crate) fn project_file_from_map(map: &Path, run: &Run) -> anyhow::Result<Option<String>> {
+    let Some(file) = bt_project::ProjectFile::find(map, run.folders.home.as_deref())? else {
+        return Ok(None);
+    };
+    let folder = map.parent().unwrap_or(map);
+    Ok(Some(
+        bt_utils::paths::relative_path(folder, &file).unwrap_or_else(|| file.display().to_string()),
+    ))
 }
 
 /// The rules that apply to a map: its AutoMap layers', else the rules file Tiled would find.
@@ -144,7 +163,7 @@ pub(crate) fn objects(run: &Run, args: &ObjectsArgs) -> anyhow::Result<Printed> 
 }
 
 /// The objects of `shown` that were not painted: the AutoMap rules placed them.
-fn placed_by_rules(painted: &Map, shown: &Map) -> Vec<ObjectId> {
+pub(crate) fn placed_by_rules(painted: &Map, shown: &Map) -> Vec<ObjectId> {
     let mut painted_ids = std::collections::HashSet::new();
     painted.for_each_layer(|layer, _| {
         if let Some(objects) = layer.as_object_layer() {

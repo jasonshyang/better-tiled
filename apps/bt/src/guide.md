@@ -70,8 +70,10 @@ written), 2 wrong usage, 3 refused, 4 out of date, 5 problems found (`bt check`)
    A script is all or nothing: if a line fails, it says which and nothing is written.
    - It reports what changed on each layer, what was painted apart from what rules made, and
      the cells no tile fits.
-   - It names the seams and hidden edges the edit made, and the objects it put on other ground
-     (else it says there are none of those); `bt check` lists everything.
+   - It names the problems the edit made that `bt check` would list (seams, hidden edges,
+     objects outside the map, on one spot or over nothing, types and properties the project
+     doesn't define) and the objects it put on other ground, or says there are none; `bt check`
+     lists everything.
    - `--view` adds the changed area as text (`--by tile`, `terrain` or `layer`, and `--runs`,
      as in `bt view`).
    - `--render out.png` adds a picture with the change outlined (`--region`, `--scale` as for
@@ -97,7 +99,8 @@ written), 2 wrong usage, 3 refused, 4 out of date, 5 problems found (`bt check`)
 
 **What to do about problems.**
 - *A seam*: two terrains of different sets meet in one layer, or the set has no tile for that
-  combination. Paint one of them on its own layer, or leave a terrain both border between them.
+  combination. Paint one of them on its own layer, or leave a terrain both border between them:
+  two cells of it between their whole cells (`bt catalog MAP terrains` says what each borders).
 - *An opaque edge over something*: the terrain's edge tiles draw their own ground and hide what
   is under them. Paint it `inside` ground that matches, or keep it away from what it hides with
   `avoid THING margin 1`.
@@ -105,7 +108,8 @@ written), 2 wrong usage, 3 refused, 4 out of date, 5 problems found (`bt check`)
   paint ground under it.
 - *Objects on the same spot*: move one, or delete it.
 - *An undefined type or property*: use a type `bt catalog MAP types` lists, or set the property
-  the class has.
+  the class has. Objects the AutoMap rules place (`bt check` says which) take their types and
+  properties from the rule maps: they change with what the rules read, or in the rule maps.
 
 ## When the map is open in the editor
 

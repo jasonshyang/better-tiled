@@ -237,7 +237,7 @@ impl Outcome for EditOutcome {
         report.add_section(notes);
         if self.made.as_ref().is_some_and(Vec::is_empty) && self.changed {
             report.add_line(Line::fact(
-                "no new seams or hidden edges, and no objects on other ground",
+                "no new problems for bt check, and no objects on other ground",
             ));
         }
         if let Some(view) = &self.view {
@@ -350,7 +350,7 @@ mod tests {
             "level.tmx: 2 operations\n  ground: 30 cells changed in 2,1 6x5: grass/water edges \
              ×18, water ×12; grass 96 → 70 cells, water 0 → 12 cells\nwarning: no tile fits 1 \
              cell, left as they were: 9,9\nnote: line 2: paint water: no tile fits 1 cell: “Land” \
-             has no tile that is all water\nno new seams or hidden edges, and no objects on other \
+             has no tile that is all water\nno new problems for bt check, and no objects on other \
              ground\nsaved level.tmx; bt undo level.tmx puts it back\n"
         );
     }
@@ -374,7 +374,7 @@ mod tests {
             "applied in the editor as one undo step (bt undo level.tmx takes it back); not saved \
              yet: bt save level.tmx writes the file\n"
         ));
-        assert!(!text.contains("no new seams"));
+        assert!(!text.contains("no new problems"));
     }
 
     #[test]
