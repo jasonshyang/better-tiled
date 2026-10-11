@@ -165,7 +165,8 @@ open there, bt works with the editor's copy instead of the file:
 signs are the ground; capital letters are objects, marked where they stand. A legend follows.
 
 - By terrain (the default when the map has terrains), a cell shows the terrain covering more
-  than half of it. A painted area therefore reads as exactly the cells that were painted.
+  than half of it. A painted area therefore reads as the cells that were painted, and a cell in
+  an inner corner of it too (three of its corners are painted).
 - By tile (the default without terrains), each kind of tile has its symbol; by layer, each
   layer has one.
 - A symbol keeps its meaning in every view of the map, before and after edits. When there are
@@ -256,7 +257,11 @@ On isometric, hexagonal and staggered maps, cells are still `X,Y` in a grid. Wha
 the grid is drawn:
 
 - `bt info` says how it sits on screen: on an isometric map, 0,0 is the diamond's top corner, x
-  runs down-right and y down-left, and the edge at the lower right is the last column.
+  runs down-right and y down-left, and the edge at the lower right is the last column. Shapes
+  are in cells, so a path that turns between x and y runs straight down the screen; to wind on
+  screen it turns between `X+N,Y` and `X,Y+N` (right and left), not between rows.
+- A path takes the cells whose centres lie within half its width of its line: `width 2` along
+  cell centres (`X.5`) takes three cells, along cell edges two; turns take more.
 - `bt view` prints the grid unturned. On hexagonal and staggered maps whose rows are shifted it
   shows the shift: two characters a cell, the shifted rows one character further right, so the
   cells that touch are the ones next to each other in the text.
@@ -336,7 +341,8 @@ bends are round. Painted, it gets a fringe of edge tiles on each side, like any 
 
 **Terrain** (the tiles around fit themselves, transitions included):
 
-    paint TERRAIN SHAPE [layer L]    the cells become that terrain
+    paint TERRAIN SHAPE [layer L]    the cells become that terrain (where it is already, its
+                                     tiles are picked again: `minus where TERRAIN` keeps them)
     erase TERRAIN SHAPE [layer L]    the terrain is taken away, the edges around repaired
     define NAME = TERRAIN [layer L] + TERRAIN [layer L] …     a material: paint both at once
 

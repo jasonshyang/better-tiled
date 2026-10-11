@@ -9,6 +9,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 #[derive(Debug, Parser)]
 #[command(
     name = "bt",
+    bin_name = "bt",
     version,
     about = "Read, edit and check Tiled maps from the command line (bt guide explains how)",
     disable_help_subcommand = false,
