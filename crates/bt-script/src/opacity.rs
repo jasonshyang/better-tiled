@@ -21,7 +21,7 @@ const OPAQUE_TENTHS: usize = 9;
 
 /// What a terrain's edge tiles are.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "edges", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EdgeOpacity {
     /// The set has no tile with the terrain and an empty lane.
     NoEdges,
