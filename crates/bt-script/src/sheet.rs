@@ -8,6 +8,7 @@ use bt_core::{Cell, Map, TileId, TilesetSlot};
 use bt_image::DecodedImage;
 use glam::{IVec2, UVec2};
 
+use crate::catalog_tiles::TilesetPart;
 use crate::error::Error;
 use crate::symbols::TileKey;
 use crate::tile_pictures::{TilePictures, TilePixels};
@@ -42,14 +43,6 @@ pub(crate) struct SheetItem {
     pub(crate) number: usize,
     /// The tile that shows it.
     pub(crate) tile: Cell,
-}
-
-/// Tiles of one tileset to draw.
-pub(crate) struct SheetTileset {
-    /// The tileset.
-    pub(crate) slot: TilesetSlot,
-    /// The tiles to draw; all of them when empty.
-    pub(crate) only: Vec<TileId>,
 }
 
 /// RGBA pixels drawn on.
@@ -244,7 +237,7 @@ struct Block {
 /// it, the tiles the map uses outlined; `scale` times their size, else as large as reads well.
 pub(crate) fn draw_tiles(
     map: &Map,
-    tilesets: &[SheetTileset],
+    tilesets: &[TilesetPart],
     used: &HashSet<TileKey>,
     scale: Option<u32>,
     pictures: &mut TilePictures,
@@ -254,15 +247,7 @@ pub(crate) fn draw_tiles(
         let Some(tileset) = map.tileset(wanted.slot) else {
             continue;
         };
-        let ids: Vec<TileId> = if wanted.only.is_empty() {
-            tileset.tile_ids()
-        } else {
-            tileset
-                .tile_ids()
-                .into_iter()
-                .filter(|id| wanted.only.contains(id))
-                .collect()
-        };
+        let ids: Vec<TileId> = wanted.ids(tileset);
         if ids.is_empty() {
             continue;
         }
@@ -408,10 +393,7 @@ mod tests {
         .collect();
         let sheet = draw_tiles(
             &map,
-            &[SheetTileset {
-                slot,
-                only: Vec::new(),
-            }],
+            &[TilesetPart::whole(slot)],
             &used,
             Some(2),
             &mut TilePictures::new(),

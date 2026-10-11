@@ -11,6 +11,7 @@ use bt_core::{
     Cell, Layer, LayerDataFormat, LayerId, LayerKind, Map, TileLayer, TilesetRef, TilesetSlot,
 };
 use bt_edit::{LayerType, add_tileset, new_layer};
+use bt_utils::paths::display_name;
 use glam::UVec2;
 use serde::{Deserialize, Serialize};
 
@@ -46,19 +47,14 @@ enum Source<'a> {
 }
 
 impl<'a> NewRequest<'a> {
-    /// A map called `file`, in the folder `new_dir`, like `other`, which is in `other_dir`.
-    pub fn like(
-        file: impl Into<String>,
-        other: &'a Map,
-        other_dir: &Path,
-        new_dir: &Path,
-    ) -> NewRequest<'a> {
+    /// The map at `new_path`, like `other`, the map read from `other_path`.
+    pub fn like(other: &'a Map, other_path: &Path, new_path: &Path) -> NewRequest<'a> {
         NewRequest {
-            file: file.into(),
+            file: display_name(new_path),
             source: Source::Like {
                 other,
-                from_dir: other_dir.to_path_buf(),
-                to_dir: new_dir.to_path_buf(),
+                from_dir: folder_of(other_path),
+                to_dir: folder_of(new_path),
             },
             size: None,
             tilesets: Vec::new(),
@@ -66,10 +62,10 @@ impl<'a> NewRequest<'a> {
         }
     }
 
-    /// A map called `file`, `size` cells of `tile` pixels.
-    pub fn sized(file: impl Into<String>, size: UVec2, tile: UVec2) -> NewRequest<'a> {
+    /// The map at `new_path`, `size` cells of `tile` pixels.
+    pub fn sized(new_path: &Path, size: UVec2, tile: UVec2) -> NewRequest<'a> {
         NewRequest {
-            file: file.into(),
+            file: display_name(new_path),
             source: Source::Fresh { tile },
             size: Some(size),
             tilesets: Vec::new(),
@@ -94,6 +90,12 @@ impl<'a> NewRequest<'a> {
         self.layers = layers;
         self
     }
+}
+
+/// The folder a file is in; the file itself when it has none.
+fn folder_of(path: &Path) -> PathBuf {
+    path.parent()
+        .map_or_else(|| path.to_path_buf(), Path::to_path_buf)
 }
 
 /// A new map and what `bt new` says of it.
@@ -367,8 +369,12 @@ mod tests {
             "intent".into(),
             Property::new(Value::String("a pond".into())),
         );
-        let request = NewRequest::like("copy.tmx", &other, Path::new("/maps"), Path::new("/maps"))
-            .size(UVec2::new(8, 6));
+        let request = NewRequest::like(
+            &other,
+            Path::new("/maps/a.tmx"),
+            Path::new("/maps/copy.tmx"),
+        )
+        .size(UVec2::new(8, 6));
         let created = NewOutcome::from_request(&request).unwrap();
         let map = &created.map;
         assert!(map.properties.is_empty());
@@ -401,10 +407,9 @@ mod tests {
         let desert = loader.load_map(&examples.join("desert.tmx")).unwrap().value;
         let elsewhere = examples.join("elsewhere");
         let created = NewOutcome::from_request(&NewRequest::like(
-            "oasis.tmx",
             &desert,
-            &examples,
-            &elsewhere,
+            &examples.join("desert.tmx"),
+            &elsewhere.join("oasis.tmx"),
         ))
         .unwrap();
         assert_eq!(created.outcome.tilesets, ["desert"]);
@@ -425,9 +430,10 @@ mod tests {
             .name("Ground Tiles")
             .build_embedded()
             .unwrap();
-        let request = NewRequest::sized("fresh.tmx", UVec2::new(10, 5), UVec2::splat(16))
-            .tilesets(vec![TilesetRef::embedded(Arc::clone(&atlas.tileset))])
-            .layers(vec!["floor:tiles".into(), "things:objects".into()]);
+        let request =
+            NewRequest::sized(Path::new("fresh.tmx"), UVec2::new(10, 5), UVec2::splat(16))
+                .tilesets(vec![TilesetRef::embedded(Arc::clone(&atlas.tileset))])
+                .layers(vec!["floor:tiles".into(), "things:objects".into()]);
         let created = NewOutcome::from_request(&request).unwrap();
         assert_eq!(created.map.file.layer_data, LayerDataFormat::Csv);
         assert_eq!(
@@ -444,7 +450,7 @@ mod tests {
         assert_eq!(floor.as_tile_layer().unwrap().size(), UVec2::new(10, 5));
         assert_eq!(
             NewOutcome::from_request(
-                &NewRequest::sized("x.tmx", UVec2::new(2, 2), UVec2::splat(16))
+                &NewRequest::sized(Path::new("x.tmx"), UVec2::new(2, 2), UVec2::splat(16))
                     .layers(vec!["floor:water".into()])
             )
             .unwrap_err()
@@ -453,7 +459,7 @@ mod tests {
         );
         assert!(matches!(
             NewOutcome::from_request(&NewRequest::sized(
-                "x.tmx",
+                Path::new("x.tmx"),
                 UVec2::new(0, 2),
                 UVec2::splat(16)
             )),

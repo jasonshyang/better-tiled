@@ -29,7 +29,9 @@ use crate::info::RuleNote;
 use crate::names::Names;
 use crate::objects::flips_text;
 use crate::report::{Line, LineKind, Outcome, Report, Section};
-use crate::rule_words::{near_miss_layer, problem_line, rule_map_name, tile_layer_named};
+use crate::rule_words::{
+    near_miss_layer, problem_line, rule_map_name, rules_file_name, tile_layer_named,
+};
 use crate::shapes::map_cells;
 use crate::words::{cell_text, region_text};
 
@@ -59,18 +61,15 @@ struct AutoMapLayers<'a> {
 }
 
 impl<'a> ExplainRequest<'a> {
-    /// What a run of `rules` (from the file called `rules_file`) does at `cell` of `map`, with
-    /// seed 1 and the rules finding layers by name.
-    pub fn new(
-        map: &'a Map,
-        rules: &'a RuleSet,
-        rules_file: impl Into<String>,
-        cell: IVec2,
-    ) -> ExplainRequest<'a> {
+    /// What a run of `rules` does at `cell` of `map`, with seed 1 and the rules finding layers
+    /// by name; the rules are named by the file they were read from.
+    pub fn new(map: &'a Map, rules: &'a RuleSet, cell: IVec2) -> ExplainRequest<'a> {
         ExplainRequest {
             map,
             rules,
-            rules_file: rules_file.into(),
+            rules_file: rules
+                .rules_file()
+                .map_or_else(|| "the rules".to_owned(), rules_file_name),
             cell,
             seed: None,
             bindings: LayerNames::by_name(),
@@ -78,6 +77,12 @@ impl<'a> ExplainRequest<'a> {
             run: None,
             all: false,
         }
+    }
+
+    /// What the rules are called: the rules file as the command was given it.
+    pub fn rules_file(mut self, name: impl Into<String>) -> ExplainRequest<'a> {
+        self.rules_file = name.into();
+        self
     }
 
     /// The seed of the rules' random choices (else 1, or the AutoMap layers' own).
@@ -577,15 +582,17 @@ impl Explained<'_> {
         cell: IVec2,
         words: &TileWords<'_>,
     ) -> Vec<String> {
-        let (Some(summary), Some(picture), Some(rule_map)) = (
-            self.summary(rule),
-            self.rules.rule_picture(rule),
-            self.rules.rule_maps().get(rule.rule_map),
-        ) else {
+        let Some(summary) = self.summary(rule) else {
+            return Vec::new();
+        };
+        let Some(picture) = self.rules.rule_picture(rule) else {
+            return Vec::new();
+        };
+        let Some(rule_map) = self.rules.rule_maps().get(rule.rule_map) else {
             return Vec::new();
         };
         let at = cell - position + summary.input.min();
-        let mut by_layer: Vec<(String, Vec<String>)> = Vec::new();
+        let mut by_layer: Vec<LayerWrites> = Vec::new();
         for layer in picture
             .layers
             .iter()
@@ -603,21 +610,40 @@ impl Explained<'_> {
                 let Some(text) = words.rule_map_tile(rule_map.map(), placed.cell) else {
                     continue;
                 };
-                match by_layer.iter_mut().find(|(name, _)| *name == shown) {
-                    Some((_, tiles)) if !tiles.contains(&text) => tiles.push(text),
+                match by_layer.iter_mut().find(|writes| writes.layer == shown) {
+                    Some(writes) if !writes.tiles.contains(&text) => writes.tiles.push(text),
                     Some(_) => {}
-                    None => by_layer.push((shown.clone(), vec![text])),
+                    None => by_layer.push(LayerWrites {
+                        layer: shown.clone(),
+                        tiles: vec![text],
+                    }),
                 }
             }
         }
         by_layer
             .into_iter()
-            .map(|(layer, tiles)| match tiles.as_slice() {
-                [one] => format!("{layer} {one}"),
-                _ => format!("{layer} one of {}", tiles.join(", ")),
+            .map(|writes| match writes.tiles.as_slice() {
+                [one] => format!("{} {one}", writes.layer),
+                _ => format!("{} one of {}", writes.layer, writes.tiles.join(", ")),
             })
             .collect()
     }
+}
+
+/// The tiles a rule would write on a layer.
+struct LayerWrites {
+    layer: String,
+    tiles: Vec<String>,
+}
+
+/// How near an attempt came, for choosing each rule's best: what came of it, then how many of
+/// its conditions fail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Rank {
+    /// Applied, matched but held back, tried, or never tried.
+    group: u8,
+    /// Failing conditions of a tried rule.
+    failures: usize,
 }
 
 /// `1 of its 3 conditions doesn't hold`.
@@ -640,14 +666,15 @@ struct Groups<'e> {
 
 impl<'e> Groups<'e> {
     fn of(explanation: &'e Explanation) -> Groups<'e> {
-        let rank = |a: &RuleAttempt| -> (u8, usize) {
+        let rank = |a: &RuleAttempt| -> Rank {
+            let rank = |group, failures| Rank { group, failures };
             match a.outcome {
-                AttemptOutcome::Applied { .. } => (0, 0),
-                AttemptOutcome::SkippedByProbability | AttemptOutcome::Overlapping => (1, 0),
+                AttemptOutcome::Applied { .. } => rank(0, 0),
+                AttemptOutcome::SkippedByProbability | AttemptOutcome::Overlapping => rank(1, 0),
                 AttemptOutcome::NoMatch
                 | AttemptOutcome::OutsideMap
-                | AttemptOutcome::OffLattice => (2, a.failures().unwrap_or(usize::MAX)),
-                AttemptOutcome::Disabled | AttemptOutcome::CanNeverMatch => (3, 0),
+                | AttemptOutcome::OffLattice => rank(2, a.failures().unwrap_or(usize::MAX)),
+                AttemptOutcome::Disabled | AttemptOutcome::CanNeverMatch => rank(3, 0),
             }
         };
         let mut best: Vec<&RuleAttempt> = Vec::new();
@@ -1123,12 +1150,9 @@ mod tests {
             .tileset;
         let rules = rules_over(&tiles);
         let map = map_of(&tiles, "set", "1 4 .\n. . .");
-        let explained = ExplainOutcome::from_request(&ExplainRequest::new(
-            &map,
-            &rules,
-            "rules.txt",
-            IVec2::new(0, 0),
-        ))
+        let explained = ExplainOutcome::from_request(
+            &ExplainRequest::new(&map, &rules, IVec2::new(0, 0)).rules_file("rules.txt"),
+        )
         .unwrap();
         let run = &explained.runs[0];
         assert_eq!(run.layers, ["set: ground:1 → ground:3"]);
@@ -1141,12 +1165,9 @@ mod tests {
         );
         assert!(run.matched.is_empty());
         // Rule 3 needs 4 then 5: at 1,0 its tile 4 holds and 5 at 2,0 doesn't.
-        let at_four = ExplainOutcome::from_request(&ExplainRequest::new(
-            &map,
-            &rules,
-            "rules.txt",
-            IVec2::new(1, 0),
-        ))
+        let at_four = ExplainOutcome::from_request(
+            &ExplainRequest::new(&map, &rules, IVec2::new(1, 0)).rules_file("rules.txt"),
+        )
         .unwrap();
         let close = &at_four.runs[0].close;
         assert_eq!(close.len(), 1, "{at_four:?}");
@@ -1180,12 +1201,9 @@ mod tests {
             .tileset;
         let rules = rules_over(&tiles);
         let map = map_of(&tiles, "Set", "1 . .\n. . .");
-        let lacking = ExplainOutcome::from_request(&ExplainRequest::new(
-            &map,
-            &rules,
-            "rules.txt",
-            IVec2::new(0, 0),
-        ))
+        let lacking = ExplainOutcome::from_request(
+            &ExplainRequest::new(&map, &rules, IVec2::new(0, 0)).rules_file("rules.txt"),
+        )
         .unwrap();
         assert_eq!(
             lacking.runs[0].missing,
@@ -1204,7 +1222,8 @@ mod tests {
         );
         // Bound to the map's layer, the rules read it, in the map's name.
         let bound = ExplainOutcome::from_request(
-            &ExplainRequest::new(&map, &rules, "rules.txt", IVec2::new(0, 0))
+            &ExplainRequest::new(&map, &rules, IVec2::new(0, 0))
+                .rules_file("rules.txt")
                 .bindings(LayerNames::builder().tiles("set", LayerId(1)).build()),
         )
         .unwrap();
@@ -1213,7 +1232,9 @@ mod tests {
         assert!(bound.report().text().contains("with set=Set:\n"));
         assert!(matches!(
             ExplainOutcome::from_request(
-                &ExplainRequest::new(&map, &rules, "rules.txt", IVec2::ZERO).run(1)
+                &ExplainRequest::new(&map, &rules, IVec2::ZERO)
+                    .rules_file("rules.txt")
+                    .run(1)
             ),
             Err(Error::RunWithoutLayers { run: 1 })
         ));
@@ -1233,7 +1254,8 @@ mod tests {
             runs: vec![LayerNames::temporary().rebound("set", false, Some(LayerId(1)))],
             seed: 5,
         };
-        let request = ExplainRequest::new(&painted, &rules, "rules.txt", IVec2::ZERO)
+        let request = ExplainRequest::new(&painted, &rules, IVec2::ZERO)
+            .rules_file("rules.txt")
             .automap_layers(&painted, &setup);
         let explained = ExplainOutcome::from_request(&request).unwrap();
         assert!(explained.automap_layers);
@@ -1275,12 +1297,9 @@ mod tests {
             .unwrap()
             .set_cell(IVec2::new(27, 23), tile)
             .unwrap();
-        let explained = ExplainOutcome::from_request(&ExplainRequest::new(
-            &map,
-            &rules,
-            "rules.txt",
-            IVec2::new(27, 23),
-        ))
+        let explained = ExplainOutcome::from_request(
+            &ExplainRequest::new(&map, &rules, IVec2::new(27, 23)).rules_file("rules.txt"),
+        )
         .unwrap();
         let unnamed = &explained.runs[0].unnamed;
         assert_eq!(unnamed.len(), 1, "{explained:?}");

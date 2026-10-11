@@ -7,15 +7,15 @@
 //! Reading files is the caller's: it gives the map, its reading warnings and the rules it found
 //! for it, read through the map's loader; a rule map's own rules are compiled here from the map.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bt_automap::layers::Setup;
 use bt_automap::{Problem, RuleSet};
 use bt_core::{
-    Cell, CustomTypes, Layer, LayerKind, Map, Orientation, StaggerAxis, StaggerIndex,
-    TileRenderSize, Tileset, TilesetSlot,
+    CustomTypes, Layer, LayerKind, Map, Orientation, StaggerAxis, StaggerIndex, TileRenderSize,
+    Tileset, TilesetSlot,
 };
 use bt_utils::IRect;
 use bt_utils::text::{and_list, plural};
@@ -28,6 +28,7 @@ use crate::property_text::{properties_text, quoted};
 use crate::report::{Line, LineKind, Outcome, Report, Section};
 use crate::rule_words::{near_miss_layer, problem_line, rules_file_name, tile_layer_named};
 use crate::shapes::map_cells;
+use crate::symbols::TileKey;
 use crate::tally::{Tally, counts_text};
 use crate::words::{number_text, region_text};
 
@@ -421,19 +422,27 @@ fn layer_holds(map: &Map, names: &Names, layer: &Layer) -> String {
             let mut kinds = Tally::new();
             // Plain tiles of each tileset: one kind is named, several are counted.
             let mut plain: BTreeMap<TilesetSlot, Tally> = BTreeMap::new();
+            // Each tile's words, found once a tile: what it shows, and whether that is a
+            // terrain's.
+            let mut labels: HashMap<TileKey, TileWords> = HashMap::new();
             let mut count = 0usize;
             for placed in tiles.cells() {
                 count += 1;
-                let tile = placed.cell;
-                let unflipped = match tile.slot() {
-                    Some(slot) => Cell::new(slot, tile.tile()),
-                    None => continue,
+                let Some(key) = TileKey::of(placed.cell) else {
+                    continue;
                 };
-                let label = names.tile_label(map, unflipped);
-                if label != names.tile_text(unflipped) {
-                    kinds.add_one(label);
-                } else if let Some(slot) = tile.slot() {
-                    plain.entry(slot).or_default().add_one(label);
+                let words = labels.entry(key).or_insert_with(|| {
+                    let label = names.tile_label(map, key.cell());
+                    let terrain = label != names.tile_text(key.cell());
+                    TileWords { label, terrain }
+                });
+                if words.terrain {
+                    kinds.add_one(words.label.clone());
+                } else {
+                    plain
+                        .entry(key.slot)
+                        .or_default()
+                        .add_one(words.label.clone());
                 }
             }
             for (slot, tally) in plain {
@@ -483,6 +492,12 @@ fn layer_holds(map: &Map, names: &Names, layer: &Layer) -> String {
             format!("group of {}", plural(children.len(), "layer", "layers"))
         }
     }
+}
+
+/// A tile in words, and whether the words are a terrain's.
+struct TileWords {
+    label: String,
+    terrain: bool,
 }
 
 /// What an object is, in a word: its sprite's name, else its type, else its shape.

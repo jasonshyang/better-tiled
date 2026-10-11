@@ -107,6 +107,62 @@ pub struct SideTiles {
     pub tiles: Vec<NameCount>,
 }
 
+/// A tileset's tiles, all of them or only some.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TilesetPart {
+    /// The tileset.
+    pub(crate) slot: TilesetSlot,
+    /// The tiles; all of the tileset's when empty.
+    pub(crate) only: Vec<TileId>,
+}
+
+impl TilesetPart {
+    /// Every tile of the tileset in `slot`.
+    pub(crate) fn whole(slot: TilesetSlot) -> TilesetPart {
+        TilesetPart {
+            slot,
+            only: Vec::new(),
+        }
+    }
+
+    /// The parts of their tilesets `tiles` are, in the order their tilesets come.
+    pub(crate) fn of_tiles(tiles: &[Cell]) -> Vec<TilesetPart> {
+        let mut parts: Vec<TilesetPart> = Vec::new();
+        for tile in tiles {
+            let Some(slot) = tile.slot() else {
+                continue;
+            };
+            match parts.iter_mut().find(|part| part.slot == slot) {
+                Some(part) => part.only.push(tile.tile()),
+                None => parts.push(TilesetPart {
+                    slot,
+                    only: vec![tile.tile()],
+                }),
+            }
+        }
+        parts
+    }
+
+    /// The part's tiles in the tileset's order.
+    pub(crate) fn ids(&self, tileset: &Tileset) -> Vec<TileId> {
+        tileset
+            .tile_ids()
+            .into_iter()
+            .filter(|id| self.only.is_empty() || self.only.contains(id))
+            .collect()
+    }
+}
+
+/// What tiles are listed against: the map, its names, and where each tile is used.
+pub(crate) struct Listing<'a> {
+    /// The map.
+    pub(crate) map: &'a Map,
+    /// Its names.
+    pub(crate) names: &'a Names,
+    /// Where each tile is used, by layer.
+    pub(crate) uses: &'a BTreeMap<TileKey, Tally>,
+}
+
 /// How often each tile is used, by layer.
 pub(crate) fn tile_uses(map: &Map) -> BTreeMap<TileKey, Tally> {
     let mut uses: BTreeMap<TileKey, Tally> = BTreeMap::new();
@@ -122,17 +178,19 @@ pub(crate) fn tile_uses(map: &Map) -> BTreeMap<TileKey, Tally> {
     uses
 }
 
-/// The tiles of the tileset in `slot`, with where they are used.
+/// The tiles of a part of a tileset, with where they are used.
 pub(crate) fn tileset_tiles(
-    map: &Map,
-    names: &Names,
-    slot: TilesetSlot,
-    uses: &BTreeMap<TileKey, Tally>,
+    listing: &Listing<'_>,
+    part: &TilesetPart,
     pictures: &mut TilePictures,
 ) -> Option<TilesetTiles> {
+    let map = listing.map;
+    let names = listing.names;
+    let uses = listing.uses;
+    let slot = part.slot;
     let tileset = map.tileset(slot)?;
     let name = names.tileset_name(slot).unwrap_or("tileset").to_owned();
-    let ids = tileset.tile_ids();
+    let ids = part.ids(tileset);
     let mut by_layer: BTreeMap<String, Tally> = BTreeMap::new();
     let mut unused: Vec<u32> = Vec::new();
     let mut used = 0;
@@ -364,7 +422,17 @@ mod tests {
         let names = Names::of(&map);
         let uses = tile_uses(&map);
         let slot = TilesetSlot::new(0).unwrap();
-        let tiles = tileset_tiles(&map, &names, slot, &uses, &mut TilePictures::new()).unwrap();
+        let listing = Listing {
+            map: &map,
+            names: &names,
+            uses: &uses,
+        };
+        let tiles = tileset_tiles(
+            &listing,
+            &TilesetPart::whole(slot),
+            &mut TilePictures::new(),
+        )
+        .unwrap();
         assert_eq!((tiles.tiles, tiles.used), (16, 3));
         assert_eq!(tiles.unused, "0, 4-15");
         assert_eq!(

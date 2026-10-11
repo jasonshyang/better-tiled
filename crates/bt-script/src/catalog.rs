@@ -7,7 +7,7 @@
 //!
 //! Writing the sheet is the caller's: the outcome comes with its pixels.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use bt_core::{Cell, ClassUsage, CustomTypes, Map, TileId, TilesetSlot, WangSetType};
@@ -18,13 +18,15 @@ use glam::UVec2;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog_sprites::{SpriteEntry, sprite_list};
-use crate::catalog_tiles::{TileDetails, TilesetTiles, tile_neighbours, tile_uses, tileset_tiles};
+use crate::catalog_tiles::{
+    Listing, TileDetails, TilesetPart, TilesetTiles, tile_neighbours, tile_uses, tileset_tiles,
+};
 use crate::error::Error;
 use crate::names::{Names, object_type};
 use crate::opacity::{EdgeMeter, EdgeOpacity};
 use crate::property_text::{assignments_text, properties_text};
 use crate::report::{Line, Outcome, Report, Section};
-use crate::sheet::{SheetItem, SheetTileset, draw_items, draw_tiles};
+use crate::sheet::{SheetItem, draw_items, draw_tiles};
 use crate::symbols::TileKey;
 use crate::tally::{NameCount, Tally, counts_text};
 use crate::tile_pictures::TilePictures;
@@ -132,8 +134,10 @@ pub struct CatalogOutcome {
     pub sprites_unmeasured: usize,
     /// The tiles by tileset, when listed.
     pub tiles: Option<Vec<TilesetTiles>>,
-    /// The tiles named by id, when they are.
+    /// The tiles named by id, when they are few: where each is and what is next to it.
     pub tile_details: Option<TileDetails>,
+    /// How many tiles were named by id (0 when none were).
+    pub tiles_named: usize,
     /// How many tiles the map has and uses, when the tiles are not listed.
     pub tiles_summary: Option<TilesSummary>,
     /// The object types, when listed.
@@ -257,59 +261,40 @@ impl CatalogOutcome {
             }
         }
         let uses = tile_uses(map);
-        let mut sheet_tilesets: Vec<SheetTileset> = Vec::new();
-        let mut tiles = None;
+        let listing = Listing {
+            map,
+            names,
+            uses: &uses,
+        };
+        let mut parts: Vec<TilesetPart> = Vec::new();
+        let mut named = 0;
         let mut tile_details = None;
         if wants(CatalogPart::Tiles) {
             match request.tiles.as_deref() {
                 Some(written) if written.contains(':') => {
                     let picked = named_tiles(map, names, written)?;
-                    if picked.len() > MOST_DETAILED {
-                        return Err(Error::TooManyTiles {
-                            count: picked.len(),
-                            most: MOST_DETAILED,
-                        });
+                    named = picked.len();
+                    parts = TilesetPart::of_tiles(&picked);
+                    if named <= MOST_DETAILED {
+                        tile_details = Some(tile_neighbours(map, names, &picked));
                     }
-                    for tile in &picked {
-                        let Some(slot) = tile.slot() else {
-                            continue;
-                        };
-                        match sheet_tilesets.iter_mut().find(|s| s.slot == slot) {
-                            Some(sheet) => sheet.only.push(tile.tile()),
-                            None => sheet_tilesets.push(SheetTileset {
-                                slot,
-                                only: vec![tile.tile()],
-                            }),
-                        }
-                    }
-                    tile_details = Some(tile_neighbours(map, names, &picked));
                 }
-                Some(tileset) => {
-                    let slot = names.tileset(tileset)?;
-                    sheet_tilesets.push(SheetTileset {
-                        slot,
-                        only: Vec::new(),
-                    });
-                    tiles = Some(
-                        tileset_tiles(map, names, slot, &uses, &mut pictures)
-                            .into_iter()
-                            .collect(),
-                    );
-                }
+                Some(tileset) => parts.push(TilesetPart::whole(names.tileset(tileset)?)),
                 None => {
-                    let slots = tile_tilesets(map, &uses);
-                    let listed: Vec<TilesetTiles> = slots
-                        .iter()
-                        .filter_map(|&slot| tileset_tiles(map, names, slot, &uses, &mut pictures))
+                    parts = tile_tilesets(map, &uses)
+                        .into_iter()
+                        .map(TilesetPart::whole)
                         .collect();
-                    sheet_tilesets.extend(slots.into_iter().map(|slot| SheetTileset {
-                        slot,
-                        only: Vec::new(),
-                    }));
-                    tiles = Some(listed);
                 }
             }
         }
+        // Tiles named one by one are told about with their neighbours; more are listed.
+        let tiles = (wants(CatalogPart::Tiles) && tile_details.is_none()).then(|| {
+            parts
+                .iter()
+                .filter_map(|part| tileset_tiles(&listing, part, &mut pictures))
+                .collect::<Vec<TilesetTiles>>()
+        });
         let summarised = tile_tilesets(map, &uses);
         let tiles_summary =
             (request.part.is_none() && !summarised.is_empty()).then(|| TilesSummary {
@@ -338,16 +323,13 @@ impl CatalogOutcome {
             let used: HashSet<TileKey> = uses.keys().copied().collect();
             let of_tiles = wants(CatalogPart::Tiles) || items.is_empty();
             let image = if of_tiles {
-                if sheet_tilesets.is_empty() {
-                    sheet_tilesets = tile_tilesets(map, &uses)
+                if parts.is_empty() {
+                    parts = tile_tilesets(map, &uses)
                         .into_iter()
-                        .map(|slot| SheetTileset {
-                            slot,
-                            only: Vec::new(),
-                        })
+                        .map(TilesetPart::whole)
                         .collect();
                 }
-                draw_tiles(map, &sheet_tilesets, &used, asked.scale, &mut pictures)?
+                draw_tiles(map, &parts, &used, asked.scale, &mut pictures)?
             } else {
                 draw_items(map, &items, &mut pictures)?
             };
@@ -366,6 +348,7 @@ impl CatalogOutcome {
                 sprites_unmeasured,
                 tiles,
                 tile_details,
+                tiles_named: named,
                 tiles_summary,
                 types,
                 nothing_found,
@@ -407,11 +390,20 @@ fn named_tiles(map: &Map, names: &Names, written: &str) -> Result<Vec<Cell>, Err
 /// The terrains whose names hold `find`, with what they border and where they are used.
 fn terrain_entries(map: &Map, names: &Names, find: Option<&str>) -> Vec<TerrainEntry> {
     let mut used: BTreeMap<String, Tally> = BTreeMap::new();
+    let mut covering: HashMap<TileKey, Option<String>> = HashMap::new();
     map.for_each_layer(|layer, _| {
         if let Some(tiles) = layer.as_tile_layer() {
             for placed in tiles.cells() {
-                if let Some(terrain) = names.terrain_covering(map, placed.cell) {
-                    used.entry(terrain.name.clone())
+                let Some(key) = TileKey::of(placed.cell) else {
+                    continue;
+                };
+                let terrain = covering.entry(key).or_insert_with(|| {
+                    names
+                        .terrain_covering(map, key.cell())
+                        .map(|t| t.name.clone())
+                });
+                if let Some(terrain) = terrain {
+                    used.entry(terrain.clone())
                         .or_default()
                         .add_one(layer.name.clone());
                 }
@@ -584,6 +576,12 @@ impl Outcome for CatalogOutcome {
         }
         if let Some(tiles) = &self.tiles {
             report.add_section(tiles_section(tiles));
+            if self.tiles_named > MOST_DETAILED {
+                report.add_line(Line::note(format!(
+                    "{} tiles named: name up to {MOST_DETAILED} for where each is and which tiles are next to it",
+                    self.tiles_named
+                )));
+            }
         }
         if let Some(details) = &self.tile_details {
             report.add_section(details_section(details));
@@ -977,13 +975,22 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("left of it: 0\n"), "{text}");
-        let too_many = CatalogOutcome::from_request(
+        let many = CatalogOutcome::from_request(
             &CatalogRequest::new(&map, &names).tiles_of("ground:0-12"),
+        )
+        .unwrap()
+        .outcome;
+        assert!(many.tile_details.is_none());
+        assert_eq!(
+            many.tiles.as_ref().unwrap()[0].tiles,
+            13,
+            "those tiles alone"
         );
-        assert!(matches!(
-            too_many,
-            Err(Error::TooManyTiles { count: 13, .. })
-        ));
+        assert!(
+            many.report()
+                .text()
+                .contains("note: 13 tiles named: name up to 12 for where each is")
+        );
         assert!(matches!(
             CatalogOutcome::from_request(
                 &CatalogRequest::new(&map, &names).sheet("x.png", Some(9))

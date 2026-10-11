@@ -52,6 +52,13 @@ struct Quarters {
     bottom: i32,
 }
 
+/// A tile with the terrain and lanes of nothing.
+struct EdgeTile {
+    id: TileId,
+    /// Its lanes that are empty.
+    empty: Vec<Lane>,
+}
+
 /// Opaque pixels of all measured.
 #[derive(Clone, Copy, Debug, Default)]
 struct Count {
@@ -81,7 +88,7 @@ impl EdgeMeter {
             .into_iter()
             .filter(|lane| set.kind.uses(*lane))
             .collect();
-        let edge_tiles: Vec<(TileId, Vec<Lane>)> = set
+        let edge_tiles: Vec<EdgeTile> = set
             .tiles
             .iter()
             .filter_map(|(&id, label)| {
@@ -93,7 +100,7 @@ impl EdgeMeter {
                     .copied()
                     .filter(|&lane| label.lane(lane) == 0)
                     .collect();
-                (has && !empty.is_empty()).then_some((id, empty))
+                (has && !empty.is_empty()).then_some(EdgeTile { id, empty })
             })
             .collect();
         if edge_tiles.is_empty() {
@@ -102,7 +109,7 @@ impl EdgeMeter {
         let mut count = Count::default();
         let mut measured = 0;
         let mut unreadable: Option<String> = None;
-        for (id, empty) in edge_tiles {
+        for EdgeTile { id, empty } in edge_tiles {
             if measured >= MEASURED {
                 break;
             }

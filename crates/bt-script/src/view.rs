@@ -239,6 +239,11 @@ impl ViewOutcome {
             map,
             names: request.names,
             tile_layers: &tile_layers,
+            classes: if by == ViewBy::Terrain {
+                tile_classes(map, request.names, &tile_layers)
+            } else {
+                HashMap::new()
+            },
             backdrop: backdrop(map, request.names, &tile_layers, by),
             by,
         };
@@ -246,7 +251,6 @@ impl ViewOutcome {
         let cols = (region.w + step - 1) / step;
         let rows = (region.h + step - 1) / step;
         let mut grid: Vec<char> = Vec::new();
-        let mut counts: Tally = Tally::new();
         let mut seen: HashMap<Shown, SightCounts> = HashMap::new();
         for row in 0..rows {
             for col in 0..cols {
@@ -258,10 +262,8 @@ impl ViewOutcome {
                 };
                 let symbol = match sight {
                     Some(sight) => {
-                        let symbol = symbols.of_shown(sight.shown);
-                        counts.add_one(symbol.to_string());
                         seen.entry(sight.shown).or_default().add(&view, sight);
-                        symbol
+                        symbols.of_shown(sight.shown)
                     }
                     None => NOTHING,
                 };
@@ -269,9 +271,9 @@ impl ViewOutcome {
             }
         }
         // Objects where they stand.
-        let mut groups = object_groups(map, request.names);
+        let groups = object_groups(map, request.names);
         let marks = if request.objects && by != ViewBy::Layer {
-            object_marks(map, request.names, &chosen, &mut groups)
+            object_marks(map, request.names, &chosen, &groups)
         } else {
             Vec::new()
         };
@@ -282,8 +284,8 @@ impl ViewOutcome {
                 continue;
             }
             let local = (mark.cell - region.min()) / step;
-            let index = usize::try_from(local.y * cols + local.x).ok();
-            if let (Some(index), Some(group)) = (index, groups.get(mark.group))
+            if let Ok(index) = usize::try_from(local.y * cols + local.x)
+                && let Some(group) = groups.get(mark.group)
                 && let Some(slot) = grid.get_mut(index)
             {
                 *slot = group.symbol;
@@ -321,22 +323,30 @@ impl ViewOutcome {
         }
         text.push_str(&nothing);
         text.push('\n');
-        let mut legend: Vec<(Shown, &SightCounts)> = seen
+        let mut legend: Vec<LegendEntry<'_>> = seen
             .iter()
-            .map(|(shown, counts)| (*shown, counts))
+            .map(|(shown, sights)| LegendEntry {
+                shown: *shown,
+                sights,
+            })
             .collect();
-        legend.sort_by(|a, b| b.1.total.cmp(&a.1.total).then_with(|| a.0.cmp(&b.0)));
+        legend.sort_by(|a, b| {
+            b.sights
+                .total
+                .cmp(&a.sights.total)
+                .then_with(|| a.shown.cmp(&b.shown))
+        });
         let mut beyond = Tally::new();
-        for (shown, sights) in legend {
-            let symbol = symbols.of_shown(shown);
+        for entry in legend {
+            let symbol = symbols.of_shown(entry.shown);
             if symbol == TOO_MANY {
-                beyond.add(format!("{shown:?}"), sights.total);
+                beyond.add(format!("{:?}", entry.shown), entry.sights.total);
                 continue;
             }
             text.push_str(&format!(
                 "  {symbol}  {}: {}\n",
-                legend_words(&view, shown, sights),
-                plural(sights.total, unit.trim_end_matches('s'), unit)
+                legend_words(&view, entry.shown, entry.sights),
+                plural(entry.sights.total, unit.trim_end_matches('s'), unit)
             ));
         }
         if beyond.kinds() > 0 {
@@ -433,13 +443,56 @@ fn backdrop(map: &Map, names: &Names, tile_layers: &[&Layer], by: ViewBy) -> Opt
     })
 }
 
+/// What a tile shows by terrain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TileClass {
+    /// A terrain covers more than half of it.
+    Terrain(TerrainKey),
+    /// It is a terrain's edge: the layer below shows.
+    Edge,
+    /// It is no terrain's.
+    Plain,
+}
+
+/// What each tile of the chosen layers shows by terrain, found once a tile.
+fn tile_classes(map: &Map, names: &Names, tile_layers: &[&Layer]) -> HashMap<TileKey, TileClass> {
+    let mut classes = HashMap::new();
+    for tiles in tile_layers.iter().filter_map(|layer| layer.as_tile_layer()) {
+        for placed in tiles.cells() {
+            let Some(key) = TileKey::of(placed.cell) else {
+                continue;
+            };
+            classes.entry(key).or_insert_with(|| {
+                let tile = key.cell();
+                match names.terrain_covering(map, tile) {
+                    Some(terrain) => TileClass::Terrain(TerrainKey {
+                        slot: terrain.slot,
+                        set: terrain.set,
+                        color: terrain.color.0,
+                    }),
+                    None if is_terrain_tile(map, tile) => TileClass::Edge,
+                    None => TileClass::Plain,
+                }
+            });
+        }
+    }
+    classes
+}
+
 /// What finds a cell's sight.
 struct Viewer<'v> {
     map: &'v Map,
     names: &'v Names,
     tile_layers: &'v [&'v Layer],
+    classes: HashMap<TileKey, TileClass>,
     backdrop: Option<Backdrop>,
     by: ViewBy,
+}
+
+/// A sight and how often a square of cells shows it.
+struct SightCount {
+    sight: Sight,
+    count: usize,
 }
 
 impl Viewer<'_> {
@@ -459,21 +512,18 @@ impl Viewer<'_> {
             {
                 continue;
             }
+            let key = TileKey {
+                slot,
+                id: tile.tile(),
+            };
             let shown = match self.by {
                 ViewBy::Layer => Shown::Layer(layer.id),
-                ViewBy::Tile => Shown::Tile(TileKey {
-                    slot,
-                    id: tile.tile(),
-                }),
-                ViewBy::Terrain => match self.names.terrain_covering(self.map, tile) {
-                    Some(terrain) => Shown::Terrain(TerrainKey {
-                        slot: terrain.slot,
-                        set: terrain.set,
-                        color: terrain.color.0,
-                    }),
+                ViewBy::Tile => Shown::Tile(key),
+                ViewBy::Terrain => match self.classes.get(&key) {
+                    Some(TileClass::Terrain(terrain)) => Shown::Terrain(*terrain),
                     // A terrain's edge lets the layer below show.
-                    None if is_terrain_tile(self.map, tile) => continue,
-                    None => Shown::OtherTiles(layer.id),
+                    Some(TileClass::Edge) => continue,
+                    Some(TileClass::Plain) | None => Shown::OtherTiles(layer.id),
                 },
             };
             return Some(Sight {
@@ -487,7 +537,7 @@ impl Viewer<'_> {
 
     /// What a square of cells shows most.
     fn square_sight(&self, origin: IVec2, step: i32, region: IRect) -> Option<Sight> {
-        let mut tally: Vec<(Sight, usize)> = Vec::new();
+        let mut tally: Vec<SightCount> = Vec::new();
         for dy in 0..step {
             for dx in 0..step {
                 let cell = origin + IVec2::new(dx, dy);
@@ -495,17 +545,24 @@ impl Viewer<'_> {
                     continue;
                 }
                 if let Some(sight) = self.sight(cell) {
-                    match tally.iter_mut().find(|(s, _)| s.shown == sight.shown) {
-                        Some((_, count)) => *count += 1,
-                        None => tally.push((sight, 1)),
+                    match tally
+                        .iter_mut()
+                        .find(|seen| seen.sight.shown == sight.shown)
+                    {
+                        Some(seen) => seen.count += 1,
+                        None => tally.push(SightCount { sight, count: 1 }),
                     }
                 }
             }
         }
         tally
             .into_iter()
-            .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.shown.cmp(&a.0.shown)))
-            .map(|(sight, _)| sight)
+            .max_by(|a, b| {
+                a.count
+                    .cmp(&b.count)
+                    .then_with(|| b.sight.shown.cmp(&a.sight.shown))
+            })
+            .map(|seen| seen.sight)
     }
 }
 
@@ -541,6 +598,12 @@ impl SightCounts {
                 .add_one(view.names.tile_text(Cell::new(slot, sight.tile.tile())));
         }
     }
+}
+
+/// A sight of the view and how often it was seen, for the legend.
+struct LegendEntry<'s> {
+    shown: Shown,
+    sights: &'s SightCounts,
 }
 
 /// What a legend line says a sight is.
@@ -614,12 +677,7 @@ fn object_groups(map: &Map, names: &Names) -> Vec<ObjectGroup> {
 }
 
 /// Where each shown object of the chosen layers stands, with what the legend says of it.
-fn object_marks(
-    map: &Map,
-    names: &Names,
-    chosen: &[&Layer],
-    groups: &mut [ObjectGroup],
-) -> Vec<Mark> {
+fn object_marks(map: &Map, names: &Names, chosen: &[&Layer], groups: &[ObjectGroup]) -> Vec<Mark> {
     let mut feet = Feet::new();
     let mut marks = Vec::new();
     for layer in chosen {

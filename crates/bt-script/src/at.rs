@@ -145,7 +145,7 @@ fn lanes_of(map: &Map, names: &Names, tile: Cell) -> Vec<LanesOf> {
         let label = terrain.wang_of_cell(tile);
         let mut by_color: Vec<LanesOf> = Vec::new();
         let mut colors: Vec<u8> = Vec::new();
-        for (lane, word) in lanes_in_reading_order(set.kind) {
+        for LaneWord { lane, word } in lanes_in_reading_order(set.kind) {
             let color = label.lane(lane);
             let name = if color == 0 {
                 "nothing".to_owned()
@@ -174,20 +174,28 @@ fn lanes_of(map: &Map, names: &Names, tile: Cell) -> Vec<LanesOf> {
     out
 }
 
+/// A lane and the word for it.
+#[derive(Clone, Copy, Debug)]
+struct LaneWord {
+    lane: Lane,
+    word: &'static str,
+}
+
 /// The lanes a set of `kind` uses, in reading order, with their words.
-pub(crate) fn lanes_in_reading_order(kind: WangSetType) -> Vec<(Lane, &'static str)> {
+fn lanes_in_reading_order(kind: WangSetType) -> Vec<LaneWord> {
+    let lane = |lane, word| LaneWord { lane, word };
     [
-        (Lane::TopLeft, "top-left"),
-        (Lane::Top, "top"),
-        (Lane::TopRight, "top-right"),
-        (Lane::Left, "left"),
-        (Lane::Right, "right"),
-        (Lane::BottomLeft, "bottom-left"),
-        (Lane::Bottom, "bottom"),
-        (Lane::BottomRight, "bottom-right"),
+        lane(Lane::TopLeft, "top-left"),
+        lane(Lane::Top, "top"),
+        lane(Lane::TopRight, "top-right"),
+        lane(Lane::Left, "left"),
+        lane(Lane::Right, "right"),
+        lane(Lane::BottomLeft, "bottom-left"),
+        lane(Lane::Bottom, "bottom"),
+        lane(Lane::BottomRight, "bottom-right"),
     ]
     .into_iter()
-    .filter(|(lane, _)| kind.uses(*lane))
+    .filter(|named| kind.uses(named.lane))
     .collect()
 }
 

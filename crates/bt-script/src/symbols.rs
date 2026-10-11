@@ -132,30 +132,31 @@ impl Symbols {
         let mut taken: Vec<char> = Vec::new();
         let mut ground = HashMap::new();
         // Terrains: hints first, in the order of the tilesets' terrains, then the rest.
-        let terrains: Vec<(Shown, String)> = names
+        let terrains: Vec<NamedSight> = names
             .terrains()
             .iter()
-            .map(|t| {
-                let key = TerrainKey {
+            .map(|t| NamedSight {
+                shown: Shown::Terrain(TerrainKey {
                     slot: t.slot,
                     set: t.set,
                     color: t.color.0,
-                };
-                (Shown::Terrain(key), t.name.clone())
+                }),
+                name: t.name.clone(),
             })
             .collect();
         assign_hinted(&terrains, &mut taken, &mut ground);
         assign_rest(&terrains, &mut taken, &mut ground);
         // Layers: their hint, else their first free letter, else the next free symbol; tiles
         // of a layer that are no terrain's take the layer's symbol by terrain too.
-        let mut layers: Vec<(LayerId, String)> = Vec::new();
+        let mut layers: Vec<&bt_core::Layer> = Vec::new();
         map.for_each_layer(|layer, _| {
             if layer.as_tile_layer().is_some() {
-                layers.push((layer.id, layer.name.clone()));
+                layers.push(layer);
             }
         });
         let mut layer_taken = taken.clone();
-        for (id, name) in &layers {
+        for layer in layers {
+            let name = &layer.name;
             let symbol = hint_for(name, &layer_taken)
                 .or_else(|| first_free_letter(name, &layer_taken))
                 .or_else(|| next_free(GROUND, &layer_taken))
@@ -163,8 +164,8 @@ impl Symbols {
             if symbol != TOO_MANY {
                 layer_taken.push(symbol);
             }
-            ground.insert(Shown::OtherTiles(*id), symbol);
-            ground.insert(Shown::Layer(*id), symbol);
+            ground.insert(Shown::OtherTiles(layer.id), symbol);
+            ground.insert(Shown::Layer(layer.id), symbol);
         }
         // Tiles, in the order of their tilesets and ids.
         let mut tile_taken: Vec<char> = Vec::new();
@@ -228,35 +229,33 @@ fn tiles_given_symbols(map: &Map) -> Vec<TileKey> {
     used
 }
 
+/// What a cell can show, with its name.
+struct NamedSight {
+    shown: Shown,
+    name: String,
+}
+
 /// Gives each named thing its hint's sign when that is free, in order.
-fn assign_hinted(
-    named: &[(Shown, String)],
-    taken: &mut Vec<char>,
-    symbols: &mut HashMap<Shown, char>,
-) {
-    for (shown, name) in named {
-        if let Some(symbol) = hint_for(name, taken) {
+fn assign_hinted(named: &[NamedSight], taken: &mut Vec<char>, symbols: &mut HashMap<Shown, char>) {
+    for sight in named {
+        if let Some(symbol) = hint_for(&sight.name, taken) {
             taken.push(symbol);
-            symbols.insert(*shown, symbol);
+            symbols.insert(sight.shown, symbol);
         }
     }
 }
 
 /// Gives each named thing without a symbol the next free ground symbol, in order.
-fn assign_rest(
-    named: &[(Shown, String)],
-    taken: &mut Vec<char>,
-    symbols: &mut HashMap<Shown, char>,
-) {
-    for (shown, _) in named {
-        if symbols.contains_key(shown) {
+fn assign_rest(named: &[NamedSight], taken: &mut Vec<char>, symbols: &mut HashMap<Shown, char>) {
+    for sight in named {
+        if symbols.contains_key(&sight.shown) {
             continue;
         }
         let symbol = next_free(GROUND, taken).unwrap_or(TOO_MANY);
         if symbol != TOO_MANY {
             taken.push(symbol);
         }
-        symbols.insert(*shown, symbol);
+        symbols.insert(sight.shown, symbol);
     }
 }
 

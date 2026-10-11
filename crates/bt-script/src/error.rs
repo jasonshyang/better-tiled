@@ -322,16 +322,6 @@ pub enum Error {
         /// What is wrong with them.
         why: String,
     },
-    /// More tiles named than `bt catalog MAP tiles TILESET:ID,…` tells about.
-    #[error(
-        "tiles TILESET:ID,… tells about at most {most} tiles, and these are {count}: bt catalog MAP tiles TILESET lists every tile with where it is used"
-    )]
-    TooManyTiles {
-        /// The tiles named.
-        count: usize,
-        /// The most it tells about.
-        most: usize,
-    },
     /// A sheet scale out of range.
     #[error("--scale for a sheet is a whole number from 1 to 8, and it is {scale}")]
     SheetScale {
