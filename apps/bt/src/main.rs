@@ -14,6 +14,7 @@ mod link;
 mod load;
 mod output;
 mod run;
+mod script_input;
 
 use std::io::Write;
 use std::process::ExitCode;

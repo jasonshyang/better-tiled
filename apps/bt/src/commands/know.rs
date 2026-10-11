@@ -1,7 +1,5 @@
 //! `bt areas` and `bt reach`: how a map's cells connect (`10-agents.md`, §10.5).
 
-use std::path::Path;
-
 use anyhow::Context as _;
 use bt_core::Map;
 use bt_script::{
@@ -13,6 +11,7 @@ use crate::exit::{Printed, Status};
 use crate::load::load_map;
 use crate::output::printed;
 use crate::run::Run;
+use crate::script_input::shape_names;
 
 /// The seed of rough shapes when `--seed` gives none: one fixed seed, so a command run twice
 /// gives the same cells.
@@ -20,9 +19,8 @@ pub(crate) const DEFAULT_SEED: u64 = 1;
 
 /// Runs `bt areas`.
 pub(crate) fn areas(run: &Run, args: &AreasArgs) -> anyhow::Result<Printed> {
-    refuse_definitions(args.with.as_deref())?;
-    let loaded = load_map(&args.map, run)?;
-    let names = Names::of(&loaded.map);
+    let mut loaded = load_map(&args.map, run)?;
+    let names = shape_names(&mut loaded, args.with.as_deref(), args.seed)?;
     let context = Context::new(args.seed.unwrap_or(DEFAULT_SEED));
     let shape = shape_cells(&loaded.map, &names, &context, &args.shape)?;
     let outcome = AreasOutcome::from_cells(&loaded.map, &shape, args.all);
@@ -31,9 +29,8 @@ pub(crate) fn areas(run: &Run, args: &AreasArgs) -> anyhow::Result<Printed> {
 
 /// Runs `bt reach`.
 pub(crate) fn reach(run: &Run, args: &ReachArgs) -> anyhow::Result<Printed> {
-    refuse_definitions(args.with.as_deref())?;
-    let loaded = load_map(&args.map, run)?;
-    let names = Names::of(&loaded.map);
+    let mut loaded = load_map(&args.map, run)?;
+    let names = shape_names(&mut loaded, args.with.as_deref(), args.seed)?;
     let context = Context::new(args.seed.unwrap_or(DEFAULT_SEED));
     let cells = |text: &str| shape_cells(&loaded.map, &names, &context, text);
     let mut request = ReachRequest::new(cells(&args.from)?, cells(&args.to)?);
@@ -59,14 +56,6 @@ pub(crate) fn shape_cells(
         written: written.to_owned(),
         cells,
     })
-}
-
-/// `--with FILE` needs the runner's definitions, which are wired with `bt edit`.
-fn refuse_definitions(with: Option<&Path>) -> anyhow::Result<()> {
-    match with {
-        Some(_) => anyhow::bail!("--with is not built yet"),
-        None => Ok(()),
-    }
 }
 
 #[cfg(test)]
