@@ -54,6 +54,8 @@ pub struct EditOutcome {
     pub view: Option<String>,
     /// Where the edit went, once the caller knows.
     pub saved: Option<Saved>,
+    /// What the editor said of the cells it outlined for `--mark`.
+    pub marked: Option<String>,
 }
 
 /// A note on how an operation was carried out.
@@ -163,6 +165,12 @@ impl EditOutcome {
         self
     }
 
+    /// This outcome with what the editor said of the cells it outlined (`--mark`).
+    pub fn with_marked(mut self, marked: String) -> EditOutcome {
+        self.marked = Some(marked);
+        self
+    }
+
     /// This outcome with a warning from reading the map or writing the result.
     pub fn with_warning(mut self, warning: impl Into<String>) -> EditOutcome {
         self.warnings.push(warning.into());
@@ -230,6 +238,9 @@ impl Outcome for EditOutcome {
         }
         if let Some(saved) = &self.saved {
             report.add_line(Line::fact(saved.text()));
+        }
+        if let Some(marked) = &self.marked {
+            report.add_line(Line::fact(marked.clone()));
         }
         report
     }
@@ -308,6 +319,7 @@ mod tests {
             made: None,
             view: None,
             saved: None,
+            marked: None,
         }
     }
 

@@ -70,7 +70,7 @@ pub(crate) fn definitions_text(file: &Path) -> anyhow::Result<String> {
 }
 
 /// The definitions of a `--with` file: define lines and seeds only.
-fn read_definitions(file: &Path) -> anyhow::Result<Script> {
+pub(crate) fn read_definitions(file: &Path) -> anyhow::Result<Script> {
     parse_definitions(&definitions_text(file)?)
         .map_err(|error| anyhow!("--with {}, {error}", display_name(file)))
 }

@@ -357,10 +357,10 @@ pub(crate) struct EditArgs {
     #[arg(long, value_name = "OTHER.tmx")]
     pub(crate) out: Option<PathBuf>,
     /// Fail instead of writing the file when the map is not open in the editor.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "out")]
     pub(crate) in_editor: bool,
     /// Outline in the editor the cells the edit changed (with --dry-run: would change).
-    #[arg(long, value_name = "LABEL")]
+    #[arg(long, value_name = "LABEL", conflicts_with = "out")]
     pub(crate) mark: Option<String>,
     /// Write a map an editor holds unsaved changes to that bt cannot reach.
     #[arg(long)]

@@ -3,6 +3,7 @@
 
 pub(crate) mod check;
 pub(crate) mod diff;
+pub(crate) mod edit;
 pub(crate) mod editor;
 pub(crate) mod export;
 pub(crate) mod know;

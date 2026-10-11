@@ -1,14 +1,13 @@
 //! `bt undo`: the last `bt edit` of a map taken back (`10-agents.md`, §12).
 
 use anyhow::Context;
-use bt_project::{AutoMapRecord, EntryPlace, ProjectFile};
 use bt_script::{History, UndoOutcome, Undone};
 use bt_utils::atomic_write::{WriteMode, write_file};
 
 use crate::cli::UndoArgs;
 use crate::exit::{Printed, Status};
-use crate::folders::Folders;
 use crate::output::printed;
+use crate::record::put_back_record;
 use crate::run::Run;
 
 /// Runs `bt undo`. A map open in the editor gets the editor's undo of the last external edit;
@@ -63,36 +62,13 @@ pub(crate) fn undo(run: &Run, args: &UndoArgs) -> anyhow::Result<Printed> {
     printed(&outcome(undone), json, Status::Done)
 }
 
-/// Puts the map's AutoMap record back as it was before the edit: `entry` (its JSON), or none.
-fn put_back_record(
-    map: &std::path::Path,
-    entry: Option<&str>,
-    folders: &Folders,
-) -> anyhow::Result<()> {
-    let place = EntryPlace::for_map(map, None, folders.home.as_deref())?;
-    let record: Option<AutoMapRecord> = entry
-        .map(serde_json::from_str)
-        .transpose()
-        .context("the kept AutoMap record is damaged")?;
-    if record.is_none() && !place.file.exists() {
-        return Ok(());
-    }
-    let locks = folders.locks()?;
-    ProjectFile::edit(&place.file, &locks, |document| match record {
-        Some(record) => document.set_automap(&place.key, record),
-        None => {
-            document.remove_automap(&place.key);
-        }
-    })?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use bt_script::EditToKeep;
     use bt_test_data::Scratch;
 
     use super::*;
+    use crate::folders::Folders;
 
     fn folders(scratch: &Scratch) -> Folders {
         std::fs::create_dir_all(scratch.join("locks")).unwrap();

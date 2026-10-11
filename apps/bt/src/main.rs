@@ -13,6 +13,7 @@ mod guide_tests;
 mod link;
 mod load;
 mod output;
+mod record;
 mod run;
 mod script_input;
 
@@ -53,6 +54,9 @@ fn main() -> ExitCode {
             let mut out = std::io::stdout().lock();
             if out.write_all(printed.text.as_bytes()).is_err() || out.flush().is_err() {
                 return Status::Failed.code();
+            }
+            if let Some(failure) = &printed.failure {
+                eprintln!("bt: {failure}");
             }
             printed.status.code()
         }

@@ -42,6 +42,9 @@ pub(crate) struct Printed {
     pub(crate) text: String,
     /// How it ended.
     pub(crate) status: Status,
+    /// Why it stopped, for standard error after `bt:`: a command that did part of what was
+    /// asked (`bt edit` of several maps) prints what it did and why it stopped.
+    pub(crate) failure: Option<String>,
 }
 
 impl Printed {
@@ -50,6 +53,16 @@ impl Printed {
         Printed {
             text: text.into(),
             status: Status::Done,
+            failure: None,
+        }
+    }
+
+    /// `text` of what a command did before it stopped, ending as `status` says, with why.
+    pub(crate) fn stopped(text: impl Into<String>, status: Status, failure: String) -> Printed {
+        Printed {
+            text: text.into(),
+            status,
+            failure: Some(failure),
         }
     }
 }

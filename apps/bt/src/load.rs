@@ -36,6 +36,17 @@ pub(crate) struct LoadedMap {
     pub(crate) source: MapSource,
     /// The project that applies to it, if any.
     pub(crate) project: Option<Arc<bt_core::Project>>,
+    /// That project's `.tiled-project` file: a map's project-file entry goes next to it when
+    /// no `better-tiled.json` is found above the map.
+    pub(crate) project_file: Option<PathBuf>,
+}
+
+/// The project that applies to a map, and its file.
+struct FoundProject {
+    /// The `.tiled-project` file.
+    file: PathBuf,
+    /// The project it holds.
+    project: Arc<bt_core::Project>,
 }
 
 /// Where a command's map was read from.
@@ -83,26 +94,28 @@ pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result
     let canonical =
         std::fs::canonicalize(path).with_context(|| format!("{} can't be read", path.display()))?;
     let home = run.folders.home.as_deref();
-    let project = project_of(&canonical, run.cli.project.as_deref(), home)?;
+    let found = project_of(&canonical, run.cli.project.as_deref(), home)?;
     let custom_types = Arc::new(
-        project
+        found
             .as_ref()
-            .map(|p| p.custom_types.clone())
+            .map(|p| p.project.custom_types.clone())
             .unwrap_or_default(),
     );
+    let project_file = found.as_ref().map(|p| p.file.clone());
+    let project = found.map(|p| p.project);
     let link = run.link();
     let mut loader = Loader::builder().custom_types(custom_types).build();
     let open = link.open_map(&canonical);
     match (copy, open) {
         (MapCopy::Editor, Some(open)) => {
-            return read_from_editor(&canonical, &open, loader, project);
+            return read_from_editor(&canonical, &open, loader, project, project_file);
         }
         (MapCopy::Editor, None) => bail!(
             "{} is not open in the editor",
             bt_utils::paths::display_name(&canonical)
         ),
         (MapCopy::Shown, Some(open)) if open.document.dirty => {
-            return read_from_editor(&canonical, &open, loader, project);
+            return read_from_editor(&canonical, &open, loader, project, project_file);
         }
         (MapCopy::Shown, _) => {
             link.refuse_unanswered(&canonical, run.folders.recovery.as_deref())?;
@@ -127,6 +140,7 @@ pub(crate) fn load_copy(path: &Path, run: &Run, copy: MapCopy) -> anyhow::Result
         loader,
         source: MapSource::File,
         project,
+        project_file,
     })
 }
 
@@ -136,6 +150,7 @@ fn read_from_editor(
     open: &OpenMap<'_>,
     mut loader: Loader,
     project: Option<Arc<bt_core::Project>>,
+    project_file: Option<PathBuf>,
 ) -> anyhow::Result<LoadedMap> {
     let text = open
         .ask(&Request::Snapshot {
@@ -161,6 +176,7 @@ fn read_from_editor(
             pid: open.editor.pid(),
         },
         project,
+        project_file,
     })
 }
 
@@ -170,7 +186,7 @@ fn project_of(
     map: &Path,
     project: Option<&Path>,
     home: Option<&Path>,
-) -> anyhow::Result<Option<Arc<bt_core::Project>>> {
+) -> anyhow::Result<Option<FoundProject>> {
     let file = match project {
         Some(file) => Some(file.to_path_buf()),
         None => nearest_project(map, home)?,
@@ -180,7 +196,10 @@ fn project_of(
     };
     let loaded = bt_tmx::load_project(&file)
         .with_context(|| format!("the project {} can't be read", file.display()))?;
-    Ok(Some(Arc::new(loaded.value)))
+    Ok(Some(FoundProject {
+        file,
+        project: Arc::new(loaded.value),
+    }))
 }
 
 /// The nearest `.tiled-project` above `map`. Two in one folder are refused: which one applies

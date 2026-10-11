@@ -75,6 +75,7 @@ pub(crate) fn run(run: &Run) -> anyhow::Result<Printed> {
         Command::Guide => Ok(Printed::done(GUIDE)),
         Command::Export(args) => commands::export::export(run, args),
         Command::Undo(args) => commands::undo::undo(run, args),
+        Command::Edit(args) => commands::edit::edit(run, args),
         Command::Areas(args) => commands::know::areas(run, args),
         Command::Reach(args) => commands::know::reach(run, args),
         Command::Editor(args) => commands::editor::editor(run, args),

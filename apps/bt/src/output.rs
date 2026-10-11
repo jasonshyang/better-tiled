@@ -18,5 +18,9 @@ pub(crate) fn printed<O: Outcome>(
     } else {
         outcome.report().text()
     };
-    Ok(Printed { text, status })
+    Ok(Printed {
+        text,
+        status,
+        failure: None,
+    })
 }
