@@ -304,9 +304,11 @@ area names:
 - `on NAME,…`: keep the cells fully on one of them.
 - `inside NAME,…`: like `on`, and the cells touching them too. Then the edges painted around
   the area also stay on that terrain: a lake that doesn't spill over the island's rim.
-- `avoid NAME,…`: drop the cells that touch them. Add `margin N` to keep N cells away:
-  `margin 1` also keeps the edges painted around the cells clear of them, e.g. a path that
-  stops short of a river instead of running under its banks.
+- `avoid NAME,…`: drop the cells they touch: their own, and the cells their painted edges
+  reach. `margin N` drops N more rings of cells around those. `margin 1` keeps the edges painted
+  around the new cells clear of them too: a path that stops short of a river instead of running
+  under its banks, or a terrain painted beside one it has no tiles with (`paint cobblestone …
+  avoid brick margin 1` leaves the two cells of sand they need between them).
 - `near NAME,…`: keep the cells next to them; `margin N`: within N cells. `where plains near
   mountain` is the plains along the mountains.
 - `minus SHAPE`.
