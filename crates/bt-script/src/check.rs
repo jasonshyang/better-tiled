@@ -1,5 +1,6 @@
 //! `bt check` (`10-agents.md`, §11): problems, then facts. The problems: the map's reading
-//! warnings; terrain seams per layer; objects standing outside the map; sprites on the same spot;
+//! warnings; terrain seams per layer; opaque edge tiles over anything but whole ground
+//! ([`crate::hidden_edges`]); objects standing outside the map; sprites on the same spot;
 //! objects standing on nothing when most of their layer stands on something; objects whose type
 //! the project does not define or with properties their class lacks; project-file entries whose
 //! map is gone. Then what objects stand on and what zones cover, layer by layer, the few on other
@@ -19,10 +20,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::feet::{Feet, standing_cell};
 use crate::ground::GroundUnder;
+use crate::hidden_edges::hidden_edges;
 use crate::names::{Names, object_type};
+use crate::opacity::EdgeMeter;
 use crate::report::{Line, Outcome, Report, Section};
 use crate::shapes::{map_cells, object_cells};
-use crate::words::{capped_list, point_text};
+use crate::words::{capped_list, cells_text, point_text};
 
 /// How close two sprites' feet stand to count as on the same spot, in cells.
 const SAME_SPOT: f64 = 0.4;
@@ -60,6 +63,18 @@ pub enum Problem {
         layer: String,
         /// Each seam: a tile and the neighbour it does not fit.
         seams: Vec<Seam>,
+    },
+    /// Edge tiles of a terrain whose edges draw their own ground lie over a terrain's edge,
+    /// plain tiles or nothing, and hide it.
+    HiddenEdges {
+        /// The layer.
+        layer: String,
+        /// The terrain whose edges they are.
+        terrain: String,
+        /// What is under them: `nothing`, `tiles of LAYER`, or a terrain's edges in words.
+        under: String,
+        /// Their cells.
+        cells: Vec<IVec2>,
     },
     /// An object stands outside the map.
     OutsideMap {
@@ -204,6 +219,7 @@ impl CheckOutcome {
             .map(|text| Problem::Reading { text: text.clone() })
             .collect();
         problems.extend(seams(map));
+        problems.extend(hidden_edge_problems(map, &names, &mut EdgeMeter::new()));
         let objects = ObjectChecks::run(map, &names, types);
         problems.extend(objects.problems);
         if let Some(file) = project_file
@@ -258,6 +274,20 @@ impl Problem {
                     }
                 )
             }
+            Problem::HiddenEdges {
+                layer,
+                terrain,
+                under,
+                cells,
+            } => format!(
+                "{layer}: {} {terrain} edge {} over {under}, which {} hide{} (the edges draw their \
+                 own ground): {}",
+                cells.len(),
+                if cells.len() == 1 { "tile" } else { "tiles" },
+                if cells.len() == 1 { "it" } else { "they" },
+                if cells.len() == 1 { "s" } else { "" },
+                cells_text(cells, LISTED)
+            ),
             Problem::OutsideMap { layer, object } => format!(
                 "{layer}: #{} {} stands outside the map, at {}",
                 object.id,
@@ -391,6 +421,19 @@ fn counts_text(counts: &[GroundCount]) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Opaque edge tiles over anything but whole ground, as problems.
+fn hidden_edge_problems(map: &Map, names: &Names, meter: &mut EdgeMeter) -> Vec<Problem> {
+    hidden_edges(map, names, meter)
+        .into_iter()
+        .map(|found| Problem::HiddenEdges {
+            layer: found.layer,
+            terrain: found.terrain,
+            under: found.under,
+            cells: found.cells,
+        })
+        .collect()
 }
 
 /// Terrain seams, layer by layer: a tile whose lanes disagree with the tile across its right or
@@ -856,7 +899,16 @@ impl MadeProblems {
     }
 }
 
-/// [`MadeProblems`] of an edit from `before` to `after`, which changed `changed` cells.
+/// An edge tile hiding what is under it: its layer and cell.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct EdgeAt {
+    layer: String,
+    cell: IVec2,
+}
+
+/// [`MadeProblems`] of an edit from `before` to `after`, which changed `changed` cells: the
+/// seams and hidden edges `after` has that `before` did not, its other problems, and the objects
+/// standing in changed cells whose ground changed.
 pub fn made_by(before: &Map, after: &Map, changed: &[IVec2]) -> MadeProblems {
     let old: HashSet<Seam> = seams(before)
         .into_iter()
@@ -865,7 +917,7 @@ pub fn made_by(before: &Map, after: &Map, changed: &[IVec2]) -> MadeProblems {
             _ => Vec::new(),
         })
         .collect();
-    let problems: Vec<Problem> = seams(after)
+    let mut problems: Vec<Problem> = seams(after)
         .into_iter()
         .filter_map(|problem| match problem {
             Problem::Seams { layer, seams } => {
@@ -875,6 +927,45 @@ pub fn made_by(before: &Map, after: &Map, changed: &[IVec2]) -> MadeProblems {
             other => Some(other),
         })
         .collect();
+    let mut meter = EdgeMeter::new();
+    let hidden_before: HashSet<EdgeAt> = hidden_edges(before, &Names::of(before), &mut meter)
+        .into_iter()
+        .flat_map(|found| {
+            let layer = found.layer;
+            found.cells.into_iter().map(move |cell| EdgeAt {
+                layer: layer.clone(),
+                cell,
+            })
+        })
+        .collect();
+    for problem in hidden_edge_problems(after, &Names::of(after), &mut meter) {
+        let Problem::HiddenEdges {
+            layer,
+            terrain,
+            under,
+            cells,
+        } = problem
+        else {
+            continue;
+        };
+        let new: Vec<IVec2> = cells
+            .into_iter()
+            .filter(|&cell| {
+                !hidden_before.contains(&EdgeAt {
+                    layer: layer.clone(),
+                    cell,
+                })
+            })
+            .collect();
+        if !new.is_empty() {
+            problems.push(Problem::HiddenEdges {
+                layer,
+                terrain,
+                under,
+                cells: new,
+            });
+        }
+    }
     let changed: HashSet<IVec2> = changed.iter().copied().collect();
     let (old_names, names) = (Names::of(before), Names::of(after));
     let mut old_ground = GroundUnder::new(before, &old_names);

@@ -25,6 +25,7 @@ mod export;
 mod feet;
 pub mod grid;
 mod ground;
+mod hidden_edges;
 mod history;
 mod info;
 mod layer_tree;
