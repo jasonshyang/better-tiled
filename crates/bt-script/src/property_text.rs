@@ -1,52 +1,12 @@
-//! How property values read in every report: as a script writes them after `key=`, so what a
-//! report shows can be typed back (`10-agents.md`, §8.5). Text is quoted when it has spaces, a
-//! number has a `.` even when it is whole, an object is `#ID`, a colour Tiled's `#rrggbb` (with
-//! its alpha first when it has one).
+//! Properties as every report lists them: by name, each value as a script writes it after `key=`
+//! ([`crate::words::value_text`]), so what a report shows can be typed back (`10-agents.md`,
+//! §8.5).
 
 use std::collections::BTreeMap;
 
-use bt_core::{Properties, Value};
+use bt_core::Properties;
 
-/// A value as a script writes it.
-pub(crate) fn value_text(value: &Value) -> String {
-    match value {
-        Value::String(text) | Value::File(text) => quoted(text),
-        Value::Int(number) => number.to_string(),
-        Value::Float(number) if number.is_finite() && number.fract() == 0.0 => {
-            format!("{number:.1}")
-        }
-        Value::Float(number) => number.to_string(),
-        Value::Bool(yes) => yes.to_string(),
-        Value::Color(Some(color)) => color.to_tiled_text(),
-        Value::Color(None) => "\"\"".to_owned(),
-        Value::Object(id) => format!("#{}", id.0),
-        Value::Class(members) => {
-            let inner: Vec<String> = members
-                .iter()
-                .map(|(key, member)| format!("{key}={}", value_text(&member.value)))
-                .collect();
-            format!("{{{}}}", inner.join(" "))
-        }
-        Value::List(items) => {
-            let inner: Vec<String> = items.iter().map(|item| value_text(&item.value)).collect();
-            format!("[{}]", inner.join(", "))
-        }
-    }
-}
-
-/// `text`, or `"text"` when it is empty or holds spaces, quotes, `=` or `#`, as scripts read
-/// words.
-pub(crate) fn quoted(text: &str) -> String {
-    let plain = !text.is_empty()
-        && !text
-            .chars()
-            .any(|c| c.is_whitespace() || matches!(c, '"' | '=' | '#' | ';'));
-    if plain {
-        text.to_owned()
-    } else {
-        format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
-    }
-}
+use crate::words::{quoted_word, value_text};
 
 /// Every property by name, its value as a script writes it.
 pub(crate) fn properties_text(properties: &Properties) -> BTreeMap<String, String> {
@@ -60,14 +20,14 @@ pub(crate) fn properties_text(properties: &Properties) -> BTreeMap<String, Strin
 pub(crate) fn assignments_text(properties: &BTreeMap<String, String>) -> String {
     let words: Vec<String> = properties
         .iter()
-        .map(|(key, value)| format!("{}={value}", quoted(key)))
+        .map(|(key, value)| format!("{}={value}", quoted_word(key)))
         .collect();
     words.join(" ")
 }
 
 #[cfg(test)]
 mod tests {
-    use bt_core::{Color, ObjectId, Property};
+    use bt_core::{Color, ObjectId, Property, Value};
 
     use super::*;
 

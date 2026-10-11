@@ -815,10 +815,7 @@ impl TileWords<'_> {
             return match &match_type.value {
                 bt_core::Value::String(kind) if kind == "Ignore" => None,
                 bt_core::Value::String(kind) if kind == "Empty" => Some("empty".to_owned()),
-                value => Some(format!(
-                    "a {} tile",
-                    crate::property_text::value_text(value)
-                )),
+                value => Some(format!("a {} tile", crate::words::value_text(value))),
             };
         }
         Some(self.tile_of(reference, cell.tile(), cell.flip()))

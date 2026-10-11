@@ -730,7 +730,7 @@ fn object_marks(map: &Map, names: &Names, chosen: &[&Layer], groups: &[ObjectGro
                 let name = if object.name.is_empty() || object.name == word {
                     String::new()
                 } else {
-                    format!(" {}", crate::property_text::quoted(&object.name))
+                    format!(" {}", crate::words::quoted_word(&object.name))
                 };
                 format!("#{}{name} {}", object.id.0, point_text(point))
             };

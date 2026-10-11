@@ -89,7 +89,8 @@ written), 2 wrong usage, 3 refused, 4 out of date, 5 problems found (`bt check`)
    - terrain seams, and opaque edges lying over anything but whole ground;
    - objects outside the map, on top of each other, or over nothing (when the rest of their
      layer stands on something);
-   - objects whose type the project doesn't define, or with properties their class lacks.
+   - objects whose type the project doesn't define, or with properties their class lacks
+     (sprites aside: their types are the game's, and the project needn't list them).
 
    Then what objects stand on and what zones cover, layer by layer: the few that stand on
    other ground than the rest of their layer are listed by id (trees in a lake, say).

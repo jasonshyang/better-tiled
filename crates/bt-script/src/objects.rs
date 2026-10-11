@@ -14,8 +14,9 @@ use serde::{Deserialize, Serialize};
 use crate::feet::{Feet, pixel_to_point, standing_cell};
 use crate::layer_tree::layers_top_first;
 use crate::names::{Names, object_type};
-use crate::property_text::{assignments_text, properties_text, quoted};
+use crate::property_text::{assignments_text, properties_text};
 use crate::report::{Line, Outcome, Report, Section};
+use crate::words::quoted_word;
 use crate::words::{number_text, point_text, region_text};
 
 /// The objects `bt objects` lists before "and N more".
@@ -200,7 +201,7 @@ impl ObjectInfo {
             }
             "text" => text.push_str(&format!(
                 "text {} box {geometry}",
-                quoted(self.text.as_deref().unwrap_or(""))
+                quoted_word(self.text.as_deref().unwrap_or(""))
             )),
             kind => text.push_str(&format!("{kind} {geometry}")),
         }
@@ -216,10 +217,10 @@ impl ObjectInfo {
         }
         let mut fields: BTreeMap<String, String> = BTreeMap::new();
         if !self.name.is_empty() {
-            fields.insert("name".into(), quoted(&self.name));
+            fields.insert("name".into(), quoted_word(&self.name));
         }
         if !self.object_type.is_empty() {
-            fields.insert("type".into(), quoted(&self.object_type));
+            fields.insert("type".into(), quoted_word(&self.object_type));
         }
         let mut words = assignments_text(&fields);
         let properties = assignments_text(&self.properties);
@@ -374,7 +375,7 @@ impl ObjectsOutcome {
             filters.push(format!("standing in {}", region_text(region)));
         }
         if let Some(name) = &request.named {
-            filters.push(format!("called {}", quoted(name)));
+            filters.push(format!("called {}", quoted_word(name)));
         }
         ObjectsOutcome { filters, objects }
     }

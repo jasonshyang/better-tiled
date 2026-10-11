@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::Error;
 use crate::layer_tree::layers_top_first;
 use crate::names::Names;
-use crate::property_text::quoted;
 use crate::report::{Line, Outcome, Report, Section};
+use crate::words::quoted_word;
 
 /// The share of the map's cells one tile must fill for a layer to have been filled with it, in
 /// tenths.
@@ -351,7 +351,7 @@ impl Outcome for NewOutcome {
                 refill.layer,
                 refill.tile,
                 refill.tile,
-                quoted(&refill.layer)
+                quoted_word(&refill.layer)
             )));
         }
         let mut report = Report::new();

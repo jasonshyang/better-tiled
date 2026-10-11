@@ -24,12 +24,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::layer_tree::layers_top_first;
 use crate::names::{Names, object_type};
-use crate::property_text::{properties_text, quoted};
+use crate::property_text::properties_text;
 use crate::report::{Line, LineKind, Outcome, Report, Section};
 use crate::rule_words::{near_miss_layer, problem_line, rules_file_name, tile_layer_named};
 use crate::shapes::map_cells;
 use crate::symbols::TileKey;
 use crate::tally::{Tally, counts_text};
+use crate::words::quoted_word;
 use crate::words::{number_text, region_text};
 
 /// The kinds of tiles a layer's line names before "and N more".
@@ -683,13 +684,13 @@ fn input_notes(map: &Map, rules: &RuleSet) -> Vec<RuleNote> {
     let mut notes = Vec::new();
     for missing in rules.missing_layers(map) {
         let near = near_miss_layer(map, &missing.name).map_or_else(String::new, |near| {
-            format!(" (it has {}: names must match exactly)", quoted(&near))
+            format!(" (it has {}: names must match exactly)", quoted_word(&near))
         });
         notes.push(RuleNote {
             kind: LineKind::Warning,
             text: format!(
                 "the rules read layer {}, which the map does not have, so it reads as empty{near}",
-                quoted(&missing.name)
+                quoted_word(&missing.name)
             ),
         });
     }
@@ -714,7 +715,7 @@ fn input_notes(map: &Map, rules: &RuleSet) -> Vec<RuleNote> {
             kind: LineKind::Fact,
             text: format!(
                 "layer {}, which the rules read, {} empty",
-                and_list(&empty.iter().map(|n| quoted(n)).collect::<Vec<_>>()),
+                and_list(&empty.iter().map(|n| quoted_word(n)).collect::<Vec<_>>()),
                 if empty.len() == 1 { "is" } else { "are" }
             ),
         });
@@ -862,7 +863,7 @@ impl Outcome for InfoOutcome {
             section.add_lines(
                 self.properties
                     .iter()
-                    .map(|(key, value)| Line::fact(format!("{}={value}", quoted(key)))),
+                    .map(|(key, value)| Line::fact(format!("{}={value}", quoted_word(key)))),
             );
             report.add_section(section);
         }

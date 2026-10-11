@@ -43,12 +43,12 @@ pub(crate) mod rect_option_json {
 }
 
 /// A word as a script writes it: as it is, or in quotes when it is empty or holds spaces, quotes,
-/// `=` or `#`.
+/// `=`, `#` or `;` (which splits `--do` lines).
 pub fn quoted_word(word: &str) -> String {
     let plain = !word.is_empty()
         && !word
             .chars()
-            .any(|c| c.is_whitespace() || matches!(c, '"' | '=' | '#'));
+            .any(|c| c.is_whitespace() || matches!(c, '"' | '=' | '#' | ';'));
     if plain {
         word.to_owned()
     } else {
@@ -56,12 +56,17 @@ pub fn quoted_word(word: &str) -> String {
     }
 }
 
-/// A property value as `key=value` lists and scripts write it: text quoted when it needs to be,
-/// numbers and yes/no as they are, an object reference as `#ID`, a colour as Tiled writes it.
+/// A property value as `key=value` lists and scripts write it, in every report: text quoted when
+/// it needs to be, a decimal number with its `.` even when whole (so it reads back as one),
+/// whole numbers and yes/no as they are, an object reference as `#ID`, a colour as Tiled writes
+/// it.
 pub fn value_text(value: &Value) -> String {
     match value {
         Value::String(text) | Value::File(text) => quoted_word(text),
         Value::Int(number) => number.to_string(),
+        Value::Float(number) if number.is_finite() && number.fract() == 0.0 => {
+            format!("{number:.1}")
+        }
         Value::Float(number) => format!("{number}"),
         Value::Bool(yes) => yes.to_string(),
         Value::Color(Some(color)) => color.to_tiled_text(),
