@@ -9,6 +9,7 @@
 //! `bt-edit`, `bt-terrain` and `bt-automap`, which port Tiled's editor code, and is
 //! GPL-3.0-or-later with them.
 
+mod at;
 mod changes;
 mod check;
 mod context;
@@ -19,13 +20,20 @@ mod feet;
 pub mod grid;
 mod ground;
 mod history;
+mod info;
+mod layer_tree;
 mod names;
+mod objects;
+mod property_text;
 mod regions;
 mod report;
+mod rule_words;
 mod script;
 mod shapes;
+mod tally;
 mod words;
 
+pub use at::{CellLayer, CellOutcome, CellTile, LanesOf};
 pub use changes::{
     CellChanges, LayerChanges, MapChanges, ObjectBrief, ObjectChanged, ObjectChanges, ObjectMoved,
     PropertyChange, Resized, TerrainCells,
@@ -43,10 +51,15 @@ pub use ground::{GroundUnder, StandsOn};
 pub use history::{
     EditToKeep, History, HistoryError, KEPT_PER_MAP, KeptEdit, UndoOutcome, Undone, fingerprint,
 };
+pub use info::{
+    EditorCopy, InfoOutcome, InfoRequest, LayerInfo, MapRules, RuleNote, RulesInfo, RulesKind,
+    TilesetInfo,
+};
 pub use names::{
     Ground, GroupPart, MaterialPart, NamedTerrain, Names, Piece, PieceObjects, Sprite, TileGroup,
     object_type,
 };
+pub use objects::{ObjectBox, ObjectInfo, ObjectsOutcome, ObjectsRequest};
 pub use regions::{
     AreasOutcome, CellsShowing, ConnectedArea, GridAxis, MapEdge, NoWay, Reach, ReachOutcome,
     ReachRequest, ShapeCells, Way,
@@ -62,6 +75,7 @@ pub use script::{
     parse_region, parse_script, parse_size, split_do,
 };
 pub use shapes::{area_cells, map_cells, object_cells, shape_cells};
+pub use tally::NameCount;
 pub use words::{
     capped_list, cell_text, cells_text, id_ranges_text, number_text, point_text, quoted_word,
     region_text, value_text,

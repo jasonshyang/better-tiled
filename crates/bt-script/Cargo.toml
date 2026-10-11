@@ -19,7 +19,8 @@ bt-render.workspace = true
 bt-terrain.workspace = true
 # Maps a script names (`copy MAP …`, pieces) and rules files are read through it.
 bt-tmx.workspace = true
-bt-utils.workspace = true
+# Rectangles in outcomes' JSON.
+bt-utils = { workspace = true, features = ["serde"] }
 glam = { workspace = true, features = ["serde"] }
 serde.workspace = true
 serde_json.workspace = true
