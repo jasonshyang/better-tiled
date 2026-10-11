@@ -375,9 +375,11 @@ bends are round. Painted, it gets a fringe of edge tiles on each side, like any 
 
     tile TILE[,TILE…] SHAPE [layer L]               those tiles (picked at random when several;
                                                      a tile written twice comes up twice as often):
-                                                     TILESET:ID, TILESET:A-B, a tile name; layer L
-                                                     only when they aren't on a layer yet and the
-                                                     map has several
+                                                     TILESET:ID, TILESET:A-B, a tile name; with
+                                                     `layer L`, that layer, always; without, the
+                                                     layer a tile name names, else the layer that
+                                                     holds most of them, else the only tile layer
+                                                     (bt asks when that's a guess)
     clear SHAPE layer L[,L…]                         empty the cells (or `layers all`)
     copy MAP REGION [layers L,…] to X,Y [objects]   copy cells (and the objects standing there,
                                                      on those layers) from another map (or `.`:
