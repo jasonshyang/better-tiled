@@ -176,7 +176,9 @@ signs are the ground; capital letters are objects, marked where they stand. A le
 `bt render` numbers the cells along the top and left and draws a grid line every 5 cells
 (`--grid`: every cell; `--clean`: neither). It is at most 2048 pixels a side unless `--scale`
 says otherwise (up to 8). `--highlight` outlines cells: a region, or any shape as in scripts
-(`--highlight "where water containing 12,10"`). `--layers` draws only those layers.
+(`--highlight "where water containing 12,10"`; with `--with FILE`, the names it defines too); a
+shape with no cells is an error. `--layers` draws only those layers. `--marks` draws the marks
+the editor has on the map, so the map must be open there.
 `bt catalog --sheet` draws the listed terrains and sprites with their list numbers; `bt catalog
 MAP tiles --sheet OUT.png` draws every tile with its id under it, laid out as in the tileset, and
 outlines the ones the map uses (`tiles TILESET:A-B`: those alone; `--scale N`: bigger). For tiles
@@ -199,7 +201,9 @@ are written as in scripts, and which cells count is yours to say.
 **Why AutoMap puts (or doesn't put) a tile somewhere.** `bt explain MAP X,Y` runs the AutoMap
 rules on the map as it is (changing nothing) and says what the run does at that cell. It takes
 the rules and the layer names like the edit step `automap` (`bt explain MAP 12,7 rules.txt
-walls=ground`).
+walls=ground`): rules named are found from the map's folder; without them, the `rules.txt`
+beside the map, else the rules file the project names. On a map with AutoMap layers it explains
+their runs, and takes no rules or names.
 
 - *Changes, in order*: every tile written to the cell, by which rule. A rule is named by its
   rule map and number (the order AutoMap goes through them) with its cells in its rule map
@@ -491,13 +495,16 @@ shows. Rows reaching outside a finite map leave those cells out, with a note.
     bt export --schema
 
 - `bt new --like` keeps the other map's tilesets and layers, emptied, and says which layers
-  were filled with one tile (a backdrop to fill again). An existing file needs `--force`.
+  were filled with one tile (a backdrop to fill again). An existing file needs `--force`:
+  without it bt refuses (exit 3) and writes nothing.
 - `bt export` writes the map (or a tileset) in the format OUT's extension names: `.tmx`, `.tmj`
   or `.json` (Tiled's JSON), `.js`, a tileset as `.tsx`, `.tsj` or `.json`, and `.png` a picture
-  of the map. The options are Tiled's export options.
-- `--resolved` writes the map for other programs as plain JSON: no global ids, flips as yes/no,
-  templates and inherited properties written out, tiles with their terrain names, every cell's
-  centre and every object's screen position. `bt export --schema` prints its JSON Schema.
+  of the whole map at its own size. The options are Tiled's export options.
+- `--resolved` writes the map for other programs as plain JSON (OUT ends in `.json`): no global
+  ids, flips as yes/no, templates and inherited properties written out, tiles with their
+  terrain and sprite names, every cell's centre and every object's screen position and outline,
+  paths relative to the JSON file. AutoMap's rule tiles are left out, and oblique maps are
+  refused. `bt export --schema` prints its JSON Schema.
 
 ## Example
 
