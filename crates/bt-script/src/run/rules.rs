@@ -60,7 +60,7 @@ impl Runner<'_> {
             Some(rules) => format!("automap {rules}"),
             None => "automap".to_owned(),
         };
-        self.note_inputs(&set, &rule_layers, &names, &way);
+        self.note_inputs(&set, &rule_layers, &names, "automap", &way);
         let request = RunRequest::builder(self.op_seed())
             .layer_names(names)
             .build();
@@ -110,7 +110,7 @@ impl Runner<'_> {
                     )));
                 }
                 self.note_rule_problems(&set, "automap layers");
-                let run = self.layers_run(&rule_layers, bindings)?;
+                let run = self.layers_run(&set, &rule_layers, bindings)?;
                 let restarting = self.auto.is_some();
                 let seed = match (&self.auto, self.own_seed()) {
                     (_, Some(seed)) => seed,
@@ -142,8 +142,9 @@ impl Runner<'_> {
                 ));
             }
             LayersOp::Add { bindings } => {
-                let rule_layers = self.auto.as_ref().ok_or_else(none)?.rules.rule_layers();
-                let run = self.layers_run(&rule_layers, bindings)?;
+                let set = Arc::clone(&self.auto.as_ref().ok_or_else(none)?.rules);
+                let rule_layers = set.rule_layers();
+                let run = self.layers_run(&set, &rule_layers, bindings)?;
                 self.refresh_shown();
                 if let Some(auto) = &mut self.auto {
                     auto.setup.runs.push(run);
@@ -271,6 +272,7 @@ impl Runner<'_> {
     /// top, named in a note.
     fn layers_run(
         &mut self,
+        set: &RuleSet,
         rule_layers: &RuleLayers,
         bindings: &[Binding],
     ) -> Result<LayerNames, RunFailure> {
@@ -314,18 +316,7 @@ impl Runner<'_> {
         for (rule, b) in &bound {
             names = names.rebound(rule, b.objects, Some(b.layer));
         }
-        let loose: Vec<String> = rule_layers
-            .inputs
-            .iter()
-            .filter(|name| !rule_layers.made.contains(name) && names.tile_layer(name).is_none())
-            .cloned()
-            .collect();
-        for name in loose {
-            self.note(format!(
-                "automap layers: no layer stands for “{name}”, which the rules read: it reads as \
-                 empty (say which: automap layers {name}=LAYER)"
-            ));
-        }
+        self.note_inputs(set, rule_layers, &names, "automap layers", "automap layers");
         Ok(names)
     }
 
@@ -390,6 +381,7 @@ impl Runner<'_> {
         set: &RuleSet,
         rule_layers: &RuleLayers,
         names: &LayerNames,
+        verb: &str,
         way: &str,
     ) {
         let missing: Vec<String> = set
@@ -398,10 +390,11 @@ impl Runner<'_> {
             .map(|m| m.name)
             .filter(|name| names.tile_layer(name).is_none())
             .collect();
+        let from_map = read_from_map(set);
         let read: Vec<&String> = rule_layers
             .inputs
             .iter()
-            .filter(|name| !rule_layers.made.contains(name))
+            .filter(|name| from_map.contains(name))
             .collect();
         if !missing.is_empty() && missing.len() == read.len() {
             let (layers, which) = if missing.len() == 1 {
@@ -411,14 +404,14 @@ impl Runner<'_> {
             };
             let first = missing.first().map_or("", String::as_str);
             self.note(format!(
-                "automap: the rules read the {layers} {}, which this map doesn't have (say which \
+                "{verb}: the rules read the {layers} {}, which this map doesn't have (say which \
                  layer {which} stands for: {way} {first}=L)",
                 and_list(&missing)
             ));
         } else {
             for name in &missing {
                 self.note(format!(
-                    "automap: the rules read the layer {name}, which this map doesn't have: it \
+                    "{verb}: the rules read the layer {name}, which this map doesn't have: it \
                      reads as empty (say which layer it stands for: {way} {name}=L)"
                 ));
             }
@@ -426,7 +419,7 @@ impl Runner<'_> {
         for name in &missing {
             if let Some(other) = near_miss(&self.map, name) {
                 self.note(format!(
-                    "automap: the map has a layer {other}, not {name} (names must match exactly)"
+                    "{verb}: the map has a layer {other}, not {name} (names must match exactly)"
                 ));
             }
         }
@@ -452,10 +445,26 @@ impl Runner<'_> {
                 } else {
                     format!("{shown} (for {name})")
                 };
-                self.note(format!("automap: the rules read {which}, which is empty"));
+                self.note(format!("{verb}: the rules read {which}, which is empty"));
             }
         }
     }
+}
+
+/// The names the rules read from the map: those a rule map reads before any rule map before it
+/// writes them (a name written first is what the rules made, not what the map holds).
+fn read_from_map(set: &RuleSet) -> Vec<String> {
+    let mut written: Vec<&str> = Vec::new();
+    let mut read: Vec<String> = Vec::new();
+    for rule_map in set.rule_maps().iter().filter(|r| r.is_used()) {
+        for input in rule_map.inputs() {
+            if !written.contains(&input.as_str()) && !read.contains(input) {
+                read.push(input.clone());
+            }
+        }
+        written.extend(rule_map.tile_outputs().iter().map(String::as_str));
+    }
+    read
 }
 
 /// A map layer a rules' name is bound to, and whether it holds objects.

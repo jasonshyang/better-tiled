@@ -292,6 +292,91 @@ fn the_highlands_rules_reach_their_outputs_through_bindings() {
     );
 }
 
+#[test]
+fn the_highlands_automap_layers_run_on_the_layers_bound_and_keep_what_was_painted() {
+    let Some(pack) = bt_test_data::test_data("assets/Epic RPG World - Highlands V1.4.1") else {
+        return;
+    };
+    let path = pack.join("TiledMap Editor/Sample scene.tmx");
+    let (mut map, mut loader) = read(&path);
+    map.layers.clear();
+    let platform = Names::of(&map)
+        .terrains()
+        .iter()
+        .find(|t| t.name.starts_with("platformv2-3tiles"))
+        .map(|t| t.name.clone())
+        .unwrap();
+    let painted = format!(
+        "layer add ground tiles\nlayer add plat2 tiles\npaint {platform} rect 5,5 10x8 layer \
+         ground\npaint {platform} rect 20,5 8x6 layer plat2"
+    );
+    let result = edit(
+        &map,
+        &path,
+        &mut loader,
+        &format!(
+            "{painted}\nautomap layers rules.txt walls=ground\nautomap layers add walls=plat2"
+        ),
+    )
+    .unwrap();
+    let setup = result.setup.clone().unwrap();
+    assert_eq!(setup.runs.len(), 2);
+    assert!(
+        notes(&result)
+            .iter()
+            .any(|n| n.ends_with("automap layers: 2 runs: walls→ground; walls→plat2")),
+        "{:?}",
+        notes(&result)
+    );
+    for layer in ["ground", "plat2"] {
+        let tiles = |m: &Map| {
+            m.layer(layer_id(m, layer))
+                .unwrap()
+                .as_tile_layer()
+                .unwrap()
+                .clone()
+        };
+        assert_ne!(
+            tiles(&result.shown),
+            tiles(&result.painted),
+            "{layer}: the rules wrote there"
+        );
+    }
+    // What was painted is the terrain as painted: every tile of it a platform tile.
+    let names = Names::of(&result.painted);
+    let ground = result
+        .painted
+        .layer(layer_id(&result.painted, "ground"))
+        .unwrap();
+    assert!(ground.as_tile_layer().unwrap().cells().all(|c| {
+        names
+            .tile_label(&result.painted, c.cell)
+            .starts_with("platformv2-3tiles")
+    }));
+
+    // Without a binding, the rules read a layer made for them, which is empty.
+    let unbound = edit(
+        &map,
+        &path,
+        &mut loader,
+        &format!("{painted}\nautomap layers rules.txt"),
+    )
+    .unwrap();
+    let texts = notes(&unbound);
+    assert!(
+        texts
+            .iter()
+            .any(|n| n.contains("automap layers: new layer")),
+        "{texts:?}"
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|n| n.ends_with("automap layers: the rules read the layer walls, which is empty")),
+        "{texts:?}"
+    );
+}
+
 /// Every object id of a map.
 fn object_ids(map: &Map) -> Vec<ObjectId> {
     let mut ids = Vec::new();
