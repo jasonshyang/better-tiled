@@ -1,11 +1,13 @@
 //! `bt`'s side of the live link (`10-agents.md`, §13; `11-live-link.md`, §7): the editors that
-//! answered, the map a command names as an editor has it, and the refusal to touch a file an
-//! editor that does not answer may hold unsaved changes to.
+//! answered, the map a command names as an editor has it (and what is selected in it), and the
+//! refusal to touch a file an editor that does not answer may hold unsaved changes to.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::bail;
-use bt_live::{DocStatus, Editor, Problem, Request, Response, canonical_path};
+use bt_core::ObjectId;
+use bt_live::{DocStatus, Editor, Problem, Request, Response, canonical_path, cells_from_runs};
+use bt_script::Selection;
 use serde::Deserialize;
 
 /// The running editors `bt` found.
@@ -137,5 +139,19 @@ impl OpenMap<'_> {
     /// Asks the map's editor.
     pub(crate) fn ask(&self, request: &Request) -> anyhow::Result<Response> {
         Ok(self.editor.ask(request)?)
+    }
+
+    /// What is selected in the map's editor, as shapes and scripts read it (`selection`,
+    /// `selected`).
+    pub(crate) fn selection(&self) -> Selection {
+        Selection {
+            cells: cells_from_runs(&self.document.selection),
+            objects: self
+                .document
+                .objects
+                .iter()
+                .map(|&id| ObjectId(id))
+                .collect(),
+        }
     }
 }

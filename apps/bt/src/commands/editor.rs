@@ -10,8 +10,8 @@ use bt_live::{
     DocStatus, KeyboardFocus, MarkSpec, Request, Status, cells_from_runs, runs_from_cells,
 };
 use bt_script::{
-    Context, Line, Outcome, Report, Section, Selection, area_cells, capped_list, cell_text,
-    parse_area, region_text,
+    Context, Line, Outcome, Report, Section, area_cells, capped_list, cell_text, parse_area,
+    region_text,
 };
 use bt_utils::IRect;
 use bt_utils::paths::display_name;
@@ -292,15 +292,8 @@ pub(crate) fn mark(run: &Run, args: &MarkArgs) -> anyhow::Result<Printed> {
         };
         let mut loaded = crate::load::load_map(&path, run)?;
         let names = crate::script_input::shape_names(&mut loaded, args.with.as_deref(), None)?;
-        let context = Context::new(crate::commands::know::DEFAULT_SEED).with_selection(Selection {
-            cells: cells_from_runs(&open.document.selection),
-            objects: open
-                .document
-                .objects
-                .iter()
-                .map(|id| bt_core::ObjectId(*id))
-                .collect(),
-        });
+        let context =
+            Context::new(crate::commands::know::DEFAULT_SEED).with_selection(open.selection());
         let area = parse_area(written)
             .map_err(anyhow::Error::msg)
             .with_context(|| format!("“{written}” is not a shape"))?;

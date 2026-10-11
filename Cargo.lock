@@ -565,6 +565,7 @@ dependencies = [
  "bt-image",
  "bt-live",
  "bt-project",
+ "bt-render",
  "bt-script",
  "bt-test-data",
  "bt-tmx",

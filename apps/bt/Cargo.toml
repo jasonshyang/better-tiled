@@ -23,6 +23,8 @@ bt-image.workspace = true
 bt-live.workspace = true
 # A map's AutoMap record in better-tiled.json, kept and put back by bt edit and bt undo.
 bt-project.workspace = true
+# The GPU device bt render draws on, without a window.
+bt-render.workspace = true
 bt-script.workspace = true
 bt-tmx.workspace = true
 bt-utils.workspace = true

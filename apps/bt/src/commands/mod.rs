@@ -11,6 +11,7 @@ pub(crate) mod export;
 pub(crate) mod know;
 pub(crate) mod layers;
 pub(crate) mod look;
+pub(crate) mod render;
 #[cfg(test)]
 pub(crate) mod testing;
 pub(crate) mod undo;
