@@ -336,6 +336,10 @@ fn an_edit_lands_as_one_undo_step_that_bt_undo_takes_back() {
     );
     assert_eq!(report.made, Some(Vec::new()));
     assert_eq!(ground_tile(&window, &map, IVec2::new(1, 1)), Some(5));
+    assert!(
+        window.shows("bt: a corner of fives"),
+        "the status bar flashes the edit's label"
+    );
     let status = window
         .ask_bt(&live, Request::Status)
         .unwrap()

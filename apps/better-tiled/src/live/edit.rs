@@ -17,6 +17,7 @@ use bt_script::{
     run_script,
 };
 use bt_tmx::{Loader, WriteRequest};
+use bt_utils::IRect;
 
 /// How many times a script runs before the map is taken to keep changing under it.
 const RUNS: usize = 3;
@@ -25,8 +26,12 @@ const RUNS: usize = 3;
 pub(super) trait Window {
     /// What a script runs on, for the map at `path`.
     fn prepare(&self, path: &Path) -> Result<ExternalBase, String>;
-    /// The result landed as one undo step, or why not.
-    fn apply(&self, edit: ExternalEdit) -> Result<Result<(), ExternalEditError>, String>;
+    /// The result landed as one undo step, its changed `area` outlined, or why not.
+    fn apply(
+        &self,
+        edit: ExternalEdit,
+        area: Option<IRect>,
+    ) -> Result<Result<(), ExternalEditError>, String>;
 }
 
 /// The script `request` asks for, run in the editor as the module's doc says.
@@ -67,7 +72,7 @@ pub(super) fn edit_in_editor(
             setup: result.setup.clone(),
             label: result.outcome.label.clone(),
         };
-        match window.apply(edit)? {
+        match window.apply(edit, result.outcome.area)? {
             Ok(()) => {
                 let saved = Saved::InEditor {
                     map: job.path.display().to_string(),
@@ -212,7 +217,11 @@ mod tests {
             Ok(self.base.clone())
         }
 
-        fn apply(&self, _edit: ExternalEdit) -> Result<Result<(), ExternalEditError>, String> {
+        fn apply(
+            &self,
+            _edit: ExternalEdit,
+            _area: Option<IRect>,
+        ) -> Result<Result<(), ExternalEditError>, String> {
             let mut applies = self.applies.borrow_mut();
             if applies.is_empty() {
                 return Err("no more answers".to_owned());

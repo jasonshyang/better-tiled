@@ -191,11 +191,17 @@ impl App {
         }
         let Job { kind, reply } = job;
         let answer = match kind {
-            LiveJob::Apply { edit } => {
+            LiveJob::Apply { edit, area } => {
+                let doc = edit.doc;
+                let label = edit.label.clone();
                 let result = self.editor.apply_external_edit(*edit);
                 let applied = match result {
                     Ok(effects) => {
                         self.carry_out_all(ctx, effects);
+                        if let (Some(area), Some(canvas)) = (area, self.canvases.get_mut(&doc)) {
+                            canvas.outline_bt_edit(area);
+                        }
+                        self.notify(bt_editor::Notice::info(format!("bt: {label}")));
                         Ok(())
                     }
                     Err(error) => Err(error),

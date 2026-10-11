@@ -7,6 +7,7 @@ use bt_editor::{ExternalBase, ExternalEdit, ExternalEditError, MarkCells};
 use bt_live::{
     Handler, JOB_WAIT, Jobs, LONG_JOB_WAIT, Request, Response, canonical_path, cells_from_runs,
 };
+use bt_utils::IRect;
 
 use super::edit::{Window, edit_in_editor};
 use super::jobs::{Answered, LiveAnswer, LiveJob};
@@ -42,9 +43,14 @@ impl Window for LiveHandler {
         }
     }
 
-    fn apply(&self, edit: ExternalEdit) -> Result<Result<(), ExternalEditError>, String> {
+    fn apply(
+        &self,
+        edit: ExternalEdit,
+        area: Option<IRect>,
+    ) -> Result<Result<(), ExternalEditError>, String> {
         let job = LiveJob::Apply {
             edit: Box::new(edit),
+            area,
         };
         match self.jobs.ask(job, LONG_JOB_WAIT)?? {
             Answered::Applied(applied) => Ok(applied),

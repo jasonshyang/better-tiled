@@ -9,12 +9,13 @@ use bt_editor::{
     DocumentId, Editor, Intent, Settings, TileRegion, ViewRequest, ViewState, ViewToggles,
 };
 use bt_render::{FrameInput, LayerVisibility, ObjectStyle};
+use bt_utils::IRect;
 use egui::{CursorIcon, Event, MouseWheelUnit, PointerButton, Pos2, Sense, Vec2};
 use glam::{DVec2, IVec2, UVec2};
 
 use super::camera::{Camera, ViewTransform};
 use super::gesture::{GestureReader, Pointer, ReadFrame};
-use super::overlay::{MarkShape, OverlayInput, mark_shapes, overlay_vectors};
+use super::overlay::{EditedOutline, MarkShape, OverlayInput, mark_shapes, overlay_vectors};
 use super::paint::CanvasGpu;
 use crate::tools::{Overlay, ToolBox, ToolContext, region_polygons};
 
@@ -73,6 +74,18 @@ pub(crate) struct Canvas {
     /// The current layer's offset (its groups' included): the tools measure the pointer from it
     /// and the grid, the selection and the hovered cell are drawn at it, as in Tiled.
     layer_offset: DVec2,
+    /// The area `bt`'s last edit changed and when it landed, outlined while it fades.
+    bt_edit: Option<BtEdit>,
+}
+
+/// How long the outline of `bt`'s last edit takes to fade.
+const BT_EDIT_FADES_IN: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// The area `bt`'s last edit changed, and when it landed.
+#[derive(Clone, Copy, Debug)]
+struct BtEdit {
+    area: IRect,
+    landed: std::time::Instant,
 }
 
 /// A selection's outline on screen, with what it was worked out from.
@@ -195,6 +208,10 @@ impl Canvas {
         self.run_tool(ui, frame, &view, response.hovered(), tools, out);
         ui.painter()
             .rect_filled(view.rect, 0.0, ui.visuals().extreme_bg_color);
+        if self.is_fading() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(30));
+        }
         if let Some(gpu) = frame.gpu {
             let time_ms = (ui.input(|input| input.time) * 1000.0) as u64;
             let input = self.frame_input(frame, &view, time_ms);
@@ -300,6 +317,35 @@ impl Canvas {
         self.selection_outline
             .as_ref()
             .map_or(&[], |o| o.polygons.as_slice())
+    }
+
+    /// Outlines `area`, which an edit of `bt`'s just changed, until the outline fades.
+    pub(crate) fn outline_bt_edit(&mut self, area: IRect) {
+        self.bt_edit = Some(BtEdit {
+            area,
+            landed: std::time::Instant::now(),
+        });
+    }
+
+    /// The outline of `bt`'s last edit and how strongly it is drawn, while it fades; forgets it
+    /// once it has.
+    fn bt_edit_outline(&mut self, geometry: &MapGeometry) -> Option<EditedOutline> {
+        let edit = self.bt_edit?;
+        let age = edit.landed.elapsed();
+        if age >= BT_EDIT_FADES_IN {
+            self.bt_edit = None;
+            return None;
+        }
+        Some(EditedOutline {
+            outline: geometry.rect_outline(edit.area),
+            strength: 1.0 - age.as_secs_f32() / BT_EDIT_FADES_IN.as_secs_f32(),
+        })
+    }
+
+    /// Whether the outline of `bt`'s last edit is still fading, so frames must keep coming.
+    pub(crate) fn is_fading(&self) -> bool {
+        self.bt_edit
+            .is_some_and(|edit| edit.landed.elapsed() < BT_EDIT_FADES_IN)
     }
 
     /// The marks `bt` made on the document's map, worked out again only when they or the grid
@@ -421,6 +467,11 @@ impl Canvas {
         } else {
             Vec::new()
         };
+        let edited = if cells {
+            self.bt_edit_outline(&frame.map.geometry())
+        } else {
+            None
+        };
         let overlays = overlay_vectors(&OverlayInput {
             map: frame.map,
             visible: view.render_camera().visible_rect(viewport_px(view)),
@@ -439,6 +490,7 @@ impl Canvas {
                     .is_some_and(|d| d.selection().carries_tiles()),
             tool: &self.tool_overlay.vectors,
             marks: &marks,
+            edited: edited.as_ref(),
         });
         let layers = if frame.toggles.highlight_current_layer {
             LayerVisibility::default().highlight(

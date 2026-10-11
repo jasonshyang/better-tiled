@@ -1,5 +1,6 @@
-//! What the canvas draws over the map: the map's border, the tile grid, the hovered cell and
-//! the marks `bt` made, as vector items in world pixels with strokes in device pixels.
+//! What the canvas draws over the map: the map's border, the tile grid, the hovered cell, the
+//! marks `bt` made and the outline of `bt`'s last edit while it fades, as vector items in world
+//! pixels with strokes in device pixels.
 
 use std::sync::Arc;
 
@@ -40,6 +41,17 @@ pub(crate) struct OverlayInput<'a> {
     pub(crate) tool: &'a [VectorItem],
     /// The marks `bt` made on the map.
     pub(crate) marks: &'a [MarkShape],
+    /// The area `bt`'s last edit changed, while its outline fades.
+    pub(crate) edited: Option<&'a EditedOutline>,
+}
+
+/// The outline of the area `bt`'s last edit changed, while it fades.
+#[derive(Clone, Debug)]
+pub(crate) struct EditedOutline {
+    /// The area's outline, in world pixels.
+    pub(crate) outline: Vec<Vec<DVec2>>,
+    /// How strongly it is drawn: 1 when the edit landed, falling to 0.
+    pub(crate) strength: f32,
 }
 
 /// The colours marks take in turn: bright, and unlike the selection's blue.
@@ -202,6 +214,19 @@ pub(crate) fn overlay_vectors(input: &OverlayInput<'_>) -> Arc<[VectorItem]> {
             ));
         }
     }
+    if let Some(edited) = input.edited {
+        let alpha = |most: f32| (most * edited.strength.clamp(0.0, 1.0)).round() as u8;
+        for outline in &edited.outline {
+            items.push(
+                VectorItem::polygon(outline.clone())
+                    .stroke(Color::rgba(0, 0, 0, alpha(160.0)), line * 4.0),
+            );
+            items.push(
+                VectorItem::polygon(outline.clone())
+                    .stroke(Color::rgba(255, 255, 255, alpha(255.0)), line * 2.0),
+            );
+        }
+    }
     items.extend(input.tool.iter().cloned());
     if let Some(cell) = input.hover
         && (input.map.infinite || map_cells.contains(cell))
@@ -242,6 +267,7 @@ mod tests {
             carrying: false,
             tool: &[],
             marks: &[],
+            edited: None,
         }
     }
 
@@ -373,6 +399,7 @@ mod tests {
         );
         let drawn = overlay_vectors(&OverlayInput {
             marks: &shapes,
+            edited: None,
             hover: None,
             ..input(&map, &settings, false)
         });
@@ -392,5 +419,33 @@ mod tests {
             VectorItem::polygon(shapes[0].tint[0].clone()).fill(with_alpha(MARK_PALETTE[1], 56));
         assert!(drawn.contains(&tint), "in the mark's colour");
         assert_ne!(MARK_PALETTE[0], MARK_PALETTE[1]);
+    }
+
+    #[test]
+    fn the_last_bt_edit_is_outlined_dark_under_light_and_fades() {
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(8))
+            .build()
+            .unwrap();
+        let settings = Settings::default();
+        let outline = map
+            .geometry()
+            .rect_outline(IRect::from_min_size(IVec2::new(1, 1), IVec2::new(3, 2)));
+        let half = EditedOutline {
+            outline: outline.clone(),
+            strength: 0.5,
+        };
+        let drawn = overlay_vectors(&OverlayInput {
+            edited: Some(&half),
+            hover: None,
+            ..input(&map, &settings, false)
+        });
+        assert_eq!(
+            drawn.len(),
+            1 + 2,
+            "the border, then a dark and a light stroke"
+        );
+        let light =
+            VectorItem::polygon(outline[0].clone()).stroke(Color::rgba(255, 255, 255, 128), 4.0);
+        assert!(drawn.contains(&light), "half as strong as when it landed");
     }
 }

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use bt_editor::{ExternalBase, ExternalEdit, ExternalEditError, MarkCells};
 use bt_live::Response;
+use bt_utils::IRect;
 
 /// A job for the window's thread.
 #[derive(Debug)]
@@ -24,6 +25,8 @@ pub(crate) enum LiveJob {
     Apply {
         /// The result.
         edit: Box<ExternalEdit>,
+        /// The cells it changed, outlined on the canvas while the outline fades.
+        area: Option<IRect>,
     },
     /// The last external edit of a map taken back.
     Undo {
