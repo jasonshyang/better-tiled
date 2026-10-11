@@ -217,6 +217,8 @@ struct Mark {
     group: usize,
     cell: IVec2,
     entry: String,
+    /// Whether its foot could not be measured, so it is marked at the middle of its box.
+    unmeasured: bool,
 }
 
 impl ViewOutcome {
@@ -402,6 +404,15 @@ impl ViewOutcome {
             text.push_str(&format!(
                 "  ({} of the objects stand outside the view)\n",
                 outside
+            ));
+        }
+        let unmeasured = marks.iter().filter(|m| m.unmeasured).count();
+        if unmeasured > 0 {
+            text.push_str(&format!(
+                "  ({} can't be measured, so {} marked at the middle of {} box: bt objects MAP says why)\n",
+                plural(unmeasured, "sprite's foot", "sprites' feet"),
+                if unmeasured == 1 { "it is" } else { "they are" },
+                if unmeasured == 1 { "its" } else { "their" }
             ));
         }
         Ok(ViewOutcome { text })
@@ -709,7 +720,8 @@ fn object_marks(map: &Map, names: &Names, chosen: &[&Layer], groups: &[ObjectGro
             else {
                 continue;
             };
-            let point = standing_point(map, &mut feet, object);
+            let measured = feet.standing_point(map, object).ok();
+            let point = measured.unwrap_or_else(|| middle_of_box(map, object));
             let entry = if sprites {
                 object
                     .tile
@@ -726,21 +738,20 @@ fn object_marks(map: &Map, names: &Names, chosen: &[&Layer], groups: &[ObjectGro
                 group,
                 cell: standing_cell(point),
                 entry,
+                unmeasured: measured.is_none(),
             });
         }
     }
     marks
 }
 
-/// Where an object stands: its foot or point, else the middle of its box when its foot cannot
-/// be measured (an image that cannot be read): the view marks it there all the same.
-fn standing_point(map: &Map, feet: &mut Feet, object: &MapObject) -> DVec2 {
-    feet.standing_point(map, object).unwrap_or_else(|_| {
-        let geometry = map.geometry();
-        let tileset = object.tile.and_then(|tile| map.tileset_of(tile));
-        let bounds = bt_core::object_pixel_outline(&geometry, object, tileset).bounds();
-        pixel_to_point(&geometry, (bounds.min + bounds.max) * 0.5)
-    })
+/// The middle of an object's box: where the view marks an object whose foot cannot be measured
+/// (its image cannot be read), and says so.
+fn middle_of_box(map: &Map, object: &MapObject) -> DVec2 {
+    let geometry = map.geometry();
+    let tileset = object.tile.and_then(|tile| map.tileset_of(tile));
+    let bounds = bt_core::object_pixel_outline(&geometry, object, tileset).bounds();
+    pixel_to_point(&geometry, (bounds.min + bounds.max) * 0.5)
 }
 
 /// `desert.tmx: cells 0,0 40x40; layers Ground`, and what else the view should say first.
@@ -1145,6 +1156,55 @@ pub(crate) mod tests {
         assert!(
             knight.contains("  L  sprites on parallax clouds ×5: cloud ×5\n"),
             "{knight}"
+        );
+    }
+
+    #[test]
+    fn a_sprite_whose_foot_cant_be_measured_is_marked_at_its_box_and_said() {
+        // A collection whose one image is a file that is not there.
+        let mut tiles = std::collections::BTreeMap::new();
+        tiles.insert(
+            bt_core::TileId(0),
+            bt_core::TileData {
+                image: Some(bt_core::ImageRef::file(
+                    bt_core::FileRef::new("gone.png", "/nowhere/gone.png"),
+                    UVec2::new(16, 16),
+                )),
+                ..bt_core::TileData::default()
+            },
+        );
+        let collection = Arc::new(Tileset {
+            name: "props".into(),
+            tile_width: 16,
+            tile_height: 16,
+            image: bt_core::TilesetImage::Collection,
+            next_tile_id: 1,
+            tiles,
+            ..Tileset::default()
+        });
+        let rock = MapObject {
+            tile: Some(Cell::new(
+                bt_core::TilesetSlot::new(0).unwrap(),
+                bt_core::TileId(0),
+            )),
+            pos: DVec2::new(16.0, 32.0),
+            size: DVec2::splat(16.0),
+            ..MapObject::default()
+        };
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::new(3, 3))
+            .tileset(collection)
+            .object_layer("props", vec![rock])
+            .build()
+            .unwrap();
+        let names = Names::of(&map);
+        let view = ViewOutcome::from_request(&ViewRequest::new(&map, &names)).unwrap();
+        assert_eq!(rows(&view.text)[1], ".P.", "{}", view.text);
+        assert!(
+            view.text.contains(
+                "(1 sprite's foot can't be measured, so it is marked at the middle of its box: bt objects MAP says why)"
+            ),
+            "{}",
+            view.text
         );
     }
 

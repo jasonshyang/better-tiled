@@ -156,6 +156,13 @@ impl ObjectInfo {
         }
     }
 
+    /// The cell it stands in, or, when its foot can't be measured (which its line says), the
+    /// cell of the middle of its box.
+    pub(crate) fn cell_or_middle(&self) -> IVec2 {
+        self.cell
+            .unwrap_or_else(|| standing_cell(self.bounds.at + self.bounds.size * 0.5))
+    }
+
     /// The object as one line, as a script would make it.
     pub(crate) fn line_text(&self) -> String {
         let mut text = format!("#{} ", self.id);
@@ -348,7 +355,7 @@ impl ObjectsOutcome {
                 let mut info =
                     ObjectInfo::from_object(map, request.names, &mut feet, &at.layer.name, object);
                 if let Some(region) = request.within
-                    && !info.cell.is_some_and(|cell| region.contains(cell))
+                    && !region.contains(info.cell_or_middle())
                 {
                     continue;
                 }
