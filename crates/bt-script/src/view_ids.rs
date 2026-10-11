@@ -26,6 +26,12 @@ impl ViewOutcome {
         let map = request.map();
         let names = request.names();
         let region = request.region_asked().unwrap_or_else(|| map_cells(map));
+        if region.is_empty() {
+            let title = request.title_asked().unwrap_or("the view");
+            return Ok(ViewOutcome {
+                text: format!("{title}: no cells\n"),
+            });
+        }
         if region.w > MOST_ACROSS || region.h > MOST_DOWN {
             return Err(Error::ViewTooLarge {
                 what: "--ids",

@@ -94,16 +94,19 @@ impl<'a> ViewRequest<'a> {
     }
 
     /// The area around `cells` (what an edit changed): their bounding rectangle grown by a cell
-    /// on each side, on the map, called "the changed area".
+    /// on each side, on the map, called "the changed area"; no cells for none.
     pub fn around(mut self, cells: &[IVec2]) -> ViewRequest<'a> {
-        if let Some(bounds) = IRect::bounding(cells.iter().copied()) {
-            let grown = IRect::from_min_size(bounds.min() - IVec2::ONE, bounds.size() + 2);
-            self.region = Some(if self.map.infinite {
-                grown
-            } else {
-                grown.intersection(map_cells(self.map))
-            });
-        }
+        self.region = Some(match IRect::bounding(cells.iter().copied()) {
+            Some(bounds) => {
+                let grown = IRect::from_min_size(bounds.min() - IVec2::ONE, bounds.size() + 2);
+                if self.map.infinite {
+                    grown
+                } else {
+                    grown.intersection(map_cells(self.map))
+                }
+            }
+            None => IRect::default(),
+        });
         self.title = Some("the changed area".to_owned());
         self
     }
@@ -221,6 +224,12 @@ impl ViewOutcome {
     pub fn from_request(request: &ViewRequest<'_>) -> Result<ViewOutcome, Error> {
         let map = request.map;
         let region = request.region.unwrap_or_else(|| map_cells(map));
+        if region.is_empty() {
+            let title = request.title.as_deref().unwrap_or("the view");
+            return Ok(ViewOutcome {
+                text: format!("{title}: no cells\n"),
+            });
+        }
         let step = match request.step {
             Some(0) => return Err(Error::ZeroStep),
             Some(step) => i32::try_from(step).unwrap_or(i32::MAX),
@@ -1053,6 +1062,9 @@ pub(crate) mod tests {
             &ViewRequest::new(&map, &names).around(&[IVec2::new(3, 2), IVec2::new(4, 2)]),
         )
         .unwrap();
+        let nothing =
+            ViewOutcome::from_request(&ViewRequest::new(&map, &names).around(&[])).unwrap();
+        assert_eq!(nothing.text, "the changed area: no cells\n");
         assert!(
             around.text.starts_with("the changed area: cells 2,1 4x3;"),
             "{}",

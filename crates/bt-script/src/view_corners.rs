@@ -90,6 +90,12 @@ impl ViewOutcome {
             });
         }
         let region = request.region_asked().unwrap_or_else(|| map_cells(map));
+        if region.is_empty() {
+            let title = request.title_asked().unwrap_or("the view");
+            return Ok(ViewOutcome {
+                text: format!("{title}: no cells\n"),
+            });
+        }
         if region.w > MOST_SIDE || region.h > MOST_SIDE {
             return Err(Error::ViewTooLarge {
                 what: "--corners",
