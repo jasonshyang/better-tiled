@@ -14,12 +14,14 @@
 
 mod dir;
 mod error;
+mod jobs;
 mod protocol;
 #[cfg(test)]
 mod testing;
 
 pub use dir::{LIVE_DIR_VAR, live_dir};
 pub use error::Error;
+pub use jobs::{JOB_WAIT, Job, Jobs, LONG_JOB_WAIT, Reply};
 pub use protocol::{
     DocStatus, Done, EditRequest, Edited, KeyboardFocus, MapText, MarkSpec, PROTOCOL, Request,
     Response, Run, Status, TilesetText, canonical_path, cells_from_runs, runs_from_cells,
