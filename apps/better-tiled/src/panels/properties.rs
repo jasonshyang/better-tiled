@@ -138,6 +138,27 @@ impl PropertiesPanel {
                 mixed: row.mixed,
                 enabled: !row.read_only,
             };
+            if let AttributeValue::Image(image) = &row.value {
+                ui.add_enabled_ui(!row.read_only, |ui| {
+                    ui.label(row.value.to_string());
+                    if ui.small_button("Choose Image…").clicked() {
+                        self.file_requests.push(FileRequest::AttributeImage {
+                            doc: subject.doc,
+                            inspected: subject.inspected.clone(),
+                        });
+                    }
+                    if image.is_some() && ui.small_button("Clear Image").clicked() {
+                        out.push(Intent::SetAttribute {
+                            doc: subject.doc,
+                            inspected: subject.inspected.clone(),
+                            attribute: row.attribute,
+                            value: AttributeValue::Image(None),
+                            merge: None,
+                        });
+                    }
+                });
+                return;
+            }
             if let Some(edited) = attribute_field(ui, &mut self.fields, field, row) {
                 out.push(Intent::SetAttribute {
                     doc: subject.doc,

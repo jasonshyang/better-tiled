@@ -53,6 +53,12 @@ impl App {
                     canvas.apply_view_request(request, map);
                 }
             }
+            Effect::Show(Dialog::ExportImage(doc)) => {
+                self.modals
+                    .push(Modal::ExportImage(crate::dialogs::ExportImageDialog::new(
+                        doc,
+                    )))
+            }
             Effect::Show(Dialog::SearchActions) => {
                 self.modals.push(Modal::Palette(PaletteDialog::default()));
             }

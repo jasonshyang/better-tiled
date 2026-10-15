@@ -82,9 +82,22 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
                 })
                 .collect()
         }
-        FileRequest::TilesetImage => {
+        FileRequest::ExportImage { .. } => {
+            let picked = pollster::block_on(
+                rfd::AsyncFileDialog::new()
+                    .set_title("Export as Image")
+                    .add_filter("PNG images", &["png"])
+                    .set_file_name("map.png")
+                    .save_file(),
+            );
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
+        FileRequest::TilesetImage | FileRequest::AttributeImage { .. } => {
             let dialog = rfd::AsyncFileDialog::new()
-                .set_title("Tileset Image")
+                .set_title("Choose Image")
                 .add_filter("Images", &IMAGE_EXTENSIONS)
                 .add_filter("All files", &["*"]);
             let picked = pollster::block_on(dialog.pick_file());

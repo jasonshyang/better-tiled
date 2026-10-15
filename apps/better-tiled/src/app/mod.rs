@@ -8,6 +8,9 @@ mod custom_types_tests;
 mod effects;
 mod frame;
 mod godot;
+mod images;
+#[cfg(test)]
+mod images_tests;
 mod live;
 #[cfg(test)]
 mod live_tests;

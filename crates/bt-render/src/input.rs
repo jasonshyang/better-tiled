@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use bt_core::{Cell, Color, LayerId, Map};
+use bt_core::{Cell, ClassUsage, Color, CustomTypes, LayerId, Map};
 use bt_utils::DRect;
 use glam::{DVec2, IVec2, UVec2};
 
@@ -134,6 +134,24 @@ impl ObjectStyle {
     /// another class takes its layer's colour.
     pub fn class_colors(mut self, colors: Arc<BTreeMap<String, Color>>) -> ObjectStyle {
         self.class_colors = colors;
+        self
+    }
+
+    /// Uses the colours of project classes that apply to objects.
+    pub fn custom_types(mut self, types: &CustomTypes) -> ObjectStyle {
+        self.class_colors = Arc::new(
+            types
+                .types
+                .iter()
+                .filter_map(|ty| {
+                    let class = ty.as_class()?;
+                    class
+                        .use_as
+                        .intersects(ClassUsage::OBJECT)
+                        .then(|| (ty.name.clone(), class.color))
+                })
+                .collect(),
+        );
         self
     }
 

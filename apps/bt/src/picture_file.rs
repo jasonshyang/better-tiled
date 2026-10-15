@@ -5,13 +5,11 @@
 
 use std::path::Path;
 
-use bt_image::{DecodedImage, encode_png};
-use bt_utils::atomic_write::{WriteMode, write_file};
+use bt_image::{DecodedImage, replace_png};
 
 /// Writes `picture` to `path` as a PNG, replacing the file there.
 pub(crate) fn write_picture(path: &Path, picture: &DecodedImage) -> anyhow::Result<()> {
-    let bytes = encode_png(path, picture)?;
-    write_file(path, &bytes, WriteMode::Atomic)?;
+    replace_png(path, picture)?;
     Ok(())
 }
 

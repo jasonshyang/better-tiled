@@ -25,6 +25,15 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// An image chosen for a built-in attribute, probed on a worker.
+    AttributeImageRead {
+        /// The document.
+        doc: DocumentId,
+        /// The captured inspector targets.
+        inspected: Inspected,
+        /// The image and measured size, or why it could not be read.
+        result: Result<bt_core::ImageRef, String>,
+    },
     /// A window worker finished an operation that reports a notice.
     Report(crate::Notice),
     /// A keyboard mapping scheme read for the window’s Preferences draft.

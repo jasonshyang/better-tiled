@@ -1,5 +1,4 @@
-//! Writing images: PNG files, made new and never written over another file, and the PNG bytes of
-//! an image for a caller that writes its files its own way.
+//! Encoding PNGs, creating new files and atomically replacing exported pictures.
 
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write as _};
@@ -10,6 +9,23 @@ use image::codecs::png::PngEncoder;
 
 use crate::decode::DecodedImage;
 use crate::error::Error;
+
+/// Atomically replaces a PNG, respecting read-only files and directories. Shared by the
+/// command line and the window's image export.
+pub fn replace_png(path: &Path, image: &DecodedImage) -> Result<(), Error> {
+    let bytes = encode_png(path, image)?;
+    bt_utils::atomic_write::write_file(path, &bytes, bt_utils::atomic_write::WriteMode::Atomic)
+        .map_err(|error| Error::Write {
+            path: path.to_path_buf(),
+            message: match error {
+                bt_utils::Error::Refused { reason, .. } => reason.to_string(),
+                bt_utils::Error::Write { source, .. }
+                | bt_utils::Error::Resolve { source, .. }
+                | bt_utils::Error::Folder { source, .. } => source.to_string(),
+                bt_utils::Error::NotPrivate { reason, .. } => reason.to_string(),
+            },
+        })
+}
 
 /// Writes `image` to a new PNG file at `path`. A file already there is never replaced: that is
 /// [`Error::Exists`], so a caller looking for a free name tries the next one. A write that fails

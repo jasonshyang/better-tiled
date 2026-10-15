@@ -481,6 +481,16 @@ worker so a frame never blocks (on macOS `rfd` shows the panel on the main threa
 chosen path comes back as `Intent::FilePicked`, one for each file chosen. Escape in a
 dialog's field leaves the field, not the dialog.
 
+As built in M6, File ▸ Export as Image opens a scale (1–800%) and background-colour
+dialog, then a PNG save panel. A worker renders a snapshot of `shown_map` with the shared
+headless renderer and the project's object class colours, and atomically replaces the PNG.
+It exports visible layers, includes unsaved edits and does not save or mark the map clean.
+Read-only targets and write failures produce an error notice and preserve the previous file.
+The Properties panel's editable Image rows offer Choose Image and Clear Image. A worker
+probes the selected file before applying one undoable change; references are relative to the
+map or tileset that owns the field, and image-layer repetition and transparent colour remain
+the layer's attributes.
+
 ## 10. Status bar and toolbar
 
 The status bar lays out its right side first (zoom menu, map size, the ⛔ and ⚠ counts that

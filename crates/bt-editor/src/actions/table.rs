@@ -260,6 +260,8 @@ action_table! {
     Export => ActionSpec::new(ActionId::Export, "export", "Export to Godot", "file godot scene").tiled("Export").on(Map).keys(&[cmd('e')]),
     /// Choose a Godot scene target.
     ExportAs => ActionSpec::new(ActionId::ExportAs, "export_as", "Export As…", "file godot scene").tiled("ExportAs").on(Map).keys(&[cmd_shift('e')]),
+    /// Export the shown map as a PNG image.
+    ExportAsImage => ActionSpec::new(ActionId::ExportAsImage, "export_as_image", "Export as Image…", "file png picture render").tiled("ExportAsImage").on(Map),
     /// Configure Godot export for this project.
     GodotSetup => ActionSpec::new(ActionId::GodotSetup, "godot_setup", "Godot Setup…", "file project godot").on(Map),
     /// Import and load the export in Godot.

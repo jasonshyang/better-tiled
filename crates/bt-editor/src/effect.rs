@@ -59,6 +59,8 @@ pub enum Effect {
 /// A dialog of the window's.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Dialog {
+    /// Export the shown map as a PNG.
+    ExportImage(DocumentId),
     /// New Map.
     NewMap,
     /// New Tileset, adding to the map of a document.
@@ -80,6 +82,22 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// An image for a built-in Image attribute in Properties.
+    AttributeImage {
+        /// The document that owns the attribute.
+        doc: DocumentId,
+        /// The captured inspector targets.
+        inspected: Inspected,
+    },
+    /// A PNG export of the shown map.
+    ExportImage {
+        /// The document to snapshot when the file is chosen.
+        doc: DocumentId,
+        /// Image pixels per world pixel, in percent.
+        scale_percent: u32,
+        /// Whether to include the map's background colour.
+        background: bool,
+    },
     /// A Tiled keyboard mapping scheme for the open Preferences draft.
     ImportShortcuts {
         /// The Preferences dialog instance that asked.

@@ -29,6 +29,8 @@ pub(crate) enum Modal {
     NewMap(NewMapDialog),
     /// New Tileset.
     NewTileset(NewTilesetDialog),
+    /// PNG export settings.
+    ExportImage(super::ExportImageDialog),
     /// The preferences.
     Preferences(Box<PreferencesDialog>),
     /// The layer the selected objects move to.
@@ -121,6 +123,7 @@ impl Modals {
             Modal::Palette(palette) => palette.show(ctx, editor, out),
             Modal::NewMap(dialog) => dialog.show(ctx, out),
             Modal::NewTileset(dialog) => dialog.show(ctx, out, requests),
+            Modal::ExportImage(dialog) => dialog.show(ctx, requests),
             Modal::Preferences(dialog) => dialog.show(ctx, out, requests),
             Modal::ChooseLayer(dialog) => dialog.show(ctx, editor, out),
             Modal::ResizeMap(dialog) => dialog.show(ctx, out),

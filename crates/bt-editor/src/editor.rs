@@ -176,6 +176,14 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::AttributeImageRead {
+                doc,
+                inspected,
+                result,
+            } => match result {
+                Ok(image) => self.attribute_image_picked(doc, &inspected, image),
+                Err(error) => vec![Effect::Notify(Notice::error(error))],
+            },
             Intent::Report(notice) => vec![Effect::Notify(notice)],
             Intent::ShortcutsRead { .. } => vec![Effect::Notify(Notice::error(
                 "Shortcut imports need an open Preferences dialog",
