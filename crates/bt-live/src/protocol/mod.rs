@@ -93,9 +93,10 @@ mod tests {
                 Request::Open { .. } => 5,
                 Request::Save { .. } => 6,
                 Request::Screenshot { .. } => 7,
+                Request::RememberExport { .. } => 8,
             })
             .collect();
-        assert_eq!(kinds, (0..8).collect::<Vec<_>>());
+        assert_eq!(kinds, (0..9).collect::<Vec<_>>());
         let kinds: Vec<usize> = every_answer()
             .iter()
             .map(|answer| match answer {

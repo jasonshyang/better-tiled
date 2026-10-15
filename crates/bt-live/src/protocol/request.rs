@@ -55,6 +55,13 @@ pub enum Request {
         /// The map.
         path: PathBuf,
     },
+    /// Remember a Godot target as one undoable step; answered by Done.
+    RememberExport {
+        /// The open map.
+        path: PathBuf,
+        /// The absolute .tscn target.
+        target: PathBuf,
+    },
     /// The editor's window as the person sees it, written as a PNG: answered by a
     /// [`Done`](crate::Done).
     Screenshot {
@@ -194,7 +201,7 @@ mod tests {
     fn requests_of_another_shape_are_refused() {
         for (text, why) in [
             (
-                r#"{"op":"remember_export","path":"/a.tmx"}"#,
+                r#"{"op":"future_operation","path":"/a.tmx"}"#,
                 "unknown variant",
             ),
             (r#"{"path":"/a.tmx"}"#, "missing field `op`"),

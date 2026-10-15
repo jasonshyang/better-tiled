@@ -53,9 +53,13 @@ pub(crate) fn every_request() -> Vec<Request> {
             focus: true,
         },
         Request::Open { path: map.clone() },
-        Request::Save { path: map },
+        Request::Save { path: map.clone() },
         Request::Screenshot {
             out: PathBuf::from("/tmp/window.png"),
+        },
+        Request::RememberExport {
+            path: map,
+            target: PathBuf::from("/game/levels/a.tscn"),
         },
     ]
 }

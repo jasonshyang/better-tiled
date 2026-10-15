@@ -54,6 +54,8 @@ pub(crate) enum LiveJob {
         /// The map's canonical path.
         path: PathBuf,
     },
+    /// Remember an export through the map's history.
+    RememberExport { path: PathBuf, target: PathBuf },
     /// The window's picture, written to `out`.
     Screenshot {
         /// The PNG to write.

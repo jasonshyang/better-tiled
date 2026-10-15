@@ -512,3 +512,45 @@ fn a_map_with_automap_layers_is_edited_as_what_was_painted() {
         assert_eq!(ours, theirs, "{}", layer.name);
     }
 }
+
+#[test]
+fn a_remember_export_request_lands_as_one_undoable_step() {
+    let scratch = Scratch::new("window-live-remember-export").unwrap();
+    let live = LiveFolder::new("remember-export");
+    let path = write_map(scratch.path(), "map.tmx");
+    let target = scratch.join("game/map.tscn");
+    let mut window = TestWindow::with_live_link(&scratch.join("data"), &live);
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    let before = std::fs::read(&path).unwrap();
+    done(window.ask_bt(
+        &live,
+        Request::RememberExport {
+            path: path.clone(),
+            target: target.clone(),
+        },
+    ));
+    assert_eq!(
+        window
+            .editor()
+            .map_of(doc)
+            .unwrap()
+            .file
+            .export
+            .target
+            .as_ref()
+            .unwrap()
+            .path,
+        target
+    );
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        before,
+        "remember changes the open map, never its saved file"
+    );
+    window.apply(bt_editor::Intent::Run(bt_editor::ActionId::Undo));
+    assert_eq!(
+        window.editor().map_of(doc).unwrap().file.export.target,
+        None
+    );
+}

@@ -94,7 +94,9 @@ impl App {
                         .ok_or_else(|| not_a_map(&path))
                 })
                 .map(|base| Answered::Base(Box::new(base))),
-            kind @ (LiveJob::Apply { .. } | LiveJob::Undo { .. }) => {
+            kind @ (LiveJob::Apply { .. }
+            | LiveJob::Undo { .. }
+            | LiveJob::RememberExport { .. }) => {
                 return self.edit_or_wait(ctx, Job { kind, reply });
             }
             LiveJob::Mark {
@@ -191,6 +193,12 @@ impl App {
         }
         let Job { kind, reply } = job;
         let answer = match kind {
+            LiveJob::RememberExport { path, target } => self.open_document(&path).and_then(|doc| {
+                self.editor
+                    .remember_export(doc, &target)
+                    .map_err(|e| e.to_string())?;
+                answered(done("Remembered Godot export".into()))
+            }),
             LiveJob::Apply { edit, area } => {
                 let doc = edit.doc;
                 let label = edit.label.clone();

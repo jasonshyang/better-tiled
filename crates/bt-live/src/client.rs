@@ -179,7 +179,7 @@ pub fn editors(folder: &Path) -> Result<Editors, Error> {
 #[cfg(unix)]
 fn answer_wait(request: &Request) -> Duration {
     match request {
-        Request::Edit(_) => EDIT_WAIT,
+        Request::RememberExport { .. } | Request::Edit(_) => EDIT_WAIT,
         Request::Save { .. } => SAVE_WAIT,
         Request::Status
         | Request::Snapshot { .. }
@@ -324,7 +324,7 @@ mod tests {
     fn each_request_waits_as_long_as_it_may_take() {
         for request in crate::testing::every_request() {
             let expected = match &request {
-                Request::Edit(_) => Duration::from_secs(600),
+                Request::RememberExport { .. } | Request::Edit(_) => Duration::from_secs(600),
                 Request::Save { .. } => Duration::from_secs(60),
                 _ => Duration::from_secs(15),
             };

@@ -67,6 +67,13 @@ fn another_question() -> String {
 impl Handler for LiveHandler {
     fn handle(&self, request: &Request) -> Result<Response, String> {
         match request {
+            Request::RememberExport { path, target } => self.ask(
+                LiveJob::RememberExport {
+                    path: canonical_path(path),
+                    target: target.clone(),
+                },
+                LONG_JOB_WAIT,
+            ),
             Request::Status => self.ask(LiveJob::Status, JOB_WAIT),
             Request::Snapshot { path } => self.ask(
                 LiveJob::Snapshot {
