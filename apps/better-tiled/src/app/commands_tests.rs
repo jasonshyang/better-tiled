@@ -1,5 +1,7 @@
 //! Edit Commands drafts, project persistence and command dispatch through the real window.
 
+#![cfg(unix)]
+
 use crate::test_window::TestWindow;
 use bt_editor::{ActionId, Intent};
 use bt_test_data::{Scratch, fixtures::MapBuilder};
@@ -12,7 +14,6 @@ fn replace(window: &mut TestWindow, label: &str, value: &str) {
 }
 
 #[test]
-#[cfg(unix)]
 fn command_drafts_cancel_apply_undo_and_run_from_their_shortcuts() {
     let scratch = Scratch::new("window-commands").unwrap();
     let map = MapBuilder::new(UVec2::splat(16), UVec2::ONE)

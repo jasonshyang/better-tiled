@@ -73,6 +73,7 @@ impl TestWindow {
     }
 
     /// A window in `data` whose live link listens in `live`, for `bt` to ask.
+    #[cfg(unix)]
     pub(crate) fn with_live_link(data: &Path, live: &LiveFolder) -> TestWindow {
         TestWindow::start(data, std::process::id(), Some(live.path().to_path_buf()))
     }
@@ -97,6 +98,7 @@ impl TestWindow {
 
     /// Asks the window as `bt` does: finds it in `live` and sends `request`, from another
     /// thread, while the window runs its frames.
+    #[cfg(unix)]
     pub(crate) fn ask_bt(
         &mut self,
         live: &LiveFolder,
@@ -130,6 +132,7 @@ impl TestWindow {
     }
 
     /// Whether the live link is listening.
+    #[cfg(unix)]
     pub(crate) fn is_listening(&self) -> bool {
         self.harness.state().live_listening()
     }
@@ -596,10 +599,12 @@ impl TestWindow {
 
 /// A folder of its own for a window's live link: short (a socket's path is limited to about a
 /// hundred bytes), private, under `/tmp`, removed when dropped.
+#[cfg(unix)]
 pub(crate) struct LiveFolder {
     path: PathBuf,
 }
 
+#[cfg(unix)]
 impl LiveFolder {
     /// A new folder for the test `name`.
     pub(crate) fn new(name: &str) -> LiveFolder {
@@ -622,6 +627,7 @@ impl LiveFolder {
     }
 }
 
+#[cfg(unix)]
 impl Drop for LiveFolder {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.path);

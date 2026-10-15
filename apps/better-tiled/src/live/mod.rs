@@ -77,7 +77,7 @@ impl LiveLink {
     }
 
     /// Whether the listener is up.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the window's tests ask"))]
+    #[cfg(all(test, unix))]
     pub(crate) fn is_listening(&self) -> bool {
         self.server.is_some()
     }
