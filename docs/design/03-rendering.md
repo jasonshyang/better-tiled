@@ -214,6 +214,13 @@ one function; the hook is a `MapImageSource` the application builds from the hea
 and gives to `bt-image`, and a map drawn as an image draws its own images through a
 `NestedSupply` (decoded on the spot) instead of the store's workers.
 
+As built in M6, `MapImages::new(load)` implements that hook; the caller supplies a callback
+returning a configured `Render`. Each nested picture gets its own renderer on the shared GPU,
+so it can render while an outer picture waits for images without taking the outer renderer's
+lock. Nested decode failures, including recursive maps, fail the image request. The window's
+image store, PNG export, `bt render` and Godot's map-image copies use this hook.
+`Render::run_with_images` uses the shared renderer with a caller-configured image store.
+
 ## 9. Interfaces
 
 | Function | What |

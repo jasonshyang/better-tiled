@@ -15,8 +15,8 @@ use std::sync::Arc;
 use bt_core::{
     Color, CustomTypes, HAlign, LayerId, Map, Orientation, StaggerAxis, StaggerIndex, VAlign,
 };
-use bt_image::DecodedImage;
-use bt_render::{HeadlessDevice, ObjectStyle, Render, TextItem, VectorItem};
+use bt_image::{DecodedImage, ImageStore};
+use bt_render::{HeadlessDevice, MapImages, ObjectStyle, Render, TextItem, VectorItem};
 use bt_utils::text::plural;
 use bt_utils::{DRect, IRect};
 use glam::{DVec2, IVec2, UVec2};
@@ -322,13 +322,31 @@ impl RenderOutcome {
         if rulers {
             ruler_vectors(&mut vectors, &map, region, world, origin, scale);
         }
+        let types = Arc::clone(&request.custom_types);
+        let mut images = ImageStore::builder()
+            .map_images(Arc::new(MapImages::new(move |path| {
+                let map = bt_tmx::Loader::builder()
+                    .custom_types(Arc::clone(&types))
+                    .build()
+                    .load_map(path)
+                    .map_err(|error| error.to_string())?
+                    .value;
+                let background = map.background_color.unwrap_or(Color::rgba(0, 0, 0, 0));
+                Ok(Render::of(Arc::new(map))
+                    .background(background)
+                    .objects(ObjectStyle::default().custom_types(&types)))
+            })))
+            .build()
+            .map_err(|error| Error::NoPicture {
+                why: error.to_string(),
+            })?;
         let picture = Render::of(Arc::new(map))
             .view(origin, size.as_uvec2())
             .scale(scale)
             .background(source.background_color.unwrap_or(BACKDROP))
             .objects(ObjectStyle::default().custom_types(&request.custom_types))
             .vectors(Arc::from(vectors))
-            .run(device)
+            .run_with_images(device, &mut images)
             .map_err(|error| Error::NoPicture {
                 why: error.to_string(),
             })?;
