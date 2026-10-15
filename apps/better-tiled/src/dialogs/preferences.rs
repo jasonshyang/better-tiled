@@ -5,7 +5,8 @@
 
 use bt_core::Color;
 use bt_editor::{
-    ACTIONS, ActionId, Chord, Editor, Intent, Keymap, ObjectSelection, SettingColor, Settings,
+    ACTIONS, ActionId, Chord, Editor, FileRequest, Intent, Keymap, ObjectSelection, SettingColor,
+    Settings,
 };
 
 use super::form::{ButtonsAnswer, DialogKeys, choice, dialog_buttons};
@@ -40,6 +41,7 @@ const OBJECT_SELECTIONS: [(ObjectSelection, &str); 3] = [
 /// The dialog's state: the preferences being edited.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PreferencesDialog {
+    dialog: u64,
     draft: Settings,
     /// The draft's key bindings, which the Keyboard page edits.
     keymap: Keymap,
@@ -50,12 +52,14 @@ pub(crate) struct PreferencesDialog {
     /// The Keyboard page's search field was given the keyboard.
     find_focused: bool,
     mac: bool,
+    scheme_status: Option<Result<String, String>>,
 }
 
 impl PreferencesDialog {
     /// The dialog over the editor's preferences.
-    pub(crate) fn new(editor: &Editor) -> PreferencesDialog {
+    pub(crate) fn new(editor: &Editor, dialog: u64) -> PreferencesDialog {
         PreferencesDialog {
+            dialog,
             draft: editor.settings().clone(),
             keymap: editor.keymap().clone(),
             page: Page::General,
@@ -63,11 +67,17 @@ impl PreferencesDialog {
             recording: None,
             find_focused: false,
             mac: editor.keymap().is_mac(),
+            scheme_status: None,
         }
     }
 
     /// Shows the dialog; OK sends the preferences to `out`. Whether it closed.
-    pub(crate) fn show(&mut self, ctx: &egui::Context, out: &mut Vec<Intent>) -> bool {
+    pub(crate) fn show(
+        &mut self,
+        ctx: &egui::Context,
+        out: &mut Vec<Intent>,
+        requests: &mut Vec<FileRequest>,
+    ) -> bool {
         if self.recording.is_some() {
             self.record_key(ctx);
         }
@@ -93,7 +103,7 @@ impl PreferencesDialog {
             match self.page {
                 Page::General => self.general(ui),
                 Page::Interface => self.interface(ui),
-                Page::Keyboard => self.keyboard(ui),
+                Page::Keyboard => self.keyboard(ui, requests),
                 Page::Theme => self.theme(ui),
             }
             ui.separator();
@@ -214,7 +224,29 @@ impl PreferencesDialog {
         });
     }
 
-    fn keyboard(&mut self, ui: &mut egui::Ui) {
+    fn keyboard(&mut self, ui: &mut egui::Ui, requests: &mut Vec<FileRequest>) {
+        ui.horizontal(|ui| {
+            if ui.button("Import Shortcuts…").clicked() {
+                requests.push(FileRequest::ImportShortcuts {
+                    dialog: self.dialog,
+                });
+            }
+            if ui.button("Export Shortcuts…").clicked() {
+                requests.push(FileRequest::ExportShortcuts {
+                    scheme: self.keymap.to_kms(),
+                });
+            }
+        });
+        if let Some(status) = &self.scheme_status {
+            match status {
+                Ok(text) => {
+                    ui.label(text);
+                }
+                Err(text) => {
+                    ui.colored_label(ui.visuals().error_fg_color, text);
+                }
+            }
+        }
         let keymap = self.keymap.clone();
         ui.horizontal(|ui| {
             ui.label("Find");
@@ -301,6 +333,33 @@ impl PreferencesDialog {
             self.keymap = edited;
             self.draft.keymap = self.keymap.to_settings();
         }
+    }
+
+    /// The dialog instance that owns an asynchronous import.
+    pub(crate) fn id(&self) -> u64 {
+        self.dialog
+    }
+
+    /// Imports into the draft; Cancel still discards all changes.
+    pub(crate) fn import_shortcuts(&mut self, text: Result<String, String>) {
+        self.scheme_status = Some(
+            text.and_then(|text| {
+                self.keymap
+                    .import_kms(&text)
+                    .map_err(|error| error.to_string())
+            })
+            .map(|report| {
+                self.draft.keymap = self.keymap.to_settings();
+                let mut message = format!("Imported {} commands", report.imported);
+                if !report.unknown_actions.is_empty() {
+                    message.push_str(&format!(
+                        "; unknown actions: {}",
+                        report.unknown_actions.join(", ")
+                    ));
+                }
+                message
+            }),
+        );
     }
 
     /// Takes the frame's first key press as the recorded command's key.

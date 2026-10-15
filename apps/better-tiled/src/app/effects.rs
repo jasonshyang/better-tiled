@@ -7,7 +7,7 @@ use bt_editor::{Dialog, Effect, Intent, Notice};
 use super::frame::App;
 use crate::dialogs::{
     ChooseLayerDialog, CustomTypesDialog, Modal, NewMapDialog, NewTilesetDialog, OffsetMapDialog,
-    PaletteDialog, PreferencesDialog, ResizeMapDialog,
+    PaletteDialog, ResizeMapDialog,
 };
 use crate::style::apply_theme;
 
@@ -98,12 +98,7 @@ impl App {
                 };
                 self.intents.push(Intent::PasteObjects { doc, at });
             }
-            Effect::Show(Dialog::Preferences) => {
-                self.modals
-                    .push(Modal::Preferences(Box::new(PreferencesDialog::new(
-                        &self.editor,
-                    ))))
-            }
+            Effect::Show(Dialog::Preferences) => self.modals.open_preferences(&self.editor),
             Effect::WriteSettings(settings) => {
                 apply_theme(ctx, &settings.theme);
                 self.writer

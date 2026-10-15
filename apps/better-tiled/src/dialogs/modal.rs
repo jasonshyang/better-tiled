@@ -5,12 +5,12 @@
 
 use std::path::PathBuf;
 
-use bt_editor::{Choice, Decision, Editor, Intent, Notice, Purpose, Question};
+use bt_editor::{Choice, Decision, Editor, FileRequest, Intent, Notice, Purpose, Question};
 
 use super::choose_layer::ChooseLayerDialog;
 use super::custom_types::CustomTypesDialog;
 use super::new_map::NewMapDialog;
-use super::new_tileset::{DialogRequest, NewTilesetDialog};
+use super::new_tileset::NewTilesetDialog;
 use super::offset_map::OffsetMapDialog;
 use super::palette::PaletteDialog;
 use super::preferences::PreferencesDialog;
@@ -45,12 +45,22 @@ pub(crate) enum Modal {
 #[derive(Debug, Default)]
 pub(crate) struct Modals {
     stack: Vec<Modal>,
+    next_dialog: u64,
 }
 
 impl Modals {
     /// Opens a modal over the others.
     pub(crate) fn push(&mut self, modal: Modal) {
         self.stack.push(modal);
+    }
+
+    /// Opens a Preferences draft with an identity for its asynchronous file reads.
+    pub(crate) fn open_preferences(&mut self, editor: &Editor) {
+        self.next_dialog += 1;
+        self.push(Modal::Preferences(Box::new(PreferencesDialog::new(
+            editor,
+            self.next_dialog,
+        ))));
     }
 
     /// Whether a modal is open.
@@ -84,6 +94,15 @@ impl Modals {
         }
     }
 
+    /// Delivers a scheme to the Preferences draft, without applying global settings.
+    pub(crate) fn deliver_shortcuts(&mut self, owner: u64, text: Result<String, String>) {
+        if let Some(Modal::Preferences(dialog)) = self.stack.last_mut()
+            && dialog.id() == owner
+        {
+            dialog.import_shortcuts(text);
+        }
+    }
+
     /// Shows the top modal; an answer goes to `out` and closes it, and what a dialog needs
     /// the window to do goes to `requests`.
     pub(crate) fn show(
@@ -91,7 +110,7 @@ impl Modals {
         ctx: &egui::Context,
         editor: &Editor,
         out: &mut Vec<Intent>,
-        requests: &mut Vec<DialogRequest>,
+        requests: &mut Vec<FileRequest>,
     ) {
         let Some(modal) = self.stack.last_mut() else {
             return;
@@ -102,7 +121,7 @@ impl Modals {
             Modal::Palette(palette) => palette.show(ctx, editor, out),
             Modal::NewMap(dialog) => dialog.show(ctx, out),
             Modal::NewTileset(dialog) => dialog.show(ctx, out, requests),
-            Modal::Preferences(dialog) => dialog.show(ctx, out),
+            Modal::Preferences(dialog) => dialog.show(ctx, out, requests),
             Modal::ChooseLayer(dialog) => dialog.show(ctx, editor, out),
             Modal::ResizeMap(dialog) => dialog.show(ctx, out),
             Modal::OffsetMap(dialog) => dialog.show(ctx, out),
@@ -255,6 +274,20 @@ mod tests {
     use bt_editor::DecisionId;
 
     use super::*;
+
+    #[test]
+    fn a_late_shortcut_read_cannot_change_a_new_preferences_draft() {
+        let editor = Editor::new();
+        let mut modals = Modals::default();
+        modals.open_preferences(&editor);
+        modals.stack.pop();
+        modals.open_preferences(&editor);
+        let before = modals.stack.clone();
+        modals.deliver_shortcuts(1, Ok("<mapping><shortcut id=\"Save\"/></mapping>".into()));
+        assert_eq!(modals.stack, before);
+        modals.deliver_shortcuts(2, Ok("<mapping><shortcut id=\"Save\"/></mapping>".into()));
+        assert_ne!(modals.stack, before);
+    }
 
     #[test]
     fn questions_name_what_is_unsaved() {

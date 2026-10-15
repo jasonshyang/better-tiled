@@ -8,18 +8,11 @@
 use std::path::PathBuf;
 
 use bt_core::Color;
-use bt_editor::{DocumentId, Intent, NewTileset, NewTilesetSource};
+use bt_editor::{DocumentId, FileRequest, Intent, NewTileset, NewTilesetSource};
 use bt_terrain::rpg_maker;
 use glam::UVec2;
 
 use super::form::{ButtonsAnswer, DialogKeys, dialog_buttons};
-
-/// What the dialog needs the window to do for it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum DialogRequest {
-    /// Ask for the tileset's image.
-    PickTilesetImage,
-}
 
 /// Where the tiles come from, as the dialog offers it.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -142,7 +135,7 @@ impl NewTilesetDialog {
         &mut self,
         ctx: &egui::Context,
         out: &mut Vec<Intent>,
-        requests: &mut Vec<DialogRequest>,
+        requests: &mut Vec<FileRequest>,
     ) -> bool {
         let keys = DialogKeys::take(ctx);
         let made = self.tileset();
@@ -178,7 +171,7 @@ impl NewTilesetDialog {
     }
 
     /// The fields, row by row.
-    fn show_fields(&mut self, ui: &mut egui::Ui, requests: &mut Vec<DialogRequest>) {
+    fn show_fields(&mut self, ui: &mut egui::Ui, requests: &mut Vec<FileRequest>) {
         ui.label("Name");
         if ui.text_edit_singleline(&mut self.name).changed() {
             self.name_typed = true;
@@ -218,7 +211,7 @@ impl NewTilesetDialog {
                     .unwrap_or_else(|| "none".to_owned());
                 ui.label(shown);
                 if ui.button("Browse…").clicked() {
-                    requests.push(DialogRequest::PickTilesetImage);
+                    requests.push(FileRequest::TilesetImage);
                 }
             });
             ui.end_row();

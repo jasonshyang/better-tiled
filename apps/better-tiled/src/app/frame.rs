@@ -20,7 +20,7 @@ use super::tabs::tab_strip;
 use super::toolbar::toolbar;
 use crate::canvas::{Canvas, CanvasFrame, CanvasGpu, CanvasRole};
 use crate::dev::{BenchFrame, BenchRun, DevRun, DevStep, Readiness, ScreenshotRun};
-use crate::dialogs::{DialogRequest, Modals};
+use crate::dialogs::Modals;
 use crate::files::{BackgroundWriter, FileDialogs, WATCH_INTERVAL, Watcher, dropped_files};
 use crate::focus::{enforce_focus, is_typing, shortcuts};
 use crate::live::LiveLink;
@@ -930,6 +930,25 @@ impl eframe::App for App {
         let finished = self.workers.take_results();
         for intent in finished {
             match intent {
+                Intent::ShortcutsRead { dialog, result } => {
+                    self.modals.deliver_shortcuts(dialog, result)
+                }
+                Intent::FilePicked {
+                    request: FileRequest::ImportShortcuts { dialog },
+                    path,
+                } => {
+                    if let Some(path) = path {
+                        self.start_shortcut_import(dialog, path);
+                    }
+                }
+                Intent::FilePicked {
+                    request: FileRequest::ExportShortcuts { scheme },
+                    path,
+                } => {
+                    if let Some(path) = path {
+                        self.start_shortcut_export(path, scheme);
+                    }
+                }
                 // The New Tileset dialog's own question.
                 Intent::FilePicked {
                     request: FileRequest::TilesetImage,
@@ -986,15 +1005,8 @@ impl eframe::App for App {
         self.modals
             .show(&ctx, &self.editor, &mut self.intents, &mut requests);
         for request in requests {
-            match request {
-                DialogRequest::PickTilesetImage => {
-                    let asked = self
-                        .file_dialogs
-                        .ask(&mut self.workers, FileRequest::TilesetImage);
-                    if let Err(problem) = asked {
-                        self.notify(Notice::error(problem));
-                    }
-                }
+            if let Err(problem) = self.file_dialogs.ask(&mut self.workers, request) {
+                self.notify(Notice::error(problem));
             }
         }
         self.apply_intents(&ctx);

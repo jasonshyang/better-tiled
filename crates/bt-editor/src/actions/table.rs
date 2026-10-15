@@ -55,8 +55,10 @@ pub enum ActionKind {
 pub struct ActionSpec {
     /// Its id.
     pub id: ActionId,
-    /// Its stable name, in settings and `.kms` files: `save_as`.
+    /// Its stable name in settings: `save_as`.
     pub name: &'static str,
+    /// The equivalent action id in Tiled keyboard mapping schemes.
+    pub tiled_id: Option<&'static str>,
     /// What menus show.
     pub label: &'static str,
     /// More words the palette matches.
@@ -86,6 +88,7 @@ impl ActionSpec {
         ActionSpec {
             id,
             name,
+            tiled_id: None,
             label,
             keywords,
             context: Context::Always,
@@ -94,6 +97,14 @@ impl ActionSpec {
             kind: ActionKind::Command,
             repeats: false,
             text_edit: false,
+        }
+    }
+
+    /// Uses Tiled’s stable command id for shortcut interchange.
+    const fn tiled(self, id: &'static str) -> ActionSpec {
+        ActionSpec {
+            tiled_id: Some(id),
+            ..self
         }
     }
 
@@ -230,118 +241,118 @@ use Context::{Document, Map, ObjectLayer, TileLayer};
 
 action_table! {
     /// Make a new map.
-    NewMap => ActionSpec::new(ActionId::NewMap, "new_map", "New Map…", "file create")
+    NewMap => ActionSpec::new(ActionId::NewMap, "new_map", "New Map…", "file create").tiled("NewMap")
         .keys(&[cmd('n')]),
     /// Make a new tileset.
-    NewTileset => ActionSpec::new(ActionId::NewTileset, "new_tileset", "New Tileset…", "file create tiles image")
+    NewTileset => ActionSpec::new(ActionId::NewTileset, "new_tileset", "New Tileset…", "file create tiles image").tiled("NewTileset")
         .on(Map),
     /// Open a file.
-    Open => ActionSpec::new(ActionId::Open, "open", "Open…", "file load").keys(&[cmd('o')]),
+    Open => ActionSpec::new(ActionId::Open, "open", "Open…", "file load").tiled("Open").keys(&[cmd('o')]),
     /// Save the current document.
-    Save => ActionSpec::new(ActionId::Save, "save", "Save", "file write")
+    Save => ActionSpec::new(ActionId::Save, "save", "Save", "file write").tiled("Save")
         .on(Document)
         .keys(&[cmd('s')]),
     /// Save the current document to another file.
-    SaveAs => ActionSpec::new(ActionId::SaveAs, "save_as", "Save As…", "file write rename")
+    SaveAs => ActionSpec::new(ActionId::SaveAs, "save_as", "Save As…", "file write rename").tiled("SaveAs")
         .on(Document)
         .keys(&[cmd_shift('s')]),
     /// Repeat the Godot export.
-    Export => ActionSpec::new(ActionId::Export, "export", "Export to Godot", "file godot scene").on(Map).keys(&[cmd('e')]),
+    Export => ActionSpec::new(ActionId::Export, "export", "Export to Godot", "file godot scene").tiled("Export").on(Map).keys(&[cmd('e')]),
     /// Choose a Godot scene target.
-    ExportAs => ActionSpec::new(ActionId::ExportAs, "export_as", "Export As…", "file godot scene").on(Map).keys(&[cmd_shift('e')]),
+    ExportAs => ActionSpec::new(ActionId::ExportAs, "export_as", "Export As…", "file godot scene").tiled("ExportAs").on(Map).keys(&[cmd_shift('e')]),
     /// Configure Godot export for this project.
     GodotSetup => ActionSpec::new(ActionId::GodotSetup, "godot_setup", "Godot Setup…", "file project godot").on(Map),
     /// Import and load the export in Godot.
     VerifyGodot => ActionSpec::new(ActionId::VerifyGodot, "verify_godot", "Verify in Godot", "file godot check scene").on(Map),
     /// Save everything unsaved.
-    SaveAll => ActionSpec::new(ActionId::SaveAll, "save_all", "Save All", "file write every")
+    SaveAll => ActionSpec::new(ActionId::SaveAll, "save_all", "Save All", "file write every").tiled("SaveAll")
         .keys(&[cmd_alt('s')]),
     /// Close the current document.
-    Close => ActionSpec::new(ActionId::Close, "close", "Close", "tab document")
+    Close => ActionSpec::new(ActionId::Close, "close", "Close", "tab document").tiled("Close")
         .on(Document)
         .keys(&[cmd('w')]),
     /// The preferences.
-    Preferences => ActionSpec::new(ActionId::Preferences, "preferences", "Preferences…", "settings options keyboard shortcuts")
+    Preferences => ActionSpec::new(ActionId::Preferences, "preferences", "Preferences…", "settings options keyboard shortcuts").tiled("Preferences")
         .keys_by_platform(&[], &[cmd(',')]),
     /// Quit.
-    Quit => ActionSpec::new(ActionId::Quit, "quit", "Quit", "exit").keys(&[cmd('q')]),
+    Quit => ActionSpec::new(ActionId::Quit, "quit", "Quit", "exit").tiled("Quit").keys(&[cmd('q')]),
     /// Undo in the current document.
-    Undo => ActionSpec::new(ActionId::Undo, "undo", "Undo", "history back")
+    Undo => ActionSpec::new(ActionId::Undo, "undo", "Undo", "history back").tiled("Undo")
         .on(Document)
         .keys(&[cmd('z')])
         .repeating()
         .text_edit(),
     /// Redo in the current document.
-    Redo => ActionSpec::new(ActionId::Redo, "redo", "Redo", "history forward")
+    Redo => ActionSpec::new(ActionId::Redo, "redo", "Redo", "history forward").tiled("Redo")
         .on(Document)
         .keys_by_platform(&[cmd('y'), cmd_shift('z')], &[cmd_shift('z')])
         .repeating()
         .text_edit(),
     /// Cut the selected tiles or objects.
-    Cut => ActionSpec::new(ActionId::Cut, "cut", "Cut", "clipboard")
+    Cut => ActionSpec::new(ActionId::Cut, "cut", "Cut", "clipboard").tiled("Cut")
         .on(Document)
         .keys(&[cmd('x')])
         .text_edit(),
     /// Copy the selected tiles or objects.
-    Copy => ActionSpec::new(ActionId::Copy, "copy", "Copy", "clipboard")
+    Copy => ActionSpec::new(ActionId::Copy, "copy", "Copy", "clipboard").tiled("Copy")
         .on(Document)
         .keys(&[cmd('c')])
         .text_edit(),
     /// Take what was copied as the brush, or paste objects under the pointer.
-    Paste => ActionSpec::new(ActionId::Paste, "paste", "Paste", "clipboard")
+    Paste => ActionSpec::new(ActionId::Paste, "paste", "Paste", "clipboard").tiled("Paste")
         .on(Document)
         .keys(&[cmd('v')])
         .text_edit(),
     /// Paste where it was copied from.
-    PasteInPlace => ActionSpec::new(ActionId::PasteInPlace, "paste_in_place", "Paste in Place", "clipboard same position")
+    PasteInPlace => ActionSpec::new(ActionId::PasteInPlace, "paste_in_place", "Paste in Place", "clipboard same position").tiled("PasteInPlace")
         .on(Document)
         .keys(&[cmd_shift('v')]),
     /// Delete the selected tiles or objects.
-    Delete => ActionSpec::new(ActionId::Delete, "delete", "Delete", "remove erase clear")
+    Delete => ActionSpec::new(ActionId::Delete, "delete", "Delete", "remove erase clear").tiled("Delete")
         .on(Document)
         .keys(&[named(Key::Delete), named(Key::Backspace)])
         .text_edit(),
     /// Select every tile of the layer, or every object.
-    SelectAll => ActionSpec::new(ActionId::SelectAll, "select_all", "Select All", "selection everything")
+    SelectAll => ActionSpec::new(ActionId::SelectAll, "select_all", "Select All", "selection everything").tiled("SelectAll")
         .on(Document)
         .keys(&[cmd('a')])
         .text_edit(),
     /// Select nothing.
-    SelectNone => ActionSpec::new(ActionId::SelectNone, "select_none", "Select None", "selection clear deselect")
+    SelectNone => ActionSpec::new(ActionId::SelectNone, "select_none", "Select None", "selection clear deselect").tiled("SelectNone")
         .on(Document)
         .keys(&[cmd_shift('a')]),
     /// Select the tiles or objects of the current layer that are not selected.
-    InvertSelection => ActionSpec::new(ActionId::InvertSelection, "invert_selection", "Invert Selection", "selection inverse")
+    InvertSelection => ActionSpec::new(ActionId::InvertSelection, "invert_selection", "Invert Selection", "selection inverse").tiled("SelectInverse")
         .on(Document)
         .keys(&[cmd('i')]),
     /// Find a command by name.
-    SearchActions => ActionSpec::new(ActionId::SearchActions, "search_actions", "Search Actions…", "palette command find")
+    SearchActions => ActionSpec::new(ActionId::SearchActions, "search_actions", "Search Actions…", "palette command find").tiled("SearchActions")
         .keys(&[cmd_shift('p')]),
     /// Zoom in.
-    ZoomIn => ActionSpec::new(ActionId::ZoomIn, "zoom_in", "Zoom In", "view bigger")
+    ZoomIn => ActionSpec::new(ActionId::ZoomIn, "zoom_in", "Zoom In", "view bigger").tiled("ZoomIn")
         .on(Document)
         .keys(&[cmd('=')])
         .repeating(),
     /// Zoom out.
-    ZoomOut => ActionSpec::new(ActionId::ZoomOut, "zoom_out", "Zoom Out", "view smaller")
+    ZoomOut => ActionSpec::new(ActionId::ZoomOut, "zoom_out", "Zoom Out", "view smaller").tiled("ZoomOut")
         .on(Document)
         .keys(&[cmd('-')])
         .repeating(),
     /// Zoom to 100 %.
-    ZoomNormal => ActionSpec::new(ActionId::ZoomNormal, "zoom_normal", "Normal Size", "view 100 actual pixels")
+    ZoomNormal => ActionSpec::new(ActionId::ZoomNormal, "zoom_normal", "Normal Size", "view 100 actual pixels").tiled("ZoomNormal")
         .on(Document)
         .keys(&[cmd('0')]),
     /// Fit the map in the view.
-    FitInView => ActionSpec::new(ActionId::FitInView, "fit_in_view", "Fit Map in View", "view whole")
+    FitInView => ActionSpec::new(ActionId::FitInView, "fit_in_view", "Fit Map in View", "view whole").tiled("FitInView")
         .on(Document)
         .keys(&[cmd('/')]),
     /// Show or hide the tile grid.
-    ShowGrid => ActionSpec::new(ActionId::ShowGrid, "show_grid", "Show Grid", "view tiles lines")
+    ShowGrid => ActionSpec::new(ActionId::ShowGrid, "show_grid", "Show Grid", "view tiles lines").tiled("ShowGrid")
         .on(Document)
         .keys(&[cmd('g')])
         .toggle(),
     /// Tiled's Highlight Current Layer.
-    HighlightCurrentLayer => ActionSpec::new(ActionId::HighlightCurrentLayer, "highlight_current_layer", "Highlight Current Layer", "view layer fade")
+    HighlightCurrentLayer => ActionSpec::new(ActionId::HighlightCurrentLayer, "highlight_current_layer", "Highlight Current Layer", "view layer fade").tiled("HighlightCurrentLayer")
         .on(Document)
         .keys(&[plain('h')])
         .toggle(),
@@ -350,22 +361,22 @@ action_table! {
         .on(Map)
         .toggle(),
     /// The project's classes and enums.
-    CustomTypesEditor => ActionSpec::new(ActionId::CustomTypesEditor, "custom_types_editor", "Custom Types Editor", "classes enums project property types")
+    CustomTypesEditor => ActionSpec::new(ActionId::CustomTypesEditor, "custom_types_editor", "Custom Types Editor", "classes enums project property types").tiled("CustomTypesEditor")
         .on(Document),
     /// Objects go where they are put.
-    SnapNone => ActionSpec::new(ActionId::SnapNone, "snap_none", "No Snapping", "snapping free")
+    SnapNone => ActionSpec::new(ActionId::SnapNone, "snap_none", "No Snapping", "snapping free").tiled("SnapNothing")
         .on(Map)
         .toggle(),
     /// Objects snap to the tile grid.
-    SnapToGrid => ActionSpec::new(ActionId::SnapToGrid, "snap_to_grid", "Snap to Grid", "snapping tiles")
+    SnapToGrid => ActionSpec::new(ActionId::SnapToGrid, "snap_to_grid", "Snap to Grid", "snapping tiles").tiled("SnapToGrid")
         .on(Map)
         .toggle(),
     /// Objects snap to the fine grid.
-    SnapToFineGrid => ActionSpec::new(ActionId::SnapToFineGrid, "snap_to_fine_grid", "Snap to Fine Grid", "snapping subdivisions")
+    SnapToFineGrid => ActionSpec::new(ActionId::SnapToFineGrid, "snap_to_fine_grid", "Snap to Fine Grid", "snapping subdivisions").tiled("SnapToFineGrid")
         .on(Map)
         .toggle(),
     /// Objects snap to whole pixels.
-    SnapToPixels => ActionSpec::new(ActionId::SnapToPixels, "snap_to_pixels", "Snap to Pixels", "snapping whole")
+    SnapToPixels => ActionSpec::new(ActionId::SnapToPixels, "snap_to_pixels", "Snap to Pixels", "snapping whole").tiled("SnapToPixels")
         .on(Map)
         .toggle(),
     /// The next tab.
@@ -383,112 +394,112 @@ action_table! {
             &[Chord::with(CONTROL_SHIFT, Key::Tab), cmd_shift('[')],
         ),
     /// Change the map's size.
-    ResizeMap => ActionSpec::new(ActionId::ResizeMap, "resize_map", "Resize Map…", "size grow shrink canvas")
+    ResizeMap => ActionSpec::new(ActionId::ResizeMap, "resize_map", "Resize Map…", "size grow shrink canvas").tiled("ResizeMap")
         .on(Map),
     /// Shift the map's contents.
-    OffsetMap => ActionSpec::new(ActionId::OffsetMap, "offset_map", "Offset Map…", "move shift wrap")
+    OffsetMap => ActionSpec::new(ActionId::OffsetMap, "offset_map", "Offset Map…", "move shift wrap").tiled("OffsetMap")
         .on(Map),
     /// Cut the map down to the selection.
-    CropToSelection => ActionSpec::new(ActionId::CropToSelection, "crop_to_selection", "Crop to Selection", "resize size")
+    CropToSelection => ActionSpec::new(ActionId::CropToSelection, "crop_to_selection", "Crop to Selection", "resize size").tiled("CropToSelection")
         .on(Map),
     /// Cut the map down to what its tiles use.
-    Autocrop => ActionSpec::new(ActionId::Autocrop, "autocrop", "Autocrop", "resize size trim")
+    Autocrop => ActionSpec::new(ActionId::Autocrop, "autocrop", "Autocrop", "resize size trim").tiled("Autocrop")
         .on(Map),
     /// Run the map's rules over the selection, or the whole map.
-    AutoMap => ActionSpec::new(ActionId::AutoMap, "automap", "AutoMap", "rules automapping run")
+    AutoMap => ActionSpec::new(ActionId::AutoMap, "automap", "AutoMap", "rules automapping run").tiled("AutoMap")
         .on(Map)
         .keys(&[cmd('m')]),
     /// Keep the rules' result apart from what was painted, made again after every change.
-    LiveAutoMap => ActionSpec::new(ActionId::LiveAutoMap, "live_automap", "Live AutoMap", "automap layers rules while drawing non-destructive")
+    LiveAutoMap => ActionSpec::new(ActionId::LiveAutoMap, "live_automap", "Live AutoMap", "automap layers rules while drawing non-destructive").tiled("AutoMapWhileDrawing")
         .on(Map)
         .toggle(),
     /// Add a tileset file to the map.
-    AddExternalTileset => ActionSpec::new(ActionId::AddExternalTileset, "add_external_tileset", "Add External Tileset…", "tsx file")
+    AddExternalTileset => ActionSpec::new(ActionId::AddExternalTileset, "add_external_tileset", "Add External Tileset…", "tsx file").tiled("AddExternalTileset")
         .on(Map),
     /// The map's properties.
-    MapProperties => ActionSpec::new(ActionId::MapProperties, "map_properties", "Map Properties…", "attributes custom")
+    MapProperties => ActionSpec::new(ActionId::MapProperties, "map_properties", "Map Properties…", "attributes custom").tiled("MapProperties")
         .on(Map),
     /// Add a tile layer.
-    NewTileLayer => ActionSpec::new(ActionId::NewTileLayer, "new_tile_layer", "New Tile Layer", "add layer")
+    NewTileLayer => ActionSpec::new(ActionId::NewTileLayer, "new_tile_layer", "New Tile Layer", "add layer").tiled("AddTileLayer")
         .on(Map),
     /// Add an object layer.
-    NewObjectLayer => ActionSpec::new(ActionId::NewObjectLayer, "new_object_layer", "New Object Layer", "add layer group objects")
+    NewObjectLayer => ActionSpec::new(ActionId::NewObjectLayer, "new_object_layer", "New Object Layer", "add layer group objects").tiled("AddObjectLayer")
         .on(Map),
     /// Add an image layer.
-    NewImageLayer => ActionSpec::new(ActionId::NewImageLayer, "new_image_layer", "New Image Layer", "add layer picture")
+    NewImageLayer => ActionSpec::new(ActionId::NewImageLayer, "new_image_layer", "New Image Layer", "add layer picture").tiled("AddImageLayer")
         .on(Map),
     /// Add a group layer.
-    NewGroupLayer => ActionSpec::new(ActionId::NewGroupLayer, "new_group_layer", "New Group Layer", "add layer folder")
+    NewGroupLayer => ActionSpec::new(ActionId::NewGroupLayer, "new_group_layer", "New Group Layer", "add layer folder").tiled("AddGroupLayer")
         .on(Map),
     /// Copy the selection into a new layer.
-    LayerViaCopy => ActionSpec::new(ActionId::LayerViaCopy, "layer_via_copy", "Layer via Copy", "new layer selection")
+    LayerViaCopy => ActionSpec::new(ActionId::LayerViaCopy, "layer_via_copy", "Layer via Copy", "new layer selection").tiled("LayerViaCopy")
         .on(Map)
         .keys(&[cmd('j')]),
     /// Move the selection into a new layer.
-    LayerViaCut => ActionSpec::new(ActionId::LayerViaCut, "layer_via_cut", "Layer via Cut", "new layer selection")
+    LayerViaCut => ActionSpec::new(ActionId::LayerViaCut, "layer_via_cut", "Layer via Cut", "new layer selection").tiled("LayerViaCut")
         .on(Map)
         .keys(&[cmd_shift('j')]),
     /// Put the selected layers in a group.
-    GroupLayers => ActionSpec::new(ActionId::GroupLayers, "group_layers", "Group Layers", "folder")
+    GroupLayers => ActionSpec::new(ActionId::GroupLayers, "group_layers", "Group Layers", "folder").tiled("GroupLayers")
         .on(Map),
     /// Take the selected groups' layers out of them.
-    UngroupLayers => ActionSpec::new(ActionId::UngroupLayers, "ungroup_layers", "Ungroup Layers", "folder")
+    UngroupLayers => ActionSpec::new(ActionId::UngroupLayers, "ungroup_layers", "Ungroup Layers", "folder").tiled("UngroupLayers")
         .on(Map),
     /// Copy the selected layers.
-    DuplicateLayers => ActionSpec::new(ActionId::DuplicateLayers, "duplicate_layers", "Duplicate Layers", "copy clone")
+    DuplicateLayers => ActionSpec::new(ActionId::DuplicateLayers, "duplicate_layers", "Duplicate Layers", "copy clone").tiled("DuplicateLayers")
         .on(Map)
         .keys(&[cmd_shift('d')]),
     /// Merge the current layer into the one below.
-    MergeLayerDown => ActionSpec::new(ActionId::MergeLayerDown, "merge_layer_down", "Merge Layer Down", "combine flatten")
+    MergeLayerDown => ActionSpec::new(ActionId::MergeLayerDown, "merge_layer_down", "Merge Layer Down", "combine flatten").tiled("MergeLayersDown")
         .on(Map),
     /// Remove the selected layers.
-    RemoveLayers => ActionSpec::new(ActionId::RemoveLayers, "remove_layers", "Remove Layers", "delete")
+    RemoveLayers => ActionSpec::new(ActionId::RemoveLayers, "remove_layers", "Remove Layers", "delete").tiled("RemoveLayers")
         .on(Map),
     /// Make the layer below current.
-    SelectPreviousLayer => ActionSpec::new(ActionId::SelectPreviousLayer, "select_previous_layer", "Select Previous Layer", "below down")
+    SelectPreviousLayer => ActionSpec::new(ActionId::SelectPreviousLayer, "select_previous_layer", "Select Previous Layer", "below down").tiled("SelectPreviousLayer")
         .on(Map)
         .keys(&[cmd_named(Key::PageDown)])
         .repeating(),
     /// Make the layer above current.
-    SelectNextLayer => ActionSpec::new(ActionId::SelectNextLayer, "select_next_layer", "Select Next Layer", "above up")
+    SelectNextLayer => ActionSpec::new(ActionId::SelectNextLayer, "select_next_layer", "Select Next Layer", "above up").tiled("SelectNextLayer")
         .on(Map)
         .keys(&[cmd_named(Key::PageUp)])
         .repeating(),
     /// Select every layer.
-    SelectAllLayers => ActionSpec::new(ActionId::SelectAllLayers, "select_all_layers", "Select All Layers", "every")
+    SelectAllLayers => ActionSpec::new(ActionId::SelectAllLayers, "select_all_layers", "Select All Layers", "every").tiled("SelectAllLayers")
         .on(Map)
         .keys(&[cmd_alt('a')]),
     /// Move the selected layers up.
-    RaiseLayers => ActionSpec::new(ActionId::RaiseLayers, "raise_layers", "Raise Layers", "move up order")
+    RaiseLayers => ActionSpec::new(ActionId::RaiseLayers, "raise_layers", "Raise Layers", "move up order").tiled("MoveLayersUp")
         .on(Map)
         .keys(&[cmd_shift_named(Key::Up)])
         .repeating(),
     /// Move the selected layers down.
-    LowerLayers => ActionSpec::new(ActionId::LowerLayers, "lower_layers", "Lower Layers", "move down order")
+    LowerLayers => ActionSpec::new(ActionId::LowerLayers, "lower_layers", "Lower Layers", "move down order").tiled("MoveLayersDown")
         .on(Map)
         .keys(&[cmd_shift_named(Key::Down)])
         .repeating(),
     /// Show or hide the selected layers.
-    ToggleSelectedLayers => ActionSpec::new(ActionId::ToggleSelectedLayers, "toggle_selected_layers", "Show/Hide Selected Layers", "visibility visible")
+    ToggleSelectedLayers => ActionSpec::new(ActionId::ToggleSelectedLayers, "toggle_selected_layers", "Show/Hide Selected Layers", "visibility visible").tiled("ToggleSelectedLayers")
         .on(Map)
         .keys_by_platform(&[cmd('h')], &[]),
     /// Lock or unlock the selected layers.
-    ToggleLockSelectedLayers => ActionSpec::new(ActionId::ToggleLockSelectedLayers, "toggle_lock_selected_layers", "Lock/Unlock Selected Layers", "locked")
+    ToggleLockSelectedLayers => ActionSpec::new(ActionId::ToggleLockSelectedLayers, "toggle_lock_selected_layers", "Lock/Unlock Selected Layers", "locked").tiled("ToggleLockSelectedLayers")
         .on(Map)
         .keys(&[cmd('l')]),
     /// Show or hide every other layer.
-    ToggleOtherLayers => ActionSpec::new(ActionId::ToggleOtherLayers, "toggle_other_layers", "Show/Hide Other Layers", "visibility visible solo")
+    ToggleOtherLayers => ActionSpec::new(ActionId::ToggleOtherLayers, "toggle_other_layers", "Show/Hide Other Layers", "visibility visible solo").tiled("ToggleOtherLayers")
         .on(Map)
         .keys(&[cmd_shift('h')]),
     /// Lock or unlock every other layer.
-    ToggleLockOtherLayers => ActionSpec::new(ActionId::ToggleLockOtherLayers, "toggle_lock_other_layers", "Lock/Unlock Other Layers", "locked")
+    ToggleLockOtherLayers => ActionSpec::new(ActionId::ToggleLockOtherLayers, "toggle_lock_other_layers", "Lock/Unlock Other Layers", "locked").tiled("ToggleLockOtherLayers")
         .on(Map)
         .keys(&[cmd_shift('l')]),
     /// The current layer's properties.
-    LayerProperties => ActionSpec::new(ActionId::LayerProperties, "layer_properties", "Layer Properties…", "attributes custom")
+    LayerProperties => ActionSpec::new(ActionId::LayerProperties, "layer_properties", "Layer Properties…", "attributes custom").tiled("LayerProperties")
         .on(Map),
     /// Copy the selected objects.
-    DuplicateObjects => ActionSpec::new(ActionId::DuplicateObjects, "duplicate_objects", "Duplicate Objects", "copy clone")
+    DuplicateObjects => ActionSpec::new(ActionId::DuplicateObjects, "duplicate_objects", "Duplicate Objects", "copy clone").tiled("DuplicateObjects")
         .on(ObjectLayer)
         .keys(&[cmd('d')]),
     /// Edit Polygons: join the selected nodes into one.
@@ -498,19 +509,19 @@ action_table! {
     SplitSegments => ActionSpec::new(ActionId::SplitSegments, "split_segments", "Split Segments", "polygon polyline add points")
         .on(ObjectLayer),
     /// Mirror the brush, the carried tiles or the selected objects left to right.
-    FlipHorizontal => ActionSpec::new(ActionId::FlipHorizontal, "flip_horizontal", "Flip Horizontally", "mirror")
+    FlipHorizontal => ActionSpec::new(ActionId::FlipHorizontal, "flip_horizontal", "Flip Horizontally", "mirror").tiled("FlipHorizontal")
         .on(Document)
         .keys(&[plain('x')]),
     /// Mirror them top to bottom.
-    FlipVertical => ActionSpec::new(ActionId::FlipVertical, "flip_vertical", "Flip Vertically", "mirror")
+    FlipVertical => ActionSpec::new(ActionId::FlipVertical, "flip_vertical", "Flip Vertically", "mirror").tiled("FlipVertical")
         .on(Document)
         .keys(&[plain('y')]),
     /// Turn them counterclockwise.
-    RotateLeft => ActionSpec::new(ActionId::RotateLeft, "rotate_left", "Rotate Left", "turn counterclockwise")
+    RotateLeft => ActionSpec::new(ActionId::RotateLeft, "rotate_left", "Rotate Left", "turn counterclockwise").tiled("RotateLeft")
         .on(Document)
         .keys(&[shift('z')]),
     /// Turn them clockwise.
-    RotateRight => ActionSpec::new(ActionId::RotateRight, "rotate_right", "Rotate Right", "turn clockwise")
+    RotateRight => ActionSpec::new(ActionId::RotateRight, "rotate_right", "Rotate Right", "turn clockwise").tiled("RotateRight")
         .on(Document)
         .keys(&[plain('z')]),
     /// Move the selected objects up a step.
@@ -533,7 +544,7 @@ action_table! {
     MoveObjectsToLayer => ActionSpec::new(ActionId::MoveObjectsToLayer, "move_objects_to_layer", "Move Objects to Layer…", "group")
         .on(ObjectLayer),
     /// Paint a random tile of the brush in each cell.
-    RandomMode => ActionSpec::new(ActionId::RandomMode, "random_mode", "Random Mode", "brush stamp variation")
+    RandomMode => ActionSpec::new(ActionId::RandomMode, "random_mode", "Random Mode", "brush stamp variation").tiled("RandomMode")
         .on(TileLayer)
         .keys(&[plain('d')])
         .toggle(),
@@ -548,27 +559,27 @@ action_table! {
         .keys(&[plain('[')])
         .repeating(),
     /// The Brush.
-    BrushTool => ActionSpec::new(ActionId::BrushTool, "brush_tool", "Brush", "stamp paint tool")
+    BrushTool => ActionSpec::new(ActionId::BrushTool, "brush_tool", "Brush", "stamp paint tool").tiled("StampTool")
         .on(TileLayer)
         .keys(&[plain('b')])
         .tool(ToolKind::Brush),
     /// The Terrain tool.
-    TerrainTool => ActionSpec::new(ActionId::TerrainTool, "terrain_tool", "Terrain", "wang terrain brush paint tool")
+    TerrainTool => ActionSpec::new(ActionId::TerrainTool, "terrain_tool", "Terrain", "wang terrain brush paint tool").tiled("WangTool")
         .on(TileLayer)
         .keys(&[plain('t')])
         .tool(ToolKind::Terrain),
     /// The Eraser.
-    EraserTool => ActionSpec::new(ActionId::EraserTool, "eraser_tool", "Eraser", "erase delete tool")
+    EraserTool => ActionSpec::new(ActionId::EraserTool, "eraser_tool", "Eraser", "erase delete tool").tiled("EraserTool")
         .on(TileLayer)
         .keys(&[plain('e')])
         .tool(ToolKind::Eraser),
     /// Bucket Fill.
-    BucketFillTool => ActionSpec::new(ActionId::BucketFillTool, "bucket_fill_tool", "Bucket Fill", "flood paint tool")
+    BucketFillTool => ActionSpec::new(ActionId::BucketFillTool, "bucket_fill_tool", "Bucket Fill", "flood paint tool").tiled("BucketFillTool")
         .on(TileLayer)
         .keys(&[plain('f')])
         .tool(ToolKind::BucketFill),
     /// Shape Fill.
-    ShapeFillTool => ActionSpec::new(ActionId::ShapeFillTool, "shape_fill_tool", "Shape Fill", "rectangle ellipse circle paint tool")
+    ShapeFillTool => ActionSpec::new(ActionId::ShapeFillTool, "shape_fill_tool", "Shape Fill", "rectangle ellipse circle paint tool").tiled("ShapeFillTool")
         .on(TileLayer)
         .keys(&[plain('p')])
         .tool(ToolKind::ShapeFill),
@@ -578,22 +589,22 @@ action_table! {
         .keys(&[plain('i')])
         .tool(ToolKind::Picker),
     /// Rectangular Select.
-    RectSelectTool => ActionSpec::new(ActionId::RectSelectTool, "rect_select_tool", "Rectangular Select", "selection marquee tool")
+    RectSelectTool => ActionSpec::new(ActionId::RectSelectTool, "rect_select_tool", "Rectangular Select", "selection marquee tool").tiled("TileSelectionTool")
         .on(TileLayer)
         .keys(&[plain('r')])
         .tool(ToolKind::RectSelect),
     /// The Magic Wand.
-    MagicWandTool => ActionSpec::new(ActionId::MagicWandTool, "magic_wand_tool", "Magic Wand", "selection connected tool")
+    MagicWandTool => ActionSpec::new(ActionId::MagicWandTool, "magic_wand_tool", "Magic Wand", "selection connected tool").tiled("MagicWandTool")
         .on(TileLayer)
         .keys(&[plain('w')])
         .tool(ToolKind::MagicWand),
     /// Select Same Tile.
-    SameTileTool => ActionSpec::new(ActionId::SameTileTool, "same_tile_tool", "Select Same Tile", "selection tool")
+    SameTileTool => ActionSpec::new(ActionId::SameTileTool, "same_tile_tool", "Select Same Tile", "selection tool").tiled("SelectSameTileTool")
         .on(TileLayer)
         .keys(&[plain('s')])
         .tool(ToolKind::SameTile),
     /// Offset Layers.
-    OffsetLayersTool => ActionSpec::new(ActionId::OffsetLayersTool, "offset_layers_tool", "Offset Layers", "move layer tool")
+    OffsetLayersTool => ActionSpec::new(ActionId::OffsetLayersTool, "offset_layers_tool", "Offset Layers", "move layer tool").tiled("LayerOffsetTool")
         .on(Map)
         .keys(&[plain('m')])
         .tool(ToolKind::OffsetLayers),
@@ -603,47 +614,47 @@ action_table! {
         .keys(&[plain('a')])
         .tool(ToolKind::Explain),
     /// Select Objects.
-    SelectObjectsTool => ActionSpec::new(ActionId::SelectObjectsTool, "select_objects_tool", "Select Objects", "move resize rotate tool")
+    SelectObjectsTool => ActionSpec::new(ActionId::SelectObjectsTool, "select_objects_tool", "Select Objects", "move resize rotate tool").tiled("ObjectSelectionTool")
         .on(ObjectLayer)
         .keys(&[plain('s')])
         .tool(ToolKind::SelectObjects),
     /// Insert Rectangle.
-    InsertRectangleTool => ActionSpec::new(ActionId::InsertRectangleTool, "insert_rectangle_tool", "Insert Rectangle", "object box tool")
+    InsertRectangleTool => ActionSpec::new(ActionId::InsertRectangleTool, "insert_rectangle_tool", "Insert Rectangle", "object box tool").tiled("CreateRectangleObjectTool")
         .on(ObjectLayer)
         .keys(&[plain('r')])
         .tool(ToolKind::InsertRectangle),
     /// Insert Ellipse.
-    InsertEllipseTool => ActionSpec::new(ActionId::InsertEllipseTool, "insert_ellipse_tool", "Insert Ellipse", "object circle tool")
+    InsertEllipseTool => ActionSpec::new(ActionId::InsertEllipseTool, "insert_ellipse_tool", "Insert Ellipse", "object circle tool").tiled("CreateEllipseObjectTool")
         .on(ObjectLayer)
         .keys(&[plain('c')])
         .tool(ToolKind::InsertEllipse),
     /// Insert Capsule.
-    InsertCapsuleTool => ActionSpec::new(ActionId::InsertCapsuleTool, "insert_capsule_tool", "Insert Capsule", "object pill tool")
+    InsertCapsuleTool => ActionSpec::new(ActionId::InsertCapsuleTool, "insert_capsule_tool", "Insert Capsule", "object pill tool").tiled("CreateCapsuleObjectTool")
         .on(ObjectLayer)
         .keys(&[shift('c')])
         .tool(ToolKind::InsertCapsule),
     /// Insert Point.
-    InsertPointTool => ActionSpec::new(ActionId::InsertPointTool, "insert_point_tool", "Insert Point", "object marker tool")
+    InsertPointTool => ActionSpec::new(ActionId::InsertPointTool, "insert_point_tool", "Insert Point", "object marker tool").tiled("CreatePointObjectTool")
         .on(ObjectLayer)
         .keys(&[plain('i')])
         .tool(ToolKind::InsertPoint),
     /// Insert Polygon.
-    InsertPolygonTool => ActionSpec::new(ActionId::InsertPolygonTool, "insert_polygon_tool", "Insert Polygon", "object polyline line shape tool")
+    InsertPolygonTool => ActionSpec::new(ActionId::InsertPolygonTool, "insert_polygon_tool", "Insert Polygon", "object polyline line shape tool").tiled("CreatePolygonObjectTool")
         .on(ObjectLayer)
         .keys(&[plain('p')])
         .tool(ToolKind::InsertPolygon),
     /// Insert Tile.
-    InsertTileTool => ActionSpec::new(ActionId::InsertTileTool, "insert_tile_tool", "Insert Tile", "object image sprite tool")
+    InsertTileTool => ActionSpec::new(ActionId::InsertTileTool, "insert_tile_tool", "Insert Tile", "object image sprite tool").tiled("CreateTileObjectTool")
         .on(ObjectLayer)
         .keys(&[plain('t')])
         .tool(ToolKind::InsertTile),
     /// Insert Text.
-    InsertTextTool => ActionSpec::new(ActionId::InsertTextTool, "insert_text_tool", "Insert Text", "object label tool")
+    InsertTextTool => ActionSpec::new(ActionId::InsertTextTool, "insert_text_tool", "Insert Text", "object label tool").tiled("CreateTextObjectTool")
         .on(ObjectLayer)
         .keys(&[plain('e')])
         .tool(ToolKind::InsertText),
     /// Edit Polygons.
-    EditPolygonsTool => ActionSpec::new(ActionId::EditPolygonsTool, "edit_polygons_tool", "Edit Polygons", "object points nodes tool")
+    EditPolygonsTool => ActionSpec::new(ActionId::EditPolygonsTool, "edit_polygons_tool", "Edit Polygons", "object points nodes tool").tiled("EditPolygonTool")
         .on(ObjectLayer)
         .keys(&[plain('o')])
         .tool(ToolKind::EditPolygons),

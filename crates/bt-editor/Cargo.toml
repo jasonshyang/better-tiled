@@ -19,6 +19,7 @@ bt-tmx.workspace = true
 bt-utils.workspace = true
 glam.workspace = true
 log.workspace = true
+roxmltree.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
