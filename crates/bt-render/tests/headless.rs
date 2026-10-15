@@ -7,6 +7,7 @@
 mod common;
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use bt_core::{Frame, TileId};
 use bt_image::ImageStore;
@@ -278,10 +279,21 @@ fn far_out_tile_layers_are_drawn_as_impostors_that_match_the_tiles() {
         zoom: 0.25,
     };
     let frame = FrameInput::new(Arc::clone(&map), camera, UVec2::new(256, 256));
-    renderer
-        .prepare(&mut store, std::slice::from_ref(&frame))
-        .unwrap();
-    let stats = renderer.prepare(&mut store, &[frame]).unwrap();
+    // Decoding is asynchronous and impostor work has a per-frame time budget.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let stats = loop {
+        let stats = renderer
+            .prepare(&mut store, std::slice::from_ref(&frame))
+            .unwrap();
+        if stats.pending_images == 0 && stats.pending_impostors == 0 {
+            break stats;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "renderer did not settle: {stats:?}"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    };
     // The map is 1024 world pixels a side: four squares of 128 texels at a quarter.
     assert_eq!(stats.impostors, 4, "one per square");
     assert_eq!(stats.instances, 4);

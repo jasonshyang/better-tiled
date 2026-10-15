@@ -216,7 +216,7 @@ fn modifiers_of(modifiers: egui::Modifiers, mac: bool) -> Modifiers {
         }
     } else {
         Modifiers {
-            command: modifiers.ctrl,
+            command: modifiers.ctrl || modifiers.command,
             shift: modifiers.shift,
             alt: modifiers.alt,
             control: false,
@@ -378,30 +378,35 @@ mod tests {
         assert_eq!(key_of(egui::Key::OpenBracket), Some(Key::Char('[')));
         assert_eq!(key_of(egui::Key::F5), Some(Key::Function(5)));
         assert_eq!(key_of(egui::Key::Tab), Some(Key::Tab));
-        let command = egui::Modifiers::COMMAND;
-        assert!(modifiers_of(command, cfg!(target_os = "macos")).command);
+        for mac in [false, true] {
+            assert!(modifiers_of(egui::Modifiers::COMMAND, mac).command);
+        }
+        let ctrl_on_other_platforms = modifiers_of(egui::Modifiers::CTRL, false);
+        assert!(ctrl_on_other_platforms.command && !ctrl_on_other_platforms.control);
         let ctrl_on_mac = modifiers_of(egui::Modifiers::CTRL, true);
         assert!(!ctrl_on_mac.command && ctrl_on_mac.control);
     }
 
     #[test]
     fn a_shortcut_runs_its_command_once_and_is_consumed() {
-        let ctx = egui::Context::default();
-        let editor = Editor::new();
-        let mut input = egui::RawInput::default();
-        input.events.push(egui::Event::Key {
-            key: egui::Key::O,
-            physical_key: None,
-            pressed: true,
-            repeat: false,
-            modifiers: egui::Modifiers::COMMAND,
-        });
-        let mut ran = Vec::new();
-        let mut output = ctx.run_ui(input, |ui| {
-            ran = shortcuts(ui.ctx(), &editor);
-            assert!(!ui.input(|i| i.key_pressed(egui::Key::O)));
-        });
-        output.textures_delta.clear();
-        assert_eq!(ran, [ActionId::Open]);
+        for mac in [false, true] {
+            let ctx = egui::Context::default();
+            let editor = Editor::builder().mac(mac).build().unwrap();
+            let mut input = egui::RawInput::default();
+            input.events.push(egui::Event::Key {
+                key: egui::Key::O,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            });
+            let mut ran = Vec::new();
+            let mut output = ctx.run_ui(input, |ui| {
+                ran = shortcuts(ui.ctx(), &editor);
+                assert!(!ui.input(|i| i.key_pressed(egui::Key::O)));
+            });
+            output.textures_delta.clear();
+            assert_eq!(ran, [ActionId::Open]);
+        }
     }
 }
