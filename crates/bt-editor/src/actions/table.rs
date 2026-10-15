@@ -635,6 +635,20 @@ action_table! {
         .on(ObjectLayer)
         .keys(&[plain('s')])
         .tool(ToolKind::SelectObjects),
+    /// Save a selected object as a reusable template.
+    SaveAsTemplate => ActionSpec::new(ActionId::SaveAsTemplate, "save_as_template", "Save As Template…", "object template create save").on(ObjectLayer),
+    /// Edit the definition of a selected template instance.
+    EditTemplate => ActionSpec::new(ActionId::EditTemplate, "edit_template", "Edit Template", "object base definition").on(ObjectLayer),
+    /// Reset inherited fields and properties to the template base.
+    ResetTemplate => ActionSpec::new(ActionId::ResetTemplate, "reset_template", "Reset Template Instances", "object template reset overrides").on(ObjectLayer),
+    /// Keep expanded object values and remove their template links.
+    DetachTemplate => ActionSpec::new(ActionId::DetachTemplate, "detach_template", "Detach Template Instances", "object template detach unlink").on(ObjectLayer),
+    /// Replace selected objects with the chosen template, retaining positions and ids.
+    ReplaceWithTemplate => ActionSpec::new(ActionId::ReplaceWithTemplate, "replace_with_template", "Replace With Template", "object base replace").on(ObjectLayer),
+    /// Choose a different placement template.
+    ChooseTemplate => ActionSpec::new(ActionId::ChooseTemplate, "choose_template", "Choose Template…", "object template file browse").on(ObjectLayer),
+    /// Place template instances.
+    InsertTemplateTool => ActionSpec::new(ActionId::InsertTemplateTool, "insert_template_tool", "Insert Template", "object template place tool").tiled("CreateTemplateTool").on(ObjectLayer).keys(&[plain('v')]).tool(ToolKind::InsertTemplate),
     /// Insert Rectangle.
     InsertRectangleTool => ActionSpec::new(ActionId::InsertRectangleTool, "insert_rectangle_tool", "Insert Rectangle", "object box tool").tiled("CreateRectangleObjectTool")
         .on(ObjectLayer)
@@ -699,6 +713,7 @@ pub fn tool_action(tool: ToolKind) -> ActionId {
         ToolKind::InsertPoint => ActionId::InsertPointTool,
         ToolKind::InsertPolygon => ActionId::InsertPolygonTool,
         ToolKind::InsertTile => ActionId::InsertTileTool,
+        ToolKind::InsertTemplate => ActionId::InsertTemplateTool,
         ToolKind::InsertText => ActionId::InsertTextTool,
         ToolKind::EditPolygons => ActionId::EditPolygonsTool,
     }

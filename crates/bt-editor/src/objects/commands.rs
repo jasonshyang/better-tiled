@@ -267,7 +267,7 @@ impl Editor {
     /// Runs a change on the selected objects as one step labelled `label`: `on_map` on those of
     /// a map's unlocked layers (the locked layers holding the others are named), `on_shapes` on
     /// a tile's collision shapes.
-    fn on_selected_objects(
+    pub(crate) fn on_selected_objects(
         &mut self,
         doc: DocumentId,
         label: &str,

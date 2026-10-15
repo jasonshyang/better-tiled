@@ -61,6 +61,13 @@ impl Editor {
                 .collect();
         }
         if let ActionKind::Tool(tool) = id.spec().kind {
+            if tool == crate::ToolKind::InsertTemplate && self.chosen_template().is_none() {
+                return self
+                    .current()
+                    .map(|doc| Effect::PickFile(FileRequest::ObjectTemplate(doc)))
+                    .into_iter()
+                    .collect();
+            }
             self.tools.set_tool(tool);
             return Vec::new();
         }
@@ -75,6 +82,26 @@ impl Editor {
             ActionId::NewMap => vec![Effect::Show(Dialog::NewMap)],
             ActionId::NewTileset => {
                 on_document(self, &|_, doc| vec![Effect::Show(Dialog::NewTileset(doc))])
+            }
+            ActionId::ChooseTemplate => on_document(self, &|_, doc| {
+                vec![Effect::PickFile(FileRequest::ObjectTemplate(doc))]
+            }),
+            ActionId::SaveAsTemplate => on_document(self, &|editor, doc| {
+                editor
+                    .document(doc)
+                    .and_then(|doc| doc.selection().objects.first())
+                    .map(|object| {
+                        Effect::PickFile(FileRequest::SaveAsTemplate {
+                            doc,
+                            object: *object,
+                        })
+                    })
+                    .into_iter()
+                    .collect()
+            }),
+            ActionId::EditTemplate => on_document(self, &Editor::edit_instance_template),
+            ActionId::ResetTemplate | ActionId::DetachTemplate | ActionId::ReplaceWithTemplate => {
+                on_document(self, &|editor, doc| editor.edit_template_instances(doc, id))
             }
             ActionId::NewWorld => on_document(self, &|_, doc| {
                 vec![Effect::PickFile(FileRequest::NewWorld(doc))]
@@ -213,6 +240,7 @@ impl Editor {
             | ActionId::InsertPolygonTool
             | ActionId::InsertTileTool
             | ActionId::InsertTextTool
+            | ActionId::InsertTemplateTool
             | ActionId::EditPolygonsTool => Vec::new(),
             ActionId::Cut if objects => on_document(self, &Editor::cut_selected_objects),
             ActionId::Cut => on_document(self, &Editor::cut_tiles),

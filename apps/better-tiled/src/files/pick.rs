@@ -48,6 +48,20 @@ impl FileDialogs {
 /// Asks for a file on a worker.
 fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
     workers.spawn("file-dialog", move || match &request {
+        FileRequest::ObjectTemplate(_) | FileRequest::SaveAsTemplate { .. } => {
+            let dialog = rfd::AsyncFileDialog::new()
+                .set_title("Object Template")
+                .add_filter("Tiled templates", &["tx", "tj"]);
+            let picked = if matches!(request, FileRequest::ObjectTemplate(_)) {
+                pollster::block_on(dialog.pick_file())
+            } else {
+                pollster::block_on(dialog.set_file_name("object.tx").save_file())
+            };
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::NewWorld(_) => {
             let picked = pollster::block_on(
                 rfd::AsyncFileDialog::new()

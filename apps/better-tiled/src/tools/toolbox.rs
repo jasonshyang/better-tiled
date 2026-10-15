@@ -57,6 +57,7 @@ impl Default for ToolBox {
                 Box::new(InsertObject::new(InsertKind::Tile)),
                 Box::new(InsertObject::new(InsertKind::Text)),
                 Box::new(InsertPolygon::default()),
+                Box::new(super::insert_template::InsertTemplate::default()),
             ],
             active: None,
         }

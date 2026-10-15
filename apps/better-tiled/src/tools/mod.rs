@@ -9,6 +9,7 @@ mod explain;
 mod fills;
 mod insert_objects;
 mod insert_polygon;
+mod insert_template;
 mod magic_wand;
 mod offset_layers;
 mod painting;

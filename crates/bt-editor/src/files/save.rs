@@ -199,7 +199,7 @@ impl Editor {
     }
 
     /// Saves referenced definitions before their owner, reporting failures individually.
-    fn save_dependencies(&mut self, asset: AssetId) -> Vec<Effect> {
+    pub(super) fn save_dependencies(&mut self, asset: AssetId) -> Vec<Effect> {
         let mut effects = Vec::new();
         for dependency in self.store.dependencies_of(asset) {
             let Some(source) = self.store.get(dependency).filter(|asset| asset.is_dirty()) else {

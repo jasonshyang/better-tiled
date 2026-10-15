@@ -183,6 +183,7 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::PlaceTemplate { doc, at, snap } => self.place_template(doc, at, snap),
             Intent::SetWorld { doc, world, value } => self.set_world(doc, world, *value),
             Intent::LoadWorldMaps { doc, visible } => self.load_world_maps(doc, visible),
             Intent::MoveWorldMap {

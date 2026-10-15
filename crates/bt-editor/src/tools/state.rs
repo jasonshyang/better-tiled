@@ -14,6 +14,8 @@ use super::terrain::TerrainChoice;
 pub struct ToolState {
     /// The tool in use.
     pub(crate) tool: ToolKind,
+    /// The chosen template asset, shared by the insertion tool and replacement command.
+    pub(crate) template: Option<crate::AssetId>,
     /// The tool before it, for a tool's key pressed again.
     pub(crate) previous_tool: Option<ToolKind>,
     /// The tile tool to bring back when a tile layer becomes current.
@@ -53,6 +55,7 @@ impl Default for ToolState {
     fn default() -> ToolState {
         ToolState {
             tool: ToolKind::Brush,
+            template: None,
             previous_tool: None,
             last_tile_tool: ToolKind::Brush,
             last_object_tool: ToolKind::SelectObjects,

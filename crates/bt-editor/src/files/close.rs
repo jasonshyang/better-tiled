@@ -265,6 +265,10 @@ impl Editor {
             return Vec::new();
         };
         match request {
+            FileRequest::ObjectTemplate(doc) => self.choose_template_file(doc, &path),
+            FileRequest::SaveAsTemplate { doc, object } => {
+                self.save_object_template(doc, object, &path)
+            }
             FileRequest::NewWorld(doc) => self.create_world(doc, &path),
             FileRequest::WorldMap { doc, world } => self.add_world_map(doc, world, &path),
             FileRequest::StampsFolder => {

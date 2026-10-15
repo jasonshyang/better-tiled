@@ -11,6 +11,9 @@ pub enum EditError {
     /// A template editor must retain one base object.
     #[error("a template must have exactly one base object")]
     TemplateBaseRequired,
+    /// A referenced template has no loaded definition.
+    #[error("the template {} is unavailable", .0.display())]
+    TemplateUnavailable(std::path::PathBuf),
     /// The map has no layer with this id.
     #[error("the map has no layer {0}")]
     NoSuchLayer(LayerId),

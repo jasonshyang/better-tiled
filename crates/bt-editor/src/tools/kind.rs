@@ -41,6 +41,8 @@ pub enum ToolKind {
     InsertTile,
     /// Places text.
     InsertText,
+    /// Places instances of the chosen object template.
+    InsertTemplate,
     /// Edits the points of polygons and polylines.
     EditPolygons,
     /// Explains what the AutoMap rules did at a cell.
@@ -80,6 +82,7 @@ impl ToolKind {
             | ToolKind::InsertPolygon
             | ToolKind::InsertTile
             | ToolKind::InsertText
+            | ToolKind::InsertTemplate
             | ToolKind::EditPolygons => ToolFamily::Object,
         }
     }
