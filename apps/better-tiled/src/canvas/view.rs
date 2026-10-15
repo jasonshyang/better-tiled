@@ -534,7 +534,7 @@ impl Canvas {
             .custom_types(frame.editor.custom_types())
             .line_width(frame.settings.interface.object_line_width * pixels_per_point);
         let mut input = FrameInput::new(
-            Arc::clone(frame.map),
+            Arc::clone(self.tool_overlay.map_preview.as_ref().unwrap_or(frame.map)),
             view.render_camera(),
             viewport_px(view),
         );

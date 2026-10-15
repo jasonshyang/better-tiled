@@ -25,6 +25,15 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Place the chosen template in the current object layer.
+    PlaceTemplate {
+        /// Destination map document.
+        doc: DocumentId,
+        /// Pointer in map drawing coordinates.
+        at: glam::DVec2,
+        /// Modifier adjustment to snapping.
+        snap: crate::SnapToggle,
+    },
     /// Commit the World Properties draft in the map document's history.
     SetWorld {
         /// History owner.

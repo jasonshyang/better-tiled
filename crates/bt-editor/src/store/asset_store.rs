@@ -42,7 +42,8 @@ impl AssetStore {
     }
 
     /// Adds an asset; one read from a file starts clean at version 1, a new one dirty.
-    pub fn insert(&mut self, new: NewAsset) -> AssetId {
+    pub fn insert(&mut self, mut new: NewAsset) -> AssetId {
+        new.root = self.refresh_root_references(new.root);
         self.next_id += 1;
         let id = AssetId(self.next_id);
         let on_disk = new.content_hash.map(|content_hash| OnDisk {
@@ -273,8 +274,28 @@ impl AssetStore {
         changed
     }
 
+    fn refresh_root_references(&self, mut root: Root) -> Root {
+        match &mut root {
+            Root::Map(map) => {
+                let mut references = map.tilesets.clone();
+                if self.refresh_references(&mut references) {
+                    Arc::make_mut(map).tilesets = references;
+                }
+            }
+            Root::Template(template) => {
+                let mut references = template.tilesets.clone();
+                if self.refresh_references(&mut references) {
+                    Arc::make_mut(template).tilesets = references;
+                }
+            }
+            _ => {}
+        }
+        root
+    }
+
     /// Replaces an asset's root and version (a transaction, undo or redo).
     pub(crate) fn set_root(&mut self, id: AssetId, root: Root, version: u64) {
+        let root = self.refresh_root_references(root);
         if let Some(asset) = self.assets.get_mut(&id) {
             asset.root = root;
             asset.version = version;

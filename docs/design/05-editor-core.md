@@ -687,6 +687,16 @@ with Escape. Its grid is the world's configured grid or the target map's tile si
 bypasses snapping. Arrows move the active map by grid steps, Shift by five and Command by
 pixels. Pattern placements refuse individual moves. `%worldfile` uses the containing world.
 
+Save As Template writes one selected object's definition and turns that object into an instance
+as one map transaction. Tile objects require an external tileset, matching Tiled. File properties
+are rebased when the template's folder differs. The chosen template is an asset; the V tool
+prepares a readonly map with its tileset and a translucent instance for the renderer, then
+adopts the tileset and object together on placement. Previews use projected object bounds,
+including rotated objects on isometric maps with layer offsets. Reset takes the current base;
+detach retains expanded values and rebases inherited file properties to the map's folder.
+Replace With Template retains object ids and positions. Edit Template opens the shared base,
+whose edits propagate through the existing cross-map transaction path.
+
 New World creates a file containing the current saved map. Add Map to World probes the chosen
 map on a worker, reuses its cached asset, and records its placement in the current document's
 history. World Properties edits grid, adjacency, explicit placements, filename patterns and

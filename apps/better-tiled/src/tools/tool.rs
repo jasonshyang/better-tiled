@@ -78,6 +78,8 @@ pub(crate) fn snap_toggle(modifiers: egui::Modifiers) -> SnapToggle {
 /// What a tool draws over the map.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Overlay {
+    /// A readonly map snapshot containing an object ghost and any tilesets it adopts.
+    pub(crate) map_preview: Option<Arc<Map>>,
     /// Outlines, rectangles and fills, in the map's pixels on screen.
     pub(crate) vectors: Vec<VectorItem>,
     /// The layer previewed tiles are drawn above.

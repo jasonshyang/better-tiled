@@ -62,7 +62,8 @@ fn rebase_layers(layers: &mut [Layer], from_dir: &Path, to_dir: &Path) {
     }
 }
 
-fn rebase_properties(properties: &mut Properties, from_dir: &Path, to_dir: &Path) {
+/// Rewrites nested file values in one property collection for a new owning folder.
+pub fn rebase_properties(properties: &mut Properties, from_dir: &Path, to_dir: &Path) {
     for property in properties.values_mut() {
         rebase_value(&mut property.value, from_dir, to_dir);
     }

@@ -182,6 +182,13 @@ impl TestWindow {
         self.drag_on_screen(start, end, modifiers);
     }
 
+    /// Moves the pointer over a world point without pressing a button.
+    pub(crate) fn hover_world(&mut self, at: glam::DVec2) {
+        let at = self.screen_of_world(at);
+        self.pointer(egui::Event::PointerMoved(at));
+        self.settle();
+    }
+
     /// Drags on the map from `from` to `to` in the map's screen space (world pixels, where the
     /// canvas draws) with the primary button, holding `modifiers`.
     pub(crate) fn drag_world(

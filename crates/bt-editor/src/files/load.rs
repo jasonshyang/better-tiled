@@ -56,6 +56,8 @@ pub(crate) enum LoadPurpose {
     Open,
     /// Cache a visible neighbouring map without opening a document tab.
     WorldMap(crate::store::AssetId),
+    /// Choose a template for insertion without opening an editing tab.
+    ChooseTemplate(crate::DocumentId),
     /// Probe and adopt a map before adding its rectangle to a world.
     WorldPatterns { world: crate::AssetId, version: u64 },
     /// Probe a map before adding it to a world.

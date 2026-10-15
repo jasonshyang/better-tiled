@@ -19,7 +19,7 @@ const TILE_TOOLS: [ToolKind; 9] = [
     ToolKind::SameTile,
 ];
 
-const OBJECT_TOOLS: [ToolKind; 9] = [
+const OBJECT_TOOLS: [ToolKind; 10] = [
     ToolKind::SelectObjects,
     ToolKind::EditPolygons,
     ToolKind::InsertRectangle,
@@ -29,6 +29,7 @@ const OBJECT_TOOLS: [ToolKind; 9] = [
     ToolKind::InsertPolygon,
     ToolKind::InsertTile,
     ToolKind::InsertText,
+    ToolKind::InsertTemplate,
 ];
 
 const SHAPES: [(FillShape, &str); 2] = [
@@ -52,7 +53,7 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
     let in_tileset = doc
         .and_then(|doc| editor.document(doc))
         .is_some_and(|d| d.tileset_editing().is_some());
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         let tools: &[ToolKind] = match family {
             Some(ToolFamily::Tile) => &TILE_TOOLS,
             Some(ToolFamily::Object) => &OBJECT_TOOLS,
@@ -68,7 +69,12 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
                 continue;
             }
             // The collision editor's shapes are never tiles or text, as in Tiled.
-            if in_tileset && matches!(tool, ToolKind::InsertTile | ToolKind::InsertText) {
+            if in_tileset
+                && matches!(
+                    tool,
+                    ToolKind::InsertTile | ToolKind::InsertText | ToolKind::InsertTemplate
+                )
+            {
                 continue;
             }
             tool_button(ui, editor, tool, current == tool, out);
@@ -86,6 +92,17 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
                 .clicked()
             {
                 out.push(Intent::SetTerrainFill(!terrain));
+            }
+        }
+        if current == ToolKind::InsertTemplate {
+            if let Some(asset) = editor
+                .chosen_template()
+                .and_then(|id| editor.store().get(id))
+            {
+                ui.label(asset.display_name());
+            }
+            if ui.small_button("Choose Template…").clicked() {
+                out.push(Intent::Run(ActionId::ChooseTemplate));
             }
         }
         if current == ToolKind::ShapeFill {
@@ -129,7 +146,7 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
     if let Some(world) = doc.and_then(|doc| editor.world_of(doc))
         && let Some(asset) = editor.store().get(world)
     {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let title = format!(
                 "World: {}{}",
                 asset.display_name(),

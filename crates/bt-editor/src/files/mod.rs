@@ -8,6 +8,7 @@ mod new;
 mod open;
 mod project;
 mod save;
+mod templates;
 mod worlds;
 
 use bt_tmx::Loader;

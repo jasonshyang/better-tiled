@@ -82,6 +82,9 @@ impl Editor {
                     | ActionId::DuplicateObjects
                     | ActionId::MoveObjectsToLayer
                     | ActionId::SaveAs
+                    | ActionId::SaveAsTemplate
+                    | ActionId::ChooseTemplate
+                    | ActionId::ReplaceWithTemplate
             );
             if map_command || insert_tool || changes_base_count {
                 return Enabled::Disabled(Some("The template editor edits one base object; map and insertion commands apply to its instances".into()));
@@ -109,6 +112,57 @@ impl Editor {
             })
         });
         match id {
+            ActionId::ChooseTemplate
+            | ActionId::InsertTemplateTool
+            | ActionId::SaveAsTemplate
+            | ActionId::EditTemplate
+            | ActionId::ResetTemplate
+            | ActionId::DetachTemplate
+            | ActionId::ReplaceWithTemplate
+                if editing_tileset =>
+            {
+                Enabled::Disabled(Some("Template instance commands act on map objects".into()))
+            }
+            ActionId::SaveAsTemplate => {
+                let objects = selection
+                    .map(|selection| selection.objects.as_slice())
+                    .unwrap_or_default();
+                let object = objects.first().and_then(|id| here.map?.object(*id));
+                let problem = if objects.len() != 1 {
+                    Some("Select one object to save as a template")
+                } else if object.is_some_and(|object| object.template.is_some()) {
+                    Some("Detach the instance before saving a new template")
+                } else if object
+                    .and_then(|object| object.tile)
+                    .and_then(|cell| here.map?.tilesets.get(cell.slot()?.index()))
+                    .is_some_and(|reference| reference.file.is_none())
+                {
+                    Some("Export the embedded tileset before creating a template")
+                } else {
+                    None
+                };
+                match problem {
+                    Some(problem) => Enabled::Disabled(Some(problem.into())),
+                    None => Enabled::Enabled,
+                }
+            }
+            ActionId::EditTemplate | ActionId::ResetTemplate | ActionId::DetachTemplate => {
+                let instances = selection.is_some_and(|selection| {
+                    selection.objects.iter().any(|id| {
+                        here.map
+                            .and_then(|map| map.object(*id))
+                            .is_some_and(|object| object.template.is_some())
+                    })
+                });
+                if instances {
+                    Enabled::Enabled
+                } else {
+                    Enabled::Disabled(Some("Select a template instance first".into()))
+                }
+            }
+            ActionId::ReplaceWithTemplate if self.chosen_template().is_none() || !has_objects => {
+                Enabled::Disabled(Some("Choose a template and select objects first".into()))
+            }
             ActionId::NewWorld if self.current().and_then(|doc| self.path_of(doc)).is_none() => {
                 Enabled::Disabled(Some("Save the map before creating its world".into()))
             }

@@ -318,3 +318,311 @@ fn cancelling_a_template_gesture_restores_every_instance_and_the_writer_cache() 
             .contains("value=\"50\"")
     );
 }
+
+#[test]
+fn save_as_template_rebases_files_and_insert_reset_detach_share_normal_history() {
+    use bt_core::{Layer, LayerId, LayerKind, ObjectId, ObjectLayer};
+    use bt_editor::{FileRequest, SnapToggle};
+    let scratch = Scratch::new("template-create-place").unwrap();
+    std::fs::create_dir_all(scratch.join("templates")).unwrap();
+    let map_path = scratch.join("map.tmx");
+    let template_path = scratch.join("templates/chest.tx");
+    let map = bt_core::Map {
+        width: 8,
+        height: 8,
+        tile_width: 16,
+        tile_height: 16,
+        next_object_id: 2,
+        next_layer_id: 2,
+        layers: vec![Layer::new(
+            LayerId(1),
+            "Objects",
+            LayerKind::Object(ObjectLayer {
+                objects: vec![MapObject {
+                    id: ObjectId(1),
+                    name: "Chest".into(),
+                    pos: DVec2::new(16.0, 16.0),
+                    size: DVec2::splat(16.0),
+                    properties: bt_core::Properties::from([(
+                        "script".into(),
+                        Property::new(Value::File("chest.lua".into())),
+                    )]),
+                    ..MapObject::default()
+                }]
+                .into(),
+                ..ObjectLayer::default()
+            }),
+        )],
+        ..bt_core::Map::default()
+    };
+    bt_tmx::WriteRequest::for_map(&map, &map_path)
+        .write()
+        .unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(map_path.clone()));
+    let doc = editor.current().unwrap();
+    apply(
+        &mut editor,
+        Intent::FilePicked {
+            request: FileRequest::SaveAsTemplate {
+                doc,
+                object: ObjectId(1),
+            },
+            path: Some(template_path.clone()),
+        },
+    );
+    let template = editor.chosen_template().unwrap();
+    let definition = editor.store().template(template).unwrap();
+    assert_eq!(
+        definition.object.as_ref().unwrap().properties["script"].value,
+        Value::File("../chest.lua".into())
+    );
+    assert!(
+        editor
+            .map_of(doc)
+            .unwrap()
+            .object(ObjectId(1))
+            .unwrap()
+            .template
+            .is_some()
+    );
+    apply(
+        &mut editor,
+        Intent::FilePicked {
+            request: FileRequest::ObjectTemplate(doc),
+            path: Some(template_path.clone()),
+        },
+    );
+    let preview = editor
+        .template_preview(doc, DVec2::new(64.0, 64.0), SnapToggle::Keep)
+        .unwrap();
+    assert_eq!(preview.object(ObjectId(2)).unwrap().name, "Chest");
+    assert_eq!(
+        editor.map_of(doc).unwrap().next_object_id,
+        2,
+        "the ghost does not allocate in the stored map"
+    );
+    apply(
+        &mut editor,
+        Intent::PlaceTemplate {
+            doc,
+            at: DVec2::new(64.0, 64.0),
+            snap: SnapToggle::Keep,
+        },
+    );
+    let placed = editor
+        .map_of(doc)
+        .unwrap()
+        .object(ObjectId(2))
+        .unwrap()
+        .clone();
+    assert!(placed.overrides.is_empty());
+    apply(
+        &mut editor,
+        Intent::SetAttribute {
+            doc,
+            inspected: Inspected::Objects(vec![ObjectId(2)]),
+            attribute: Attribute::Name,
+            value: AttributeValue::Text("Own name".into()),
+            merge: None,
+        },
+    );
+    apply(&mut editor, Intent::Run(ActionId::ResetTemplate));
+    assert_eq!(
+        editor
+            .map_of(doc)
+            .unwrap()
+            .object(ObjectId(2))
+            .unwrap()
+            .name,
+        "Chest"
+    );
+    assert_eq!(
+        editor.map_of(doc).unwrap().object(ObjectId(2)).unwrap().pos,
+        placed.pos
+    );
+    apply(&mut editor, Intent::Run(ActionId::DetachTemplate));
+    let detached = editor.map_of(doc).unwrap().object(ObjectId(2)).unwrap();
+    assert!(detached.template.is_none());
+    assert_eq!(
+        detached.properties["script"].value,
+        Value::File("chest.lua".into())
+    );
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert!(
+        editor
+            .map_of(doc)
+            .unwrap()
+            .object(ObjectId(2))
+            .unwrap()
+            .template
+            .is_some()
+    );
+    apply(&mut editor, Intent::Run(ActionId::Save));
+    let text = std::fs::read_to_string(&map_path).unwrap();
+    assert!(
+        !text.contains("name=\"script\""),
+        "inherited script path must stay inherited: {text}"
+    );
+    let read = bt_tmx::Loader::default().load_map(&map_path).unwrap().value;
+    assert_eq!(
+        read.object(ObjectId(2)).unwrap().properties["script"].value,
+        Value::File("../chest.lua".into())
+    );
+}
+
+#[test]
+fn tile_template_preview_and_placement_adopt_a_tileset_once_and_undo_it() {
+    use bt_core::{Cell, ObjectId, TileId, TilesetRef, TilesetSlot};
+    use bt_editor::{FileRequest, SnapToggle};
+    use bt_test_data::fixtures::{Atlas, MapBuilder};
+    use glam::UVec2;
+    let scratch = Scratch::new("template-tile-placement").unwrap();
+    let atlas = Atlas::builder().build_in(scratch.path()).unwrap();
+    let tileset = scratch.join("tiles.tsx");
+    bt_tmx::WriteRequest::for_tileset(&atlas.tileset, &tileset)
+        .write()
+        .unwrap();
+    let path = scratch.join("tile.tx");
+    let template = ObjectTemplate {
+        tilesets: vec![TilesetRef {
+            file: Some(bt_core::FileRef::new("tiles.tsx", &tileset)),
+            first_gid: Some(1),
+            tileset: atlas.tileset,
+        }],
+        object: Some(MapObject {
+            tile: Some(Cell::new(TilesetSlot::new(0).unwrap(), TileId(1))),
+            ..MapObject::default()
+        }),
+        ..ObjectTemplate::default()
+    };
+    bt_tmx::WriteRequest::for_template(&template, &path)
+        .write()
+        .unwrap();
+    let map = MapBuilder::new(UVec2::splat(16), UVec2::splat(8))
+        .object_layer("Objects", Vec::new())
+        .build()
+        .unwrap();
+    let map_path = scratch.join("map.tmx");
+    bt_tmx::WriteRequest::for_map(&map, &map_path)
+        .write()
+        .unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(map_path));
+    let doc = editor.current().unwrap();
+    apply(&mut editor, Intent::Open(tileset.clone()));
+    let tileset_doc = editor.current().unwrap();
+    let tileset_asset = editor.document(tileset_doc).unwrap().asset();
+    editor
+        .transact(tileset_doc, "Offset Tileset", |tx| {
+            tx.tileset_mut(tileset_asset)?.tile_offset.x = 3;
+            Ok::<_, bt_editor::EditError>(())
+        })
+        .unwrap();
+    apply(&mut editor, Intent::SelectDocument(doc));
+    apply(
+        &mut editor,
+        Intent::FilePicked {
+            request: FileRequest::ObjectTemplate(doc),
+            path: Some(path),
+        },
+    );
+    let chosen = editor.chosen_template().unwrap();
+    assert!(
+        Arc::ptr_eq(
+            &editor.store().template(chosen).unwrap().tilesets[0].tileset,
+            editor.store().tileset(tileset_asset).unwrap()
+        ),
+        "templates take the authoritative unsaved tileset root"
+    );
+    assert_eq!(
+        editor
+            .template_preview(doc, DVec2::splat(48.0), SnapToggle::Keep)
+            .unwrap()
+            .tilesets
+            .len(),
+        1
+    );
+    assert!(editor.map_of(doc).unwrap().tilesets.is_empty());
+    apply(
+        &mut editor,
+        Intent::PlaceTemplate {
+            doc,
+            at: DVec2::splat(48.0),
+            snap: SnapToggle::Keep,
+        },
+    );
+    assert_eq!(editor.map_of(doc).unwrap().tilesets.len(), 1);
+    assert!(
+        editor
+            .map_of(doc)
+            .unwrap()
+            .object(ObjectId(1))
+            .unwrap()
+            .tile
+            .is_some()
+    );
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert!(editor.map_of(doc).unwrap().tilesets.is_empty());
+    apply(&mut editor, Intent::Run(ActionId::Redo));
+    apply(
+        &mut editor,
+        Intent::PlaceTemplate {
+            doc,
+            at: DVec2::splat(80.0),
+            snap: SnapToggle::Keep,
+        },
+    );
+    assert_eq!(editor.map_of(doc).unwrap().tilesets.len(), 1);
+}
+
+#[test]
+fn isometric_template_ghost_is_centred_in_drawing_coordinates_with_layer_offset() {
+    use bt_core::{ObjectId, Orientation};
+    use bt_editor::{FileRequest, SnapToggle, Snapping};
+    use bt_test_data::fixtures::MapBuilder;
+    use glam::UVec2;
+    let scratch = Scratch::new("template-isometric-ghost").unwrap();
+    let template_path = scratch.join("base.tx");
+    let template = ObjectTemplate {
+        object: Some(MapObject {
+            size: DVec2::new(32.0, 16.0),
+            rotation: 15.0,
+            ..MapObject::default()
+        }),
+        ..ObjectTemplate::default()
+    };
+    bt_tmx::WriteRequest::for_template(&template, &template_path)
+        .write()
+        .unwrap();
+    let mut map = MapBuilder::new(UVec2::new(32, 16), UVec2::splat(8))
+        .orientation(Orientation::Isometric)
+        .object_layer("Objects", Vec::new())
+        .build()
+        .unwrap();
+    map.layers[0].offset = DVec2::new(10.0, 20.0);
+    let path = scratch.join("map.tmx");
+    bt_tmx::WriteRequest::for_map(&map, &path).write().unwrap();
+    let mut editor = editor_in(&scratch);
+    let mut settings = editor.settings().clone();
+    settings.behaviour.snapping = Snapping::None;
+    apply(&mut editor, Intent::ChangeSettings(Box::new(settings)));
+    apply(&mut editor, Intent::Open(path));
+    let doc = editor.current().unwrap();
+    apply(
+        &mut editor,
+        Intent::FilePicked {
+            request: FileRequest::ObjectTemplate(doc),
+            path: Some(template_path),
+        },
+    );
+    let at = DVec2::new(128.0, 64.0);
+    let ghost = editor.template_preview(doc, at, SnapToggle::Keep).unwrap();
+    let object = ghost.object(ObjectId(1)).unwrap();
+    let bounds = bt_core::object_outline(&ghost.geometry(), object, None).bounds();
+    let centre = (bounds.min + bounds.max) * 0.5 + ghost.layers[0].offset;
+    assert!(
+        (centre - at).length() < 0.00001,
+        "{centre:?} should equal {at:?}"
+    );
+}

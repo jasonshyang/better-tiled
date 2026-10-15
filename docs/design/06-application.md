@@ -636,3 +636,14 @@ Neighbour loads run on workers and reuse asset identities when opened as documen
 tool previews movement and all eight resize handles, commits on release, and cancels with
 Escape. Its window test drives movement, cancellation, resize, arrows and neighbour opening
 with the real GPU renderer.
+
+
+### M6 template placement as built
+
+Insert Template uses the V key and an asynchronous template picker. Its ghost is a complete
+readonly map snapshot containing the adopted tileset and translucent object, rendered through
+the normal GPU pipeline. The stored map changes only on placement. Choose Template remains
+available in the wrapping toolbar and the Tools menu. Object commands create a template from
+one selected object, edit its base, reset or detach instances, and replace selected objects
+with the chosen template. Window tests pick an external tile template, inspect its real ghost,
+place it, edit the base through Properties and verify propagation, detach and undo.

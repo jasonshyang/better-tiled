@@ -92,6 +92,15 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// Choose the template placed by the insertion tool.
+    ObjectTemplate(DocumentId),
+    /// Save this captured object's current state as a template.
+    SaveAsTemplate {
+        /// Owning map document.
+        doc: DocumentId,
+        /// Object selected when the picker opened.
+        object: bt_core::ObjectId,
+    },
     /// A new world containing the saved map.
     NewWorld(DocumentId),
     /// An existing map to place in a loaded world.

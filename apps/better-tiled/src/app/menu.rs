@@ -140,6 +140,12 @@ const MENUS: [Menu; 8] = [
     Menu {
         title: "Objects",
         entries: &[
+            Action(ActionId::SaveAsTemplate),
+            Action(ActionId::EditTemplate),
+            Action(ActionId::ResetTemplate),
+            Action(ActionId::DetachTemplate),
+            Action(ActionId::ReplaceWithTemplate),
+            Separator,
             Action(ActionId::DuplicateObjects),
             Action(ActionId::JoinNodes),
             Action(ActionId::SplitSegments),
@@ -176,6 +182,8 @@ const MENUS: [Menu; 8] = [
             Action(ActionId::InsertPolygonTool),
             Action(ActionId::InsertTileTool),
             Action(ActionId::InsertTextTool),
+            Action(ActionId::InsertTemplateTool),
+            Action(ActionId::ChooseTemplate),
             Action(ActionId::EditPolygonsTool),
             Separator,
             Action(ActionId::RandomMode),

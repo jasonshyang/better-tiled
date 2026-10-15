@@ -86,19 +86,35 @@ impl Editor {
                         .store
                         .by_path(&dependency.path)
                         .and_then(|id| self.store.template(id))
-                    && let Err(error) = bt_edit::refresh_template_instances(
+                {
+                    let refreshed = bt_edit::refresh_template_instances(
                         Arc::make_mut(map),
                         &dependency.path,
                         before,
                         after,
                     )
-                {
-                    loaded.outcome = Err(error.to_string());
-                    break;
+                    .and_then(|_| {
+                        if let Ok(Some(layers)) = &mut files.layers {
+                            bt_edit::refresh_template_instances(
+                                &mut layers.painted,
+                                &dependency.path,
+                                before,
+                                after,
+                            )?;
+                        }
+                        Ok(())
+                    });
+                    if let Err(error) = refreshed {
+                        loaded.outcome = Err(error.to_string());
+                        break;
+                    }
                 }
             }
         }
         let mut effects = Vec::new();
+        if let LoadPurpose::ChooseTemplate(doc) = loaded.purpose {
+            return self.finish_choosing_template(doc, loaded);
+        }
         if let LoadPurpose::WorldPatterns { world, version } = loaded.purpose {
             return self.finish_world_patterns(world, version, loaded);
         }
@@ -214,7 +230,12 @@ impl Editor {
                 .by_path(&path)
                 .filter(|id| self.store.map(*id).is_some())
         {
-            if self.store.get(id).is_some_and(|asset| !asset.is_dirty()) {
+            if self.store.get(id).is_some_and(|asset| !asset.is_dirty())
+                || self
+                    .store
+                    .map(id)
+                    .is_some_and(|map| map.as_ref() == saved.as_ref())
+            {
                 let version = self.store.get(id).map_or(1, |asset| asset.version());
                 self.store.set_root(id, Root::Map(root), version);
             }
