@@ -80,6 +80,18 @@ pub fn relative_path(base_dir: &Path, target: &Path) -> Option<String> {
     Some(parts.join("/"))
 }
 
+/// Resolves an existing file's symbolic links, or cleans a path for a file not created yet.
+/// This is for comparing filesystem identities; project-file references use `clean_path`.
+pub fn canonical_or_clean(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| clean_path(path))
+}
+
+/// A file reference relative to `base_dir`, or its absolute path on another drive.
+/// Uses `/` separators on every platform.
+pub fn reference_path(base_dir: &Path, target: &Path) -> String {
+    relative_path(base_dir, target).unwrap_or_else(|| target.to_string_lossy().replace('\\', "/"))
+}
+
 /// The file name of a reference (`/` or `\` separated) without its last extension (Qt's
 /// `QFileInfo::completeBaseName`): `"../Tiles/ground.v2.tsx"` gives `"ground.v2"`. A name that
 /// starts with its only dot keeps it.

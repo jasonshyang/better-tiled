@@ -61,7 +61,9 @@ pub use map::{Map, Orientation, RenderOrder, StaggerAxis, StaggerIndex, TilesetR
 pub use object::{MapObject, ObjectOverrides, Shape};
 pub use object_frame::ObjectFrame;
 pub use object_layer::{DrawOrder, ObjectLayer};
-pub use object_outline::{object_marker, object_outline, object_pixel_outline, tile_object_box};
+pub use object_outline::{
+    object_local_outline, object_marker, object_outline, object_pixel_outline, tile_object_box,
+};
 pub use outline::Outline;
 pub use polygon::{polygon_holds, polygon_holds_or_bounds};
 pub use project::{Command, CompatibilityVersion, Project};

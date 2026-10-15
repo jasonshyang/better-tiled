@@ -23,6 +23,17 @@ pub struct ExportOptions {
     pub minimize: bool,
 }
 
+impl ExportOptions {
+    /// Applies export transformations to a copy. References are rebased for a map at `path`;
+    /// no files are read or written. Templates already carry their loaded values.
+    pub fn prepare_map(&self, map: &Map, types: &CustomTypes, path: &Path) -> Map {
+        let mut result =
+            exported_map(map, self, Some(types), None, path).unwrap_or_else(|| map.clone());
+        result.file.export = Default::default();
+        result
+    }
+}
+
 /// The map to write under `options`: `None` when the options change nothing but the layout.
 pub(crate) fn exported_map(
     map: &Map,

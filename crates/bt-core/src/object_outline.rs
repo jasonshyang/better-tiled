@@ -39,7 +39,7 @@ pub fn object_outline(
     tileset: Option<&Tileset>,
 ) -> Outline {
     let frame = ObjectFrame::of(geometry, object);
-    local_outline(geometry, object, tileset).mapped(|p| frame.to_screen(p))
+    object_local_outline(geometry, object, tileset).mapped(|p| frame.to_screen(p))
 }
 
 /// The outline of `object` as drawn (see [`object_outline`]), in pixel space: the pixel
@@ -51,7 +51,7 @@ pub fn object_pixel_outline(
     tileset: Option<&Tileset>,
 ) -> Outline {
     let frame = ObjectFrame::of(geometry, object);
-    local_outline(geometry, object, tileset).mapped(|p| frame.to_pixels(p))
+    object_local_outline(geometry, object, tileset).mapped(|p| frame.to_pixels(p))
 }
 
 /// Tiled's marker for a rectangle, ellipse or capsule without a size, in screen space: a square
@@ -114,7 +114,11 @@ fn tile_alignment(geometry: &MapGeometry, tileset: Option<&Tileset>) -> Alignmen
 }
 
 /// `object`'s outline in its own frame.
-fn local_outline(geometry: &MapGeometry, object: &MapObject, tileset: Option<&Tileset>) -> Outline {
+pub fn object_local_outline(
+    geometry: &MapGeometry,
+    object: &MapObject,
+    tileset: Option<&Tileset>,
+) -> Outline {
     if let Some(image) = tile_object_box(geometry, object, tileset) {
         return Outline::Area(rect_corners(image.min, image.size()));
     }
