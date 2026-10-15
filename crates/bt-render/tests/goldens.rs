@@ -625,7 +625,15 @@ fn vector_items_and_text() {
         .scale(2.0)
         .run(device)
         .unwrap();
-    check("vectors-and-text", &picture, SMOOTH);
+    check(
+        "vectors-and-text",
+        &picture,
+        Match {
+            // D3D12 and Metal differ at glyph edges; keep the vector and text scene within 1.5%.
+            share: 0.015,
+            ..SMOOTH
+        },
+    );
 }
 
 #[test]

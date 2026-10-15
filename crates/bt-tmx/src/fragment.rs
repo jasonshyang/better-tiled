@@ -83,7 +83,7 @@ mod tests {
         let cell = map.layers[0].as_tile_layer().unwrap().cell(IVec2::ZERO);
         assert_eq!(cell, Cell::new(TilesetSlot::new(0).unwrap(), TileId(2)));
         let fragment = fragment_text(&map, Some(&loader)).text;
-        let tileset = scratch.join("t.tsx").display().to_string();
+        let tileset = scratch.join("t.tsx").to_string_lossy().replace('\\', "/");
         assert!(
             fragment.contains(&format!("source=\"{tileset}\"")),
             "{fragment}"

@@ -78,13 +78,13 @@ pub(crate) fn written_reference(dir: &Path, file: &FileRef) -> String {
 }
 
 /// A `file` property value written relative to `from_dir`, rewritten relative to `to_dir`, for
-/// a value moving to another folder (Save As). Empty, absolute and verbatim values stay.
+/// a value moving to another folder (Save As). Empty, rooted and verbatim values stay.
 pub(crate) fn rebased_file_value(value: &str, from_dir: &Path, to_dir: &Path) -> Option<String> {
     if value.is_empty() || is_verbatim_reference(value) {
         return None;
     }
     let resolved = resolve_reference(from_dir, value);
-    if !resolved.is_absolute() || Path::new(value).is_absolute() {
+    if !resolved.is_absolute() || Path::new(value).has_root() {
         return None;
     }
     relative_path(to_dir, &resolved).filter(|relative| relative != value)
@@ -119,27 +119,29 @@ mod tests {
 
     #[test]
     fn written_references_keep_their_text_while_it_still_fits() {
-        let dir = Path::new("/maps/world");
-        let kept = FileRef::new("./../tiles/a.tsx", "/maps/tiles/a.tsx");
-        assert_eq!(written_reference(dir, &kept), "./../tiles/a.tsx");
-        assert_eq!(written_reference(Path::new("/maps"), &kept), "tiles/a.tsx");
-        let new = FileRef::new("", "/maps/world/b.png");
-        assert_eq!(written_reference(dir, &new), "b.png");
+        let maps = std::path::absolute("/maps").unwrap();
+        let dir = maps.join("world");
+        let kept = FileRef::new("./../tiles/a.tsx", maps.join("tiles/a.tsx"));
+        assert_eq!(written_reference(&dir, &kept), "./../tiles/a.tsx");
+        assert_eq!(written_reference(&maps, &kept), "tiles/a.tsx");
+        let new = FileRef::new("", dir.join("b.png"));
+        assert_eq!(written_reference(&dir, &new), "b.png");
         let builtin = FileRef::new(":/automap-tiles.tsx", ":/automap-tiles.tsx");
-        assert_eq!(written_reference(dir, &builtin), ":/automap-tiles.tsx");
+        assert_eq!(written_reference(&dir, &builtin), ":/automap-tiles.tsx");
         let unresolved = FileRef::new("x.png", "");
-        assert_eq!(written_reference(dir, &unresolved), "x.png");
+        assert_eq!(written_reference(&dir, &unresolved), "x.png");
     }
 
     #[test]
     fn file_values_move_with_their_file() {
-        let (from, to) = (Path::new("/a/maps"), Path::new("/a/maps/sub"));
+        let from = std::path::absolute("/a/maps").unwrap();
+        let to = from.join("sub");
         assert_eq!(
-            rebased_file_value("s.lua", from, to).as_deref(),
+            rebased_file_value("s.lua", &from, &to).as_deref(),
             Some("../s.lua")
         );
-        assert_eq!(rebased_file_value("", from, to), None);
-        assert_eq!(rebased_file_value("/abs.lua", from, to), None);
-        assert_eq!(rebased_file_value("s.lua", from, from), None);
+        assert_eq!(rebased_file_value("", &from, &to), None);
+        assert_eq!(rebased_file_value("/abs.lua", &from, &to), None);
+        assert_eq!(rebased_file_value("s.lua", &from, &from), None);
     }
 }

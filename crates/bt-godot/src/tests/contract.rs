@@ -958,12 +958,12 @@ fn the_project_scan_reads_uids_and_references_where_godot_looks() {
 
     let scan = project_scan::scan(&dir);
     let id = |text: &str| read::text_to_uid(text);
-    let entries: Vec<(String, Option<u64>, bool)> = scan
+    let entries: Vec<(PathBuf, Option<u64>, bool)> = scan
         .entries
         .iter()
         .map(|e| {
             (
-                e.path.strip_prefix(&dir).unwrap().display().to_string(),
+                e.path.strip_prefix(&dir).unwrap().to_path_buf(),
                 e.uid,
                 e.generated,
             )
@@ -976,11 +976,11 @@ fn the_project_scan_reads_uids_and_references_where_godot_looks() {
     assert_eq!(
         entries,
         [
-            ("a.tscn".to_owned(), id("uid://cyncsb"), false),
-            ("b.tres".to_owned(), None, false),
-            ("images/i.png".to_owned(), id("uid://d"), false),
-            ("levels/features.tscn".to_owned(), features, true),
-            ("scripts/x.gd".to_owned(), id("uid://c"), false),
+            (PathBuf::from("a.tscn"), id("uid://cyncsb"), false),
+            (PathBuf::from("b.tres"), None, false),
+            (PathBuf::from("images/i.png"), id("uid://d"), false),
+            (PathBuf::from("levels/features.tscn"), features, true),
+            (PathBuf::from("scripts/x.gd"), id("uid://c"), false),
         ]
     );
     let paths = |entries: Vec<&project_scan::Entry>| {
