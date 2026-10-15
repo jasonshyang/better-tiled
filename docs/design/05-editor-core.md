@@ -679,6 +679,14 @@ the document. `set_marks(doc, marks)` replaces or adds the outlines `bt mark` as
 As built in M6, world and template files are typed roots in the same asset store as maps,
 tilesets and projects. Explicit world loads open a map, retain filename-pattern placements
 separately from the writable world root, and persist loaded world paths in the session.
+Maps also discover world files beside them or one folder above on the load worker. Visible
+neighbours load once into the asset store without document tabs; opening one reuses its asset.
+The adjacency switch filters this context, and cached maps remain watched. The World tool
+previews moves and resize handles, records a release as one transaction, and cancels previews
+with Escape. Its grid is the world's configured grid or the target map's tile size; Command
+bypasses snapping. Arrows move the active map by grid steps, Shift by five and Command by
+pixels. Pattern placements refuse individual moves. `%worldfile` uses the containing world.
+
 Map resize/crop updates explicit world rectangles in the map's transaction; the position shift
 uses projected grid bounds, including for isometric maps. Worlds participate in Save All,
 watching and recovery.

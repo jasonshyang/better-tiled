@@ -1060,6 +1060,8 @@ impl eframe::App for App {
             self.intents
                 .extend(crate::focus::quick_stamp_shortcuts(&ctx, &self.editor));
             self.intents
+                .extend(crate::focus::world_shortcuts(&ctx, &self.editor));
+            self.intents
                 .extend(crate::focus::project_command_shortcuts(&ctx, &self.editor));
         }
         egui::Panel::top("menu_bar").show(ui, |ui| menu_bar(ui, &self.editor, &mut self.intents));

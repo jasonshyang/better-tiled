@@ -76,8 +76,32 @@ impl Editor {
 
     /// Takes in a finished load: the project, the tilesets (the store's when it has the file),
     /// the map, and a document showing it.
-    pub(crate) fn finish_load(&mut self, loaded: Loaded) -> Vec<Effect> {
+    pub(crate) fn finish_load(&mut self, mut loaded: Loaded) -> Vec<Effect> {
+        if let Ok(files) = &mut loaded.outcome
+            && let Root::Map(map) = &mut files.content
+        {
+            for dependency in &files.dependencies {
+                if let Root::Template(before) = &dependency.root
+                    && let Some(after) = self
+                        .store
+                        .by_path(&dependency.path)
+                        .and_then(|id| self.store.template(id))
+                    && let Err(error) = bt_edit::refresh_template_instances(
+                        Arc::make_mut(map),
+                        &dependency.path,
+                        before,
+                        after,
+                    )
+                {
+                    loaded.outcome = Err(error.to_string());
+                    break;
+                }
+            }
+        }
         let mut effects = Vec::new();
+        if let LoadPurpose::WorldMap(world) = loaded.purpose {
+            return self.cache_world_map(world, loaded);
+        }
         if let LoadPurpose::Reload(asset) = loaded.purpose {
             let mut effects = match loaded.outcome {
                 Ok(files) => self.finish_reload(asset, files),
@@ -149,20 +173,6 @@ impl Editor {
             self.files.project = Some(id);
         }
         let mut map = (*map).clone();
-        for dependency in &files.dependencies {
-            if let Root::Template(before) = &dependency.root
-                && let Some(after) = self
-                    .store
-                    .by_path(&dependency.path)
-                    .and_then(|id| self.store.template(id))
-                && let Err(error) =
-                    bt_edit::refresh_template_instances(&mut map, &dependency.path, before, after)
-            {
-                return vec![Effect::Notify(Notice::error(format!(
-                    "Cannot apply the open template to this map: {error}"
-                )))];
-            }
-        }
         self.adopt_dependencies(files.dependencies);
         self.store.refresh_tilesets(&mut map);
         let mut layers = match files.layers {
@@ -192,12 +202,25 @@ impl Editor {
         } else {
             Some(path.clone())
         };
-        let asset = self.store.insert(NewAsset {
-            root: Root::Map(root),
-            path: file,
-            content_hash: files.content_hash,
-            warnings: files.warnings,
-        });
+        let asset = if loaded.recovered_from.is_none()
+            && let Some(id) = self
+                .store
+                .by_path(&path)
+                .filter(|id| self.store.map(*id).is_some())
+        {
+            if self.store.get(id).is_some_and(|asset| !asset.is_dirty()) {
+                let version = self.store.get(id).map_or(1, |asset| asset.version());
+                self.store.set_root(id, Root::Map(root), version);
+            }
+            id
+        } else {
+            self.store.insert(NewAsset {
+                root: Root::Map(root),
+                path: file,
+                content_hash: files.content_hash,
+                warnings: files.warnings,
+            })
+        };
         if loaded.recovered_from.is_some() {
             self.store.forget_disk(asset);
         }
@@ -219,6 +242,13 @@ impl Editor {
                 bt_utils::paths::display_name(&path),
                 bt_utils::text::plural(warning_count, "warning", "warnings")
             ))));
+        }
+        for world in files.nearby_worlds {
+            if self.store.by_path(&world).is_none()
+                && self.files.world_requested.insert(world.clone())
+            {
+                effects.push(Effect::Load(self.load_job(world, LoadSource::File)));
+            }
         }
         self.session_changed();
         effects
@@ -260,7 +290,10 @@ impl Editor {
     }
 
     /// Puts the external tilesets a load read into the store, unless it has their files.
-    fn adopt_dependencies(&mut self, dependencies: Vec<crate::files::load::LoadedAsset>) {
+    pub(super) fn adopt_dependencies(
+        &mut self,
+        dependencies: Vec<crate::files::load::LoadedAsset>,
+    ) {
         for dependency in dependencies {
             if self.store.by_path(&dependency.path).is_none() {
                 self.store.insert(NewAsset {
@@ -364,6 +397,10 @@ impl Editor {
                     .find(|d| d.asset() == asset)
                     .map(|d| d.id())
                 else {
+                    let version = self.store.next_version(asset);
+                    self.store
+                        .set_root(asset, Root::Map(Arc::new(map)), version);
+                    self.store.mark_saved(asset, content_hash);
                     return Vec::new();
                 };
                 let fallback = super::super::editor::topmost_leaf(&map);
@@ -472,7 +509,15 @@ impl Editor {
                             .first()
                             .map(|map| map.file.path.clone())
                     });
-                if let Some(first) = first {
+                let shows_member = self
+                    .current()
+                    .and_then(|doc| self.path_of(doc))
+                    .is_some_and(|path| {
+                        self.world_maps(asset)
+                            .iter()
+                            .any(|map| map.file.path == path)
+                    });
+                if !shows_member && let Some(first) = first {
                     effects.extend(self.open(&first));
                 }
                 self.session_changed();

@@ -61,7 +61,8 @@ impl Editor {
         }
         for asset in self.store.assets() {
             match asset.kind() {
-                AssetKind::Tileset
+                AssetKind::Map
+                | AssetKind::Tileset
                 | AssetKind::Project
                 | AssetKind::Template
                 | AssetKind::World => {
@@ -69,7 +70,6 @@ impl Editor {
                         paths.insert(path.to_path_buf());
                     }
                 }
-                AssetKind::Map => {}
             }
             if let Some(map) = self.store.map(asset.id()) {
                 image_paths_of_map(map, &mut paths);

@@ -52,6 +52,8 @@ pub(crate) enum LoadKind {
 pub(crate) enum LoadPurpose {
     /// To open it.
     Open,
+    /// Cache a visible neighbouring map without opening a document tab.
+    WorldMap(crate::store::AssetId),
     /// It changed on disk: its asset takes the new content.
     Reload(crate::store::AssetId),
     /// Add External Tileset: the map of a document refers to it.
@@ -75,6 +77,8 @@ pub struct LoadJob {
 /// A loaded map or tileset and what came with it.
 #[derive(Debug)]
 pub(crate) struct LoadedFiles {
+    /// World files beside a map or one folder above, discovered on the worker.
+    pub(crate) nearby_worlds: Vec<PathBuf>,
     /// Pattern-expanded map positions, for world loads.
     pub(crate) world_maps: Vec<bt_core::WorldMap>,
     pub(crate) content: Root,
@@ -220,6 +224,7 @@ impl LoadJob {
             let content_hash =
                 matches!(self.source, LoadSource::File).then(|| fnv1a_64(text.as_bytes()));
             return Ok(LoadedFiles {
+                nearby_worlds: Vec::new(),
                 content: loaded.value,
                 warnings: loaded.warnings,
                 content_hash,
@@ -248,6 +253,7 @@ impl LoadJob {
                 }
             };
             return Ok(LoadedFiles {
+                nearby_worlds: Vec::new(),
                 world_maps: Vec::new(),
                 content: Root::Tileset(loaded.value),
                 warnings: loaded.warnings,
@@ -310,6 +316,11 @@ impl LoadJob {
                 .map(|record| restore(record, PathBuf::from(&record.rules), &loaded.value))),
         };
         Ok(LoadedFiles {
+            nearby_worlds: if self.purpose == LoadPurpose::Open {
+                nearby_worlds(canonical)
+            } else {
+                Vec::new()
+            },
             world_maps: Vec::new(),
             content: Root::Map(Arc::new(loaded.value)),
             warnings: loaded.warnings,
@@ -367,4 +378,27 @@ fn read_project(path: &Path) -> Result<LoadedProject, String> {
         project: loaded.value,
         content_hash: hash_file(path)?,
     })
+}
+
+/// Tiled searches beside the map and in its parent's folder, in stable filename order.
+fn nearby_worlds(path: &Path) -> Vec<PathBuf> {
+    let mut worlds = Vec::new();
+    let Some(folder) = path.parent() else {
+        return worlds;
+    };
+    for folder in std::iter::once(folder).chain(folder.parent()) {
+        if let Ok(entries) = std::fs::read_dir(folder) {
+            worlds.extend(
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| {
+                        path.extension()
+                            .is_some_and(|extension| extension == "world")
+                    }),
+            );
+        }
+    }
+    worlds.sort();
+    worlds
 }

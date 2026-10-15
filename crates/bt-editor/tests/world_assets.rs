@@ -138,3 +138,58 @@ fn resizing_an_isometric_map_moves_its_world_by_projected_bounds_and_undoes_both
     apply(&mut editor, Intent::Run(ActionId::Redo));
     assert_eq!(editor.world_maps(world)[0].rect.min(), expected);
 }
+
+#[test]
+fn a_map_adopts_nearby_worlds_and_loads_visible_neighbours_once_without_tabs() {
+    use bt_utils::DRect;
+    use glam::DVec2;
+    let scratch = Scratch::new("world-neighbour-cache").unwrap();
+    let first = write_map(scratch.path(), "first.tmx");
+    let second = write_map(scratch.path(), "second.tmx");
+    let far = write_map(scratch.path(), "far.tmx");
+    let world_path = scratch.join("game.world");
+    let entry = |path: &std::path::Path, x| WorldMap {
+        file: FileRef::new(path.file_name().unwrap().to_str().unwrap(), path),
+        rect: IRect::from_min_size(IVec2::new(x, 0), IVec2::new(48, 32)),
+    };
+    let world = World {
+        maps: vec![entry(&first, 0), entry(&second, 48), entry(&far, 4800)],
+        ..World::default()
+    };
+    bt_tmx::WriteRequest::for_world(&world, &world_path)
+        .write()
+        .unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(first.clone()));
+    let doc = editor.current().unwrap();
+    assert_eq!(editor.path_of(doc), Some(first));
+    assert!(editor.world_of(doc).is_some());
+    let visible = DRect::from_min_size(DVec2::new(-10.0, -10.0), DVec2::new(150.0, 100.0));
+    assert!(editor.needs_world_maps(doc, visible));
+    apply(&mut editor, Intent::LoadWorldMaps { doc, visible });
+    assert_eq!(editor.documents().in_order().count(), 1);
+    assert!(!editor.needs_world_maps(doc, visible));
+    let cached = editor.store().by_path(&second).unwrap();
+    assert!(
+        editor.store().by_path(&far).is_none(),
+        "offscreen maps load on demand"
+    );
+    apply(&mut editor, Intent::Open(second.clone()));
+    assert_eq!(
+        editor.document(editor.current().unwrap()).unwrap().asset(),
+        cached
+    );
+    let world = editor.world_of(doc).unwrap();
+    apply(
+        &mut editor,
+        Intent::MoveWorldMap {
+            doc,
+            world,
+            path: second,
+            position: IVec2::new(64, 0),
+        },
+    );
+    apply(&mut editor, Intent::SelectDocument(doc));
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    assert_eq!(editor.world_maps(world)[1].rect.x, 48);
+}

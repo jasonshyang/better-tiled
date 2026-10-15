@@ -183,6 +183,7 @@ impl Editor {
             | ActionId::RectSelectTool
             | ActionId::MagicWandTool
             | ActionId::SameTileTool
+            | ActionId::WorldTool
             | ActionId::OffsetLayersTool
             | ActionId::ExplainTool
             | ActionId::SelectObjectsTool

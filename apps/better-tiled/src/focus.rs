@@ -276,6 +276,93 @@ fn function_key(key: egui::Key) -> Option<Key> {
     (1..=24).contains(&number).then_some(Key::Function(number))
 }
 
+/// The World tool's arrow keys move the active map by grid steps, outside text fields.
+pub(crate) fn world_shortcuts(ctx: &egui::Context, editor: &Editor) -> Vec<bt_editor::Intent> {
+    if is_typing(ctx) || editor.tools().tool() != bt_editor::ToolKind::World {
+        return Vec::new();
+    }
+    let Some(doc) = editor.current() else {
+        return Vec::new();
+    };
+    let Some(world) = editor.world_of(doc) else {
+        return Vec::new();
+    };
+    let Some(path) = editor.path_of(doc) else {
+        return Vec::new();
+    };
+    let Some(source) = editor.store().world(world) else {
+        return Vec::new();
+    };
+    let Some(entry) = source.maps.iter().find(|entry| entry.file.path == path) else {
+        return Vec::new();
+    };
+    let Some(map) = editor.map_of(doc) else {
+        return Vec::new();
+    };
+    let grid = if source.grid_size.x > 0 && source.grid_size.y > 0 {
+        source.grid_size
+    } else {
+        glam::IVec2::new(map.tile_width.max(1) as i32, map.tile_height.max(1) as i32)
+    };
+    let mut position = entry.rect.min();
+    let mut out = Vec::new();
+    ctx.input_mut(|input| {
+        for event in input.events.clone() {
+            let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            else {
+                continue;
+            };
+            let direction = match key {
+                egui::Key::ArrowLeft => -glam::IVec2::X,
+                egui::Key::ArrowRight => glam::IVec2::X,
+                egui::Key::ArrowUp => -glam::IVec2::Y,
+                egui::Key::ArrowDown => glam::IVec2::Y,
+                _ => continue,
+            };
+            if modifiers.alt {
+                continue;
+            }
+            let steps = if modifiers.shift { 5.0 } else { 1.0 };
+            let grid = if modifiers.command {
+                glam::DVec2::ONE
+            } else {
+                grid.as_dvec2()
+            };
+            let cells = position.as_dvec2() / grid;
+            let next = glam::DVec2::new(
+                if direction.x > 0 {
+                    cells.x.floor() + steps
+                } else if direction.x < 0 {
+                    cells.x.ceil() - steps
+                } else {
+                    cells.x
+                },
+                if direction.y > 0 {
+                    cells.y.floor() + steps
+                } else if direction.y < 0 {
+                    cells.y.ceil() - steps
+                } else {
+                    cells.y
+                },
+            );
+            position = (next * grid).round().as_ivec2();
+            input.consume_key(modifiers, key);
+            out.push(bt_editor::Intent::MoveWorldMap {
+                doc,
+                world,
+                path: path.clone(),
+                position,
+            });
+        }
+    });
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -109,6 +109,9 @@ impl Editor {
             })
         });
         match id {
+            ActionId::WorldTool if self.current().and_then(|doc| self.world_of(doc)).is_none() => {
+                Enabled::Disabled(Some("Open a world containing this map first".into()))
+            }
             ActionId::Undo if history.is_none_or(|h| h.undoable().is_none()) => {
                 Enabled::Disabled(Some("There is nothing to undo".to_owned()))
             }

@@ -61,7 +61,7 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
         let map_tools: &[ToolKind] = if in_tileset || in_template {
             &[]
         } else {
-            &[ToolKind::OffsetLayers, ToolKind::Explain]
+            &[ToolKind::OffsetLayers, ToolKind::Explain, ToolKind::World]
         };
         for &tool in tools.iter().chain(map_tools) {
             if in_template && !matches!(tool, ToolKind::SelectObjects | ToolKind::EditPolygons) {

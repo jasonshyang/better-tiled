@@ -45,3 +45,6 @@ mod stamps_tests;
 
 #[cfg(test)]
 mod template_tests;
+
+#[cfg(test)]
+mod world_tests;

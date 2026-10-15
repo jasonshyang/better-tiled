@@ -160,6 +160,7 @@ const MENUS: [Menu; 8] = [
             Action(ActionId::MagicWandTool),
             Action(ActionId::SameTileTool),
             Action(ActionId::OffsetLayersTool),
+            Action(ActionId::WorldTool),
             Action(ActionId::ExplainTool),
             Separator,
             Action(ActionId::SelectObjectsTool),

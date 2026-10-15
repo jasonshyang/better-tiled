@@ -288,7 +288,13 @@ pub(crate) fn build_view(input: &FrameInput, data: &mut FrameData, res: &mut Res
     };
     if let Some(background) = input.background {
         let params = walk.params(LayerParams::plain(DVec2::ZERO, 1.0));
-        walk.push_instances(params, &[solid(view_rect, background)]);
+        walk.push_instances(
+            params,
+            &[solid(
+                input.background_bounds.unwrap_or(view_rect),
+                background,
+            )],
+        );
     }
     walk.layers(&map.layers, EffectiveLayer::ROOT, false);
     let top: Vec<&VectorItem> = walk.vectors.top.clone();

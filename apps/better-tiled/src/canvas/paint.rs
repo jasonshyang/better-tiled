@@ -60,14 +60,14 @@ impl CanvasGpu {
     pub(crate) fn callback(
         &self,
         rect: egui::Rect,
-        view: FrameInput,
+        views: Vec<FrameInput>,
         time_ms: u64,
         waker: egui::Context,
     ) -> egui::PaintCallback {
         egui_wgpu::Callback::new_paint_callback(
             rect,
             CanvasCallback {
-                view,
+                views,
                 time_ms,
                 images: Arc::clone(&self.images),
                 stats: Arc::clone(&self.stats),
@@ -87,7 +87,7 @@ impl CanvasGpu {
 
 /// One frame of one canvas.
 struct CanvasCallback {
-    view: FrameInput,
+    views: Vec<FrameInput>,
     time_ms: u64,
     images: Arc<Mutex<ImageStore>>,
     stats: Arc<Mutex<RenderStats>>,
@@ -108,9 +108,7 @@ impl CallbackTrait for CanvasCallback {
         };
         let prepared = {
             let mut images = self.images.lock().unwrap_or_else(PoisonError::into_inner);
-            canvas
-                .renderer
-                .prepare(&mut *images, std::slice::from_ref(&self.view))
+            canvas.renderer.prepare(&mut *images, &self.views)
         };
         match prepared {
             Ok(stats) => {
@@ -139,7 +137,9 @@ impl CallbackTrait for CanvasCallback {
         resources: &CallbackResources,
     ) {
         if let Some(canvas) = resources.get::<CanvasRenderer>() {
-            canvas.renderer.paint(pass, 0);
+            for index in 0..self.views.len() {
+                canvas.renderer.paint(pass, index);
+            }
         }
     }
 }

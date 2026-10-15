@@ -189,6 +189,7 @@ pub struct FrameInput {
     pub(crate) objects: ObjectStyle,
     pub(crate) parallax: bool,
     pub(crate) background: Option<Color>,
+    pub(crate) background_bounds: Option<DRect>,
 }
 
 impl FrameInput {
@@ -207,6 +208,7 @@ impl FrameInput {
             objects: ObjectStyle::default(),
             parallax: false,
             background: None,
+            background_bounds: None,
         }
     }
 
@@ -250,6 +252,12 @@ impl FrameInput {
     /// The colour under the layers (blend modes blend with it); none leaves the target as it is.
     pub fn background(mut self, color: Option<Color>) -> FrameInput {
         self.background = color;
+        self
+    }
+
+    /// Limits the background to a world-space rectangle, for several maps in one viewport.
+    pub fn background_bounds(mut self, bounds: DRect) -> FrameInput {
+        self.background_bounds = Some(bounds);
         self
     }
 
