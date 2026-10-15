@@ -15,9 +15,7 @@ use crate::document::DocumentId;
 use crate::editor::{Editor, warn};
 use crate::effect::Effect;
 use crate::error::EditError;
-use crate::files::{
-    LoadJob, LoadKind, LoadPurpose, LoadSource, Loaded, LoadedContent, ProjectChoice,
-};
+use crate::files::{LoadJob, LoadKind, LoadPurpose, LoadSource, Loaded, ProjectChoice};
 use crate::notice::Notice;
 use crate::store::{NewAsset, Root};
 
@@ -57,7 +55,7 @@ impl Editor {
                 )];
             }
         };
-        let LoadedContent::Tileset(read) = files.content else {
+        let Root::Tileset(read) = files.content else {
             return vec![Effect::Notify(Notice::error(format!(
                 "Cannot add {name}: it is not a tileset"
             )))];

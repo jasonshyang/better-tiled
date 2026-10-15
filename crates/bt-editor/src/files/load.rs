@@ -6,12 +6,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bt_automap::layers::{Restored, restore};
-use bt_core::{CustomTypes, Map, Project, Tileset};
+use bt_core::{CustomTypes, Project};
 use bt_project::AutoMapRecord;
 use bt_tmx::{Loader, Warning};
 use bt_utils::hash::fnv1a_64;
 
 use crate::automap::read_layers;
+use crate::store::Root;
 
 /// Where a load's text comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +35,12 @@ pub(crate) enum ProjectChoice {
 /// What a file holds.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum LoadKind {
+    /// A world file.
+    World,
+    /// An object template.
+    Template,
+    /// A project file opened explicitly.
+    Project,
     /// A map.
     Map,
     /// A tileset in a file of its own.
@@ -65,23 +72,16 @@ pub struct LoadJob {
     pub(crate) recovered_layers: Option<AutoMapRecord>,
 }
 
-/// What a load read.
-#[derive(Debug)]
-pub(crate) enum LoadedContent {
-    /// A map.
-    Map(Box<Map>),
-    /// A tileset.
-    Tileset(Arc<Tileset>),
-}
-
 /// A loaded map or tileset and what came with it.
 #[derive(Debug)]
 pub(crate) struct LoadedFiles {
-    pub(crate) content: LoadedContent,
+    /// Pattern-expanded map positions, for world loads.
+    pub(crate) world_maps: Vec<bt_core::WorldMap>,
+    pub(crate) content: Root,
     pub(crate) warnings: Vec<Warning>,
     /// The map file's hash; `None` for a recovered map (not what the file holds).
     pub(crate) content_hash: Option<u64>,
-    pub(crate) tilesets: Vec<LoadedTileset>,
+    pub(crate) dependencies: Vec<LoadedAsset>,
     pub(crate) project: Option<LoadedProject>,
     /// The loader, with the templates the map uses, for writing it.
     pub(crate) loader: Loader,
@@ -92,9 +92,9 @@ pub(crate) struct LoadedFiles {
 
 /// An external tileset read with a map.
 #[derive(Debug)]
-pub(crate) struct LoadedTileset {
+pub(crate) struct LoadedAsset {
     pub(crate) path: PathBuf,
-    pub(crate) tileset: Arc<Tileset>,
+    pub(crate) root: Root,
     pub(crate) content_hash: u64,
 }
 
@@ -167,6 +167,69 @@ impl LoadJob {
             ),
         };
         let mut loader = Loader::builder().custom_types(custom_types).build();
+        if matches!(
+            self.kind,
+            LoadKind::World | LoadKind::Template | LoadKind::Project
+        ) {
+            let source = match &self.source {
+                LoadSource::File => &self.path,
+                LoadSource::Snapshot(snapshot) => snapshot,
+            };
+            let text = std::fs::read_to_string(source)
+                .map_err(|error| format!("Cannot read {}: {error}", source.display()))?;
+            let loaded = match self.kind {
+                LoadKind::World => {
+                    let loaded = loader
+                        .parse_world(&text, &self.path)
+                        .map_err(|error| error.to_string())?;
+                    bt_tmx::Loaded {
+                        value: Root::World(Arc::new(loaded.value)),
+                        warnings: loaded.warnings,
+                    }
+                }
+                LoadKind::Template => {
+                    let loaded = loader
+                        .parse_template(&text, &self.path)
+                        .map_err(|error| error.to_string())?;
+                    if loaded.value.object.is_none() {
+                        return Err("The template has no base object".into());
+                    }
+                    bt_tmx::Loaded {
+                        value: Root::Template(loaded.value),
+                        warnings: loaded.warnings,
+                    }
+                }
+                LoadKind::Project => {
+                    let loaded = bt_tmx::parse_project(&text, &self.path)
+                        .map_err(|error| error.to_string())?;
+                    bt_tmx::Loaded {
+                        value: Root::Project(Arc::new(loaded.value)),
+                        warnings: loaded.warnings,
+                    }
+                }
+                _ => return Err("The auxiliary load has the wrong file kind".into()),
+            };
+            let world_maps = match &loaded.value {
+                Root::World(world) => bt_tmx::resolve_world_maps(world, &self.path),
+                _ => Vec::new(),
+            };
+            let dependencies = match &loaded.value {
+                Root::Template(template) => loaded_tilesets(&template.tilesets),
+                _ => Vec::new(),
+            };
+            let content_hash =
+                matches!(self.source, LoadSource::File).then(|| fnv1a_64(text.as_bytes()));
+            return Ok(LoadedFiles {
+                content: loaded.value,
+                warnings: loaded.warnings,
+                content_hash,
+                dependencies,
+                world_maps,
+                project,
+                loader,
+                layers: Ok(None),
+            });
+        }
         if self.kind == LoadKind::Tileset {
             let (loaded, content_hash) = match &self.source {
                 LoadSource::File => (
@@ -185,10 +248,11 @@ impl LoadJob {
                 }
             };
             return Ok(LoadedFiles {
-                content: LoadedContent::Tileset(loaded.value),
+                world_maps: Vec::new(),
+                content: Root::Tileset(loaded.value),
                 warnings: loaded.warnings,
                 content_hash,
-                tilesets: Vec::new(),
+                dependencies: Vec::new(),
                 project,
                 loader,
                 layers: Ok(None),
@@ -210,20 +274,32 @@ impl LoadJob {
             LoadSource::File => Some(hash_file(&self.path)?),
             LoadSource::Snapshot(_) => None,
         };
-        let mut tilesets = Vec::new();
-        for reference in &loaded.value.tilesets {
-            let Some(file) = &reference.file else {
+        let mut dependencies = loaded_tilesets(&loaded.value.tilesets);
+        let mut templates = std::collections::BTreeSet::new();
+        loaded.value.for_each_layer(|layer, _| {
+            if let Some(objects) = layer.as_object_layer() {
+                templates.extend(
+                    objects.objects.iter().filter_map(|object| {
+                        object.template.as_ref().map(|file| file.path.clone())
+                    }),
+                );
+            }
+        });
+        for path in templates {
+            let Some(template) = loader
+                .cached_template(&path)
+                .filter(|template| template.object.is_some())
+            else {
                 continue;
             };
-            // A missing tileset is a placeholder with a warning; it has no file to hash.
-            let Ok(hash) = hash_file(&file.path) else {
-                continue;
-            };
-            tilesets.push(LoadedTileset {
-                path: file.path.clone(),
-                tileset: Arc::clone(&reference.tileset),
-                content_hash: hash,
-            });
+            if let Ok(content_hash) = hash_file(&path) {
+                dependencies.extend(loaded_tilesets(&template.tilesets));
+                dependencies.push(LoadedAsset {
+                    path,
+                    root: Root::Template(Arc::clone(template)),
+                    content_hash,
+                });
+            }
         }
         // A recovered map is what was painted already; AutoMap layers are read for the file.
         let layers = match &self.source {
@@ -234,15 +310,32 @@ impl LoadJob {
                 .map(|record| restore(record, PathBuf::from(&record.rules), &loaded.value))),
         };
         Ok(LoadedFiles {
-            content: LoadedContent::Map(Box::new(loaded.value)),
+            world_maps: Vec::new(),
+            content: Root::Map(Arc::new(loaded.value)),
             warnings: loaded.warnings,
             content_hash,
-            tilesets,
+            dependencies,
             project,
             loader,
             layers,
         })
     }
+}
+
+fn loaded_tilesets(references: &[bt_core::TilesetRef]) -> Vec<LoadedAsset> {
+    references
+        .iter()
+        .filter_map(|reference| {
+            let file = reference.file.as_ref()?;
+            // Missing tilesets are already reported by the loader; no file exists to hash.
+            let hash = hash_file(&file.path).ok()?;
+            Some(LoadedAsset {
+                path: file.path.clone(),
+                root: Root::Tileset(Arc::clone(&reference.tileset)),
+                content_hash: hash,
+            })
+        })
+        .collect()
 }
 
 /// The FNV-1a hash of a file's bytes.

@@ -77,6 +77,9 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
             let dialog = rfd::AsyncFileDialog::new()
                 .set_title("Open")
                 .add_filter("Tiled maps", &MAP_EXTENSIONS)
+                .add_filter("Object templates", &["tx", "tj"])
+                .add_filter("Worlds", &["world"])
+                .add_filter("Projects", &["tiled-project"])
                 .add_filter("All files", &["*"]);
             let picked = pollster::block_on(dialog.pick_files()).unwrap_or_default();
             if picked.is_empty() {

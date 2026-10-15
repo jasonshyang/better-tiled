@@ -2,6 +2,7 @@
 
 mod asset;
 mod asset_store;
+mod template_view;
 mod tileset_home;
 
 pub use asset::{Asset, AssetId, AssetKind, OnDisk, Root};

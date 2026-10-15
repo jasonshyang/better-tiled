@@ -18,6 +18,8 @@ const RECENT_FILES: usize = 20;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Session {
+    /// The loaded worlds, reopened before their maps.
+    pub worlds: Vec<PathBuf>,
     /// The nine quick stamps, as Tiled stamp JSON with the owning path used for references.
     pub quick_stamps: Vec<SessionStamp>,
     /// The files open, in tab order.

@@ -61,7 +61,10 @@ impl Editor {
         }
         for asset in self.store.assets() {
             match asset.kind() {
-                AssetKind::Tileset | AssetKind::Project => {
+                AssetKind::Tileset
+                | AssetKind::Project
+                | AssetKind::Template
+                | AssetKind::World => {
                     if let Some(path) = asset.path() {
                         paths.insert(path.to_path_buf());
                     }
@@ -73,6 +76,11 @@ impl Editor {
             }
             if let Some(tileset) = self.store.tileset(asset.id()) {
                 image_paths_of_tileset(tileset, &mut paths);
+            }
+            if let Some(template) = self.store.template(asset.id()) {
+                for tileset in &template.tilesets {
+                    image_paths_of_tileset(&tileset.tileset, &mut paths);
+                }
             }
         }
         self.watched_rule_files(&mut paths);
@@ -156,6 +164,8 @@ impl Editor {
         let load_kind = match kind {
             AssetKind::Map => LoadKind::Map,
             AssetKind::Tileset => LoadKind::Tileset,
+            AssetKind::Template => LoadKind::Template,
+            AssetKind::World => LoadKind::World,
             // The project reloads with the Custom Types editor, which keeps unsaved types.
             AssetKind::Project => return Vec::new(),
         };
@@ -199,7 +209,10 @@ impl Editor {
             (Choice::Reload, Some((path, kind))) => {
                 let kind = match kind {
                     AssetKind::Tileset => LoadKind::Tileset,
-                    AssetKind::Map | AssetKind::Project => LoadKind::Map,
+                    AssetKind::Map => LoadKind::Map,
+                    AssetKind::Project => LoadKind::Project,
+                    AssetKind::World => LoadKind::World,
+                    AssetKind::Template => LoadKind::Template,
                 };
                 vec![self.reload(asset, path, kind)]
             }

@@ -47,6 +47,7 @@ const MODES: [(SelectionMode, &str); 4] = [
 pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>) {
     let current = editor.tools().tool();
     let doc = editor.current();
+    let in_template = doc.is_some_and(|doc| editor.template_of(doc).is_some());
     let family = doc.and_then(|doc| editor.tool_family(doc));
     let in_tileset = doc
         .and_then(|doc| editor.document(doc))
@@ -57,12 +58,15 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
             Some(ToolFamily::Object) => &OBJECT_TOOLS,
             Some(ToolFamily::Any) | None => &[],
         };
-        let map_tools: &[ToolKind] = if in_tileset {
+        let map_tools: &[ToolKind] = if in_tileset || in_template {
             &[]
         } else {
             &[ToolKind::OffsetLayers, ToolKind::Explain]
         };
         for &tool in tools.iter().chain(map_tools) {
+            if in_template && !matches!(tool, ToolKind::SelectObjects | ToolKind::EditPolygons) {
+                continue;
+            }
             // The collision editor's shapes are never tiles or text, as in Tiled.
             if in_tileset && matches!(tool, ToolKind::InsertTile | ToolKind::InsertText) {
                 continue;

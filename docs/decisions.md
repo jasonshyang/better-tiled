@@ -1008,3 +1008,16 @@ is `--godot-project`; `--project` still names Tiled custom types.
 global Tiled project argument.
 **Why:** saved maps remain saved when export refuses, editor and CLI output stays identical,
 and a user can inspect a refusal and choose a concrete recovery action without losing work.
+
+
+## 2026-10-15 — Template editing reuses a derived map view
+
+Worlds and templates are typed asset roots with their own file versions, snapshots and writes.
+A template's editing map is a derived cache, following Tiled's dummy-map view; it does not
+become the saved document. Transaction finalization converts that view back to a definition
+and refreshes inherited fields in map instances before recording all changed roots together.
+The same path handles external template reloads. Writer caches receive the authoritative
+snapshot after apply, undo, redo and cancellation, preventing inherited properties from being
+written as instance overrides. Dependency saves order external tilesets, templates and maps.
+World positions share map history; resize shifts use projected bounds rather than object
+pixel offsets, which differ on isometric maps.

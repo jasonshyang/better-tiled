@@ -68,7 +68,7 @@ impl Editor {
         let mut after_selection = tx.selection.clone();
         let after_automap = tx.automap.clone();
         let keeps_carry = tx.keeps_carry;
-        let mut changed = self.changed_roots(tx.working);
+        let mut changed = self.changed_roots(tx.working)?;
         if after_automap != before_automap
             && !changed.contains_key(&doc_asset)
             && let Some(asset) = self.store.get(doc_asset)
@@ -104,15 +104,17 @@ impl Editor {
     pub(crate) fn changed_roots(
         &self,
         working: BTreeMap<AssetId, Root>,
-    ) -> BTreeMap<AssetId, Root> {
-        working
+    ) -> Result<BTreeMap<AssetId, Root>, EditError> {
+        Ok(self
+            .store
+            .finish_working_roots(working)?
             .into_iter()
             .filter(|(id, root)| {
                 self.store
                     .get(*id)
                     .is_some_and(|asset| !asset.root().same_as(root))
             })
-            .collect()
+            .collect())
     }
 
     /// Puts changed roots in the store at new versions; the changes, with what they replaced.
@@ -150,6 +152,18 @@ impl Editor {
                 let version = self.store.get(id).map_or(1, |asset| asset.version());
                 self.store
                     .set_root(id, Root::Map(std::sync::Arc::new(refreshed)), version);
+            }
+        }
+        self.sync_template_caches();
+    }
+
+    pub(crate) fn sync_template_caches(&mut self) {
+        for asset in self.store.assets() {
+            let (Some(path), Root::Template(template)) = (asset.path(), asset.root()) else {
+                continue;
+            };
+            for loader in self.files.loaders.values_mut() {
+                loader.set_template_snapshot(path, std::sync::Arc::clone(template));
             }
         }
     }

@@ -42,3 +42,6 @@ mod godot_tests;
 mod shortcuts_tests;
 #[cfg(test)]
 mod stamps_tests;
+
+#[cfg(test)]
+mod template_tests;

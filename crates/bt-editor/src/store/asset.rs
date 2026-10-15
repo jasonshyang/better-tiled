@@ -4,7 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_core::{Map, Project, Tileset};
+use bt_core::{Map, ObjectTemplate, Project, Tileset, World};
 use bt_tmx::Warning;
 
 /// An asset's identity for the life of the process; never reused.
@@ -20,6 +20,10 @@ impl fmt::Display for AssetId {
 /// What an asset holds: replaced, never changed in place.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Root {
+    /// A world file.
+    World(Arc<World>),
+    /// An object template file.
+    Template(Arc<ObjectTemplate>),
     /// A map.
     Map(Arc<Map>),
     /// A tileset in a file of its own.
@@ -29,9 +33,21 @@ pub enum Root {
 }
 
 impl Root {
+    /// A serialization request for this root; callers provide any owning loader.
+    pub(crate) fn write_request(&self, path: &Path) -> bt_tmx::WriteRequest<'_> {
+        match self {
+            Root::Map(map) => bt_tmx::WriteRequest::for_map(map, path),
+            Root::Tileset(tileset) => bt_tmx::WriteRequest::for_tileset(tileset, path),
+            Root::Template(template) => bt_tmx::WriteRequest::for_template(template, path),
+            Root::World(world) => bt_tmx::WriteRequest::for_world(world, path),
+            Root::Project(project) => bt_tmx::WriteRequest::for_project(project, path),
+        }
+    }
     /// The kind of asset.
     pub fn kind(&self) -> AssetKind {
         match self {
+            Root::World(_) => AssetKind::World,
+            Root::Template(_) => AssetKind::Template,
             Root::Map(_) => AssetKind::Map,
             Root::Tileset(_) => AssetKind::Tileset,
             Root::Project(_) => AssetKind::Project,
@@ -41,6 +57,8 @@ impl Root {
     /// Whether two roots are the same value, cheaply when they are the same `Arc`.
     pub(crate) fn same_as(&self, other: &Root) -> bool {
         match self {
+            Root::World(a) => matches!(other, Root::World(b) if Arc::ptr_eq(a, b) || a == b),
+            Root::Template(a) => matches!(other, Root::Template(b) if Arc::ptr_eq(a, b) || a == b),
             Root::Map(a) => matches!(other, Root::Map(b) if Arc::ptr_eq(a, b) || a == b),
             Root::Tileset(a) => matches!(other, Root::Tileset(b) if Arc::ptr_eq(a, b) || a == b),
             Root::Project(a) => matches!(other, Root::Project(b) if Arc::ptr_eq(a, b) || a == b),
@@ -51,6 +69,10 @@ impl Root {
 /// The kinds of assets.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AssetKind {
+    /// A world.
+    World,
+    /// An object template.
+    Template,
     /// A map.
     Map,
     /// A tileset.
@@ -62,6 +84,8 @@ pub enum AssetKind {
 impl fmt::Display for AssetKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            AssetKind::World => "world",
+            AssetKind::Template => "template",
             AssetKind::Map => "map",
             AssetKind::Tileset => "tileset",
             AssetKind::Project => "project",

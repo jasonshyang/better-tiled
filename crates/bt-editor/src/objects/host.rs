@@ -66,7 +66,7 @@ impl Editor {
             }),
             Some(_) => None,
             None => {
-                self.store.map(document.asset())?;
+                self.store.editing_map(document.asset())?;
                 Some(ObjectHost::Map(document.asset()))
             }
         }
