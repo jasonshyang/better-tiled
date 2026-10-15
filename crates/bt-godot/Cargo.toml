@@ -1,0 +1,31 @@
+[package]
+name = "bt-godot"
+description = "Godot scene export, stable identity and safe regeneration"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+bt-core.workspace = true
+bt-image.workspace = true
+bt-render.workspace = true
+bt-project.workspace = true
+bt-tmx.workspace = true
+bt-utils.workspace = true
+glam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The independent terrain solver is only a test oracle, never linked into the exporter.
+bt-terrain.workspace = true
+image = { workspace = true, features = ["png"] }
+bt-test-data = { workspace = true, features = ["fixtures"] }
+
+[lints]
+workspace = true

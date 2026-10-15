@@ -14,6 +14,7 @@ bt-automap = { path = "crates/bt-automap" }
 bt-core = { path = "crates/bt-core" }
 bt-edit = { path = "crates/bt-edit" }
 bt-editor = { path = "crates/bt-editor" }
+bt-godot = { path = "crates/bt-godot" }
 bt-image = { path = "crates/bt-image" }
 bt-live = { path = "crates/bt-live" }
 bt-project = { path = "crates/bt-project" }

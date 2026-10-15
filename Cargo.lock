@@ -633,6 +633,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bt-godot"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "bt-core",
+ "bt-image",
+ "bt-project",
+ "bt-render",
+ "bt-terrain",
+ "bt-test-data",
+ "bt-tmx",
+ "bt-utils",
+ "glam",
+ "image",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "bt-image"
 version = "0.1.0"
 dependencies = [
