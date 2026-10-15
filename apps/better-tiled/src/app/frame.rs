@@ -50,11 +50,12 @@ pub(crate) struct App {
     pub(super) editor: Editor,
     pub(super) godot: super::godot::GodotState,
     pub(super) canvases: HashMap<DocumentId, Canvas>,
+    pub(super) issues_filter: String,
     layers_panel: LayersPanel,
     project_panel: crate::panels::ProjectPanel,
     objects_panel: ObjectsPanel,
     /// The panel the left group shows.
-    left_tab: LeftTab,
+    pub(super) left_tab: LeftTab,
     /// The panel shown in the right group's upper part.
     right_tab: RightTab,
     /// The canvas's tools.
@@ -82,7 +83,7 @@ pub(crate) struct App {
     /// Whether intents were applied since then, so the list may be out of date.
     watch_list_stale: bool,
     pub(super) gpu: Option<CanvasGpu>,
-    images: Arc<Mutex<ImageStore>>,
+    pub(super) images: Arc<Mutex<ImageStore>>,
     pub(super) intents: Vec<Intent>,
     pub(super) flash: Option<Flash>,
     session: SessionSync,
@@ -394,6 +395,7 @@ impl App {
             project_panel: crate::panels::ProjectPanel::default(),
             objects_panel: ObjectsPanel::default(),
             left_tab: LeftTab::default(),
+            issues_filter: String::new(),
             right_tab: RightTab::default(),
             toolbox: ToolBox::default(),
             tiles_panel: TilesPanel::default(),
@@ -724,16 +726,18 @@ impl App {
                 .map(|map| &**map),
             hint: canvas.and_then(Canvas::hint),
         };
-        let count = current
-            .and_then(|doc| self.godot.issues.get(&doc))
-            .map_or(0, Vec::len);
+        let count = current.map_or(0, |doc| self.all_issues(doc).len());
         let mut open_issues = false;
         egui::Panel::bottom("status_bar").show(ui, |ui| {
             if count > 0 {
                 open_issues = ui
                     .button(
-                        egui::RichText::new(format!("{count} Godot issues"))
-                            .color(ui.visuals().error_fg_color),
+                        egui::RichText::new(if count == 1 {
+                            "1 issue".into()
+                        } else {
+                            format!("{count} issues")
+                        })
+                        .color(ui.visuals().error_fg_color),
                     )
                     .clicked();
             }
@@ -749,7 +753,10 @@ impl App {
         let project_document = doc
             .and_then(|doc| self.editor.document(doc))
             .is_some_and(|doc| self.editor.store().project(doc.asset()).is_some());
-        if (doc.is_none() || project_document) && self.editor.project_asset().is_some() {
+        if (doc.is_none() || project_document)
+            && self.editor.project_asset().is_some()
+            && self.left_tab != LeftTab::Issues
+        {
             egui::Panel::left("project-only")
                 .resizable(true)
                 .default_size(300.0)
@@ -763,13 +770,17 @@ impl App {
         let in_template = self.editor.template_of(doc).is_some();
         // While a map's tileset is edited in its place, the map's layers and objects wait; a
         // tileset's tab has none.
-        if on_map && !in_template && !self.shows_tileset_editor(doc) {
+        let map_panels = on_map && !in_template && !self.shows_tileset_editor(doc);
+        if map_panels || self.left_tab == LeftTab::Issues {
             egui::Panel::left("left_panels")
                 .resizable(true)
                 .default_size(240.0)
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         for tab in LeftTab::ALL {
+                            if !map_panels && !matches!(tab, LeftTab::Issues | LeftTab::Project) {
+                                continue;
+                            }
                             let title = egui::RichText::new(tab.title()).heading();
                             if ui.selectable_label(self.left_tab == tab, title).clicked() {
                                 self.left_tab = tab;
@@ -789,7 +800,7 @@ impl App {
                         LeftTab::Project => {
                             self.project_panel.show(ui, &self.editor, &mut self.intents)
                         }
-                        LeftTab::Issues => self.show_godot_issues(ui, doc),
+                        LeftTab::Issues => self.show_issues(ui, doc),
                         LeftTab::Stamps => {
                             let mut files = Vec::new();
                             self.stamps_panel.show(
@@ -813,6 +824,9 @@ impl App {
                         }
                     }
                 });
+        }
+        if project_document {
+            return;
         }
         // The Properties panel below the Tiles panel (alone in a tileset's tab), so it stays
         // beside the tileset editor.

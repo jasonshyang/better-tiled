@@ -21,6 +21,30 @@ impl App {
 
     fn carry_out(&mut self, ctx: &egui::Context, effect: Effect) {
         match effect {
+            Effect::ReadIssueImage { request, path } => {
+                let request_on_failure = request.clone();
+                if let Err(error) = self.workers.spawn("locate image", move || {
+                    vec![Intent::IssueImageRead {
+                        request,
+                        result: super::images::read_image_reference(&path),
+                    }]
+                }) {
+                    self.intents.push(Intent::IssueImageRead {
+                        request: request_on_failure,
+                        result: Err(error),
+                    });
+                }
+            }
+            Effect::CheckIssues(job) => {
+                let worker = job.clone();
+                if let Err(error) = self
+                    .workers
+                    .spawn("issues", move || vec![Intent::IssuesChecked(worker.run())])
+                {
+                    self.intents.push(Intent::IssuesChecked(job.failed(error)));
+                }
+            }
+            Effect::Show(Dialog::Issues(_)) => self.left_tab = super::frame::LeftTab::Issues,
             Effect::RunCommand(job) => {
                 if job.shows_output() {
                     self.console_open = true;

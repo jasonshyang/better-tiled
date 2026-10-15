@@ -23,6 +23,8 @@ const FIRST_SEED: u64 = 0xA070_3A9D_5EED;
 pub(crate) struct AutoMapState {
     /// Each map's rules, by its asset.
     pub(crate) maps: HashMap<AssetId, AutoMapRules>,
+    /// Problems restoring painted state, retained alongside the document.
+    pub(crate) restoration: HashMap<AssetId, Vec<bt_automap::Problem>>,
     /// The seed of the next run.
     pub(crate) seed: u64,
     /// The number of the next read, so that only the latest read of a map's rules counts.
@@ -44,6 +46,7 @@ impl Default for AutoMapState {
     fn default() -> AutoMapState {
         AutoMapState {
             maps: HashMap::new(),
+            restoration: HashMap::new(),
             seed: FIRST_SEED,
             next_read: 1,
             types_seen: None,

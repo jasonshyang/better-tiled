@@ -17,6 +17,7 @@ mod godot;
 mod history;
 mod inspect;
 mod intent;
+mod issues;
 mod layer_commands;
 mod map_commands;
 mod notice;
@@ -68,6 +69,10 @@ pub use history::{
 };
 pub use inspect::Inspected;
 pub use intent::Intent;
+pub use issues::{
+    Issue, IssueJob, IssueKind, IssueSource, IssueTarget, IssuesLoaded, LocateTarget, ResourceKind,
+    deduplicate_issues,
+};
 pub use notice::{Notice, Severity};
 pub use objects::{
     HandleFrame, NodeHandle, ObjectFrame, ObjectRow, ObjectStroke, ObjectStrokeKind, SnapToggle,

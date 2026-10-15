@@ -1034,3 +1034,18 @@ for Refresh. This avoids rescanning a large tree on each custom-property edit an
 late refresh from replacing newer filesystem results. Whole-root property drafts require their
 captured source version to remain current. Named project edits now have recovery snapshots;
 map saves and project Save As remove snapshots after successful dependent writes.
+
+## 2026-10-15 — Issues use versioned worker snapshots and exact repair targets
+
+File probes and full map validation run on workers over immutable roots. Their results carry a
+request identity and store revision; stale completions cannot restore old diagnostic targets.
+Checks repeat every two seconds for files that appear or disappear. AutoMap compiler, command,
+Live and painted-state restoration problems join renderer decode failures and Godot notes in
+one panel. Resource identity includes the reference target, without interpreting error text;
+compiler reports without structured locations retain their complete detail to keep distinct
+problems. Embedded images use the same request keys as the renderer. The model-to-image request
+adapter now lives in `bt-image`, shared by the renderer and diagnostic worker.
+
+Locate File captures the owner version before opening the picker and checks it again after
+reading a replacement. Reference changes use the document's existing transaction history,
+preserve cell IDs and object overrides, and keep already-edited dependency assets authoritative.

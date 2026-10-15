@@ -102,6 +102,7 @@ impl EditorBuilder {
             keymap,
             tools: ToolState::default(),
             stamps: crate::StampStore::new(stamps_folder),
+            issues: Default::default(),
             palette: PaletteState::default(),
             clipboard: Clipboard::default(),
             files: Files {
@@ -147,6 +148,7 @@ pub struct Editor {
     pub(crate) watch: WatchModel,
     /// Each map's rules and the next AutoMap run's seed.
     pub(crate) automap: AutoMapState,
+    pub(crate) issues: crate::issues::Issues,
     /// Each document's external edits and marks.
     pub(crate) external: crate::external::ExternalStates,
     pub(crate) session: Session,
@@ -245,6 +247,11 @@ impl Editor {
                 }
                 effects
             }
+            Intent::LocateIssue { doc, target } => self.locate_issue(doc, target),
+            Intent::IssueImageRead { request, result } => self.issue_image_read(request, result),
+            Intent::GoToIssue(target) => self.go_to_issue(target),
+            Intent::IssuesChecked(loaded) => self.issues_checked(loaded),
+            Intent::RefreshIssues => self.refresh_issues(),
             Intent::FilePicked { request, path } => self.file_picked(request, path),
             Intent::Decided { decision, choice } => self.decide(decision, choice),
             Intent::SelectDocument(doc) => {
@@ -454,6 +461,7 @@ impl Editor {
     /// recovery schedule's snapshots to write and delete.
     fn tick(&mut self, now_ms: u64) -> Vec<Effect> {
         let mut effects = self.tick_rules();
+        effects.extend(self.tick_issues(now_ms));
         if !self.settings.general.recovery {
             return effects;
         }

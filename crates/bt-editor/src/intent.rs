@@ -25,6 +25,26 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Choose a replacement for a missing or unreadable resource.
+    LocateIssue {
+        /// History owner.
+        doc: DocumentId,
+        /// Reference to repair.
+        target: crate::LocateTarget,
+    },
+    /// An image chosen for a file repair was probed.
+    IssueImageRead {
+        /// Captured request.
+        request: crate::FileRequest,
+        /// Probed image or a visible error.
+        result: Result<bt_core::ImageRef, String>,
+    },
+    /// Navigate to the source of a diagnostic.
+    GoToIssue(crate::IssueTarget),
+    /// A background diagnostic check finished.
+    IssuesChecked(crate::IssuesLoaded),
+    /// Check files and model invariants again now.
+    RefreshIssues,
     /// Apply a Project Properties draft to its captured project asset.
     SetProject {
         /// History owner.

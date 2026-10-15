@@ -142,6 +142,11 @@ impl Editor {
         if let Some(saved) = saved {
             self.automap.saved.insert(doc, saved);
         }
+        if let Some(asset) = self.document(doc).map(|doc| doc.asset()) {
+            self.automap
+                .restoration
+                .insert(asset, restored.notes.clone());
+        }
         let Some(first) = restored.notes.first() else {
             return Vec::new();
         };

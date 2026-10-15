@@ -19,6 +19,7 @@ pub struct AssetStore {
     assets: BTreeMap<AssetId, Asset>,
     by_path: HashMap<PathBuf, AssetId>,
     next_id: u64,
+    generation: u64,
     template_views: HashMap<AssetId, Arc<Map>>,
 }
 
@@ -41,8 +42,33 @@ impl AssetStore {
         AssetStore::default()
     }
 
+    /// Revision of loaded asset state, including references, paths and on-disk status.
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub(crate) fn set_warnings(&mut self, id: AssetId, warnings: Vec<Warning>) {
+        if let Some(asset) = self.assets.get_mut(&id) {
+            asset.warnings = warnings;
+            self.generation += 1;
+        }
+    }
+
+    pub(crate) fn clear_file_warnings(&mut self, path: &Path) {
+        for asset in self.assets.values_mut() {
+            let before = asset.warnings.len();
+            asset
+                .warnings
+                .retain(|warning| warning.related_file.as_deref() != Some(path));
+            if asset.warnings.len() != before {
+                self.generation += 1;
+            }
+        }
+    }
+
     /// Adds an asset; one read from a file starts clean at version 1, a new one dirty.
     pub fn insert(&mut self, mut new: NewAsset) -> AssetId {
+        self.generation += 1;
         new.root = self.refresh_root_references(new.root);
         self.next_id += 1;
         let id = AssetId(self.next_id);
@@ -295,6 +321,7 @@ impl AssetStore {
 
     /// Replaces an asset's root and version (a transaction, undo or redo).
     pub(crate) fn set_root(&mut self, id: AssetId, root: Root, version: u64) {
+        self.generation += 1;
         let root = self.refresh_root_references(root);
         if let Some(asset) = self.assets.get_mut(&id) {
             asset.root = root;
@@ -307,6 +334,7 @@ impl AssetStore {
     /// Replaces an asset's root and version without refreshing what uses it (a map whose own
     /// tilesets were just refreshed).
     fn set_root_only(&mut self, id: AssetId, root: Root) {
+        self.generation += 1;
         if let Some(asset) = self.assets.get_mut(&id) {
             asset.root = root;
         }
@@ -362,6 +390,7 @@ impl AssetStore {
 
     /// Records that the asset's current version is what its file holds.
     pub(crate) fn mark_saved(&mut self, id: AssetId, content_hash: u64) {
+        self.generation += 1;
         if let Some(asset) = self.assets.get_mut(&id) {
             asset.on_disk = Some(OnDisk {
                 version: asset.version,
@@ -373,6 +402,7 @@ impl AssetStore {
 
     /// Records whether an asset's file is gone (the asset is then the only copy, and dirty).
     pub(crate) fn set_missing(&mut self, id: AssetId, missing: bool) {
+        self.generation += 1;
         if let Some(asset) = self.assets.get_mut(&id) {
             asset.missing = missing;
         }
@@ -380,6 +410,7 @@ impl AssetStore {
 
     /// Moves an asset to another file (Save As).
     pub(crate) fn retarget(&mut self, id: AssetId, path: PathBuf) {
+        self.generation += 1;
         let Some(asset) = self.assets.get_mut(&id) else {
             return;
         };
@@ -393,6 +424,7 @@ impl AssetStore {
 
     /// Takes an asset out of the store.
     pub(crate) fn remove(&mut self, id: AssetId) -> Option<Asset> {
+        self.generation += 1;
         self.template_views.remove(&id);
         let asset = self.assets.remove(&id)?;
         if let Some(path) = &asset.path {
@@ -403,6 +435,7 @@ impl AssetStore {
 
     /// Marks a recovered asset: it has no file version on disk, so it is dirty until saved.
     pub(crate) fn forget_disk(&mut self, id: AssetId) {
+        self.generation += 1;
         if let Some(asset) = self.assets.get_mut(&id) {
             asset.on_disk = None;
         }

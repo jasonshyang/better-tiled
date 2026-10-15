@@ -90,44 +90,50 @@ pub fn refresh_template_instances(
     for id in ids {
         let object = crate::object_mut(map, id)?;
         let previous = object.clone();
-        let own = object
-            .properties
-            .iter()
-            .filter(|(name, value)| old.properties.get(*name) != Some(*value))
-            .map(|(name, value)| (name.clone(), value.clone()))
-            .collect::<bt_core::Properties>();
-        object.properties = base.properties.clone();
-        object.properties.extend(own);
-        let overrides = object.overrides;
-        if !overrides.contains(ObjectOverrides::NAME) {
-            object.name = base.name.clone();
-        }
-        if !overrides.contains(ObjectOverrides::CLASS) {
-            object.class = base.class.clone();
-        }
-        if !overrides.contains(ObjectOverrides::SIZE) {
-            object.size = base.size;
-        }
-        if !overrides.contains(ObjectOverrides::ROTATION) {
-            object.rotation = base.rotation;
-        }
-        if !overrides.contains(ObjectOverrides::OPACITY) {
-            object.opacity = base.opacity;
-        }
-        if !overrides.contains(ObjectOverrides::VISIBLE) {
-            object.visible = base.visible;
-        }
-        if !overrides.contains(ObjectOverrides::TILE) {
-            object.tile = base.tile;
-        }
-        if !overrides.intersects(ObjectOverrides::SHAPE | ObjectOverrides::TEXT) {
-            object.shape = base.shape.clone();
-        }
+        refresh_template_object(object, old, &base);
         if *object != previous {
             changed.push(id);
         }
     }
     Ok(changed)
+}
+
+/// Refreshes one instance from a base already remapped to its owning map. Its identity,
+/// position, explicitly overridden fields and own properties stay intact.
+pub fn refresh_template_object(object: &mut MapObject, old: &MapObject, base: &MapObject) {
+    let own = object
+        .properties
+        .iter()
+        .filter(|(name, value)| old.properties.get(*name) != Some(*value))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect::<bt_core::Properties>();
+    object.properties = base.properties.clone();
+    object.properties.extend(own);
+    let overrides = object.overrides;
+    if !overrides.contains(ObjectOverrides::NAME) {
+        object.name = base.name.clone();
+    }
+    if !overrides.contains(ObjectOverrides::CLASS) {
+        object.class = base.class.clone();
+    }
+    if !overrides.contains(ObjectOverrides::SIZE) {
+        object.size = base.size;
+    }
+    if !overrides.contains(ObjectOverrides::ROTATION) {
+        object.rotation = base.rotation;
+    }
+    if !overrides.contains(ObjectOverrides::OPACITY) {
+        object.opacity = base.opacity;
+    }
+    if !overrides.contains(ObjectOverrides::VISIBLE) {
+        object.visible = base.visible;
+    }
+    if !overrides.contains(ObjectOverrides::TILE) {
+        object.tile = base.tile;
+    }
+    if !overrides.intersects(ObjectOverrides::SHAPE | ObjectOverrides::TEXT) {
+        object.shape = base.shape.clone();
+    }
 }
 
 #[cfg(test)]

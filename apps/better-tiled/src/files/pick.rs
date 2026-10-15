@@ -48,6 +48,29 @@ impl FileDialogs {
 /// Asks for a file on a worker.
 fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
     workers.spawn("file-dialog", move || match &request {
+        FileRequest::LocateFile { target, .. } => {
+            let dialog = rfd::AsyncFileDialog::new().set_title("Locate File");
+            let dialog = match target {
+                bt_editor::LocateTarget::Tileset { .. } => {
+                    dialog.add_filter("Tiled tilesets", &["tsx", "tsj", "json"])
+                }
+                bt_editor::LocateTarget::Template { .. } => {
+                    dialog.add_filter("Object templates", &["tx", "tj", "json"])
+                }
+                bt_editor::LocateTarget::WorldMap { .. } => {
+                    dialog.add_filter("Tiled maps", &MAP_EXTENSIONS)
+                }
+                _ => dialog.add_filter(
+                    "Images and maps",
+                    &["png", "jpg", "jpeg", "bmp", "gif", "webp", "tmx", "tmj"],
+                ),
+            };
+            let picked = pollster::block_on(dialog.pick_file());
+            vec![Intent::FilePicked {
+                request,
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::NewProject | FileRequest::ProjectAs(_) => {
             let picked = pollster::block_on(
                 rfd::AsyncFileDialog::new()

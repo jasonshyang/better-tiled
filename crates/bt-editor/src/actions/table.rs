@@ -364,6 +364,8 @@ action_table! {
         .toggle(),
     /// Edit the project's external commands.
     EditCommands => ActionSpec::new(ActionId::EditCommands, "edit_commands", "Edit Commands…", "project external executable arguments").on(Document),
+    /// Show all diagnostic sources.
+    ShowIssues => ActionSpec::new(ActionId::ShowIssues, "show_issues", "Show Issues", "errors warnings missing files diagnostics").on(Context::Document),
     /// Show process output and execution controls.
     ShowConsole => ActionSpec::new(ActionId::ShowConsole, "show_console", "Show Console", "commands output process log"),
     /// The project's classes and enums.

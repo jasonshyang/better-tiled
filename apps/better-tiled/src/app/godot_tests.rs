@@ -76,12 +76,12 @@ fn export_uses_the_shown_map_remember_is_undoable_and_save_refusals_stay_in_issu
         !window.has_modal(),
         "an automatic export does not ask a question"
     );
-    assert!(window.shows("1 Godot issues"));
-    window.click("1 Godot issues");
+    assert!(window.shows("1 issue"));
+    window.click("1 issue");
     assert!(window.shows("Issues"));
     window.pause(12.0);
     assert!(
-        window.shows("1 Godot issues"),
+        window.shows("1 issue"),
         "the issue survives the status flash"
     );
 }

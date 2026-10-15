@@ -14,6 +14,15 @@ use crate::recovery::Snapshot;
 /// A request to the window.
 #[derive(Clone, Debug)]
 pub enum Effect {
+    /// Probe an image chosen for an Issues repair on a worker.
+    ReadIssueImage {
+        /// Captured repair request.
+        request: FileRequest,
+        /// Chosen file.
+        path: PathBuf,
+    },
+    /// Check model invariants and resource files on a worker.
+    CheckIssues(crate::IssueJob),
     /// Scan the current project's folders away from the frame thread.
     ScanProject(crate::ProjectScanJob),
     /// Run an external project command on a window worker.
@@ -65,6 +74,8 @@ pub enum Effect {
 /// A dialog of the window's.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Dialog {
+    /// Show file, model, rules and export diagnostics.
+    Issues(DocumentId),
     /// Project settings and custom properties.
     ProjectProperties(DocumentId),
     /// Edit the current map's world settings and placements.
@@ -96,6 +107,15 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// Replace this exact reference, if the owner is still at the captured version.
+    LocateFile {
+        /// History owner.
+        doc: DocumentId,
+        /// Reference to replace.
+        target: crate::LocateTarget,
+        /// Owner's version when the picker opened.
+        version: u64,
+    },
     /// Where to create a new project.
     NewProject,
     /// Save this project under a new filename.

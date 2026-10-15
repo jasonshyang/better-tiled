@@ -27,6 +27,7 @@ mod supply;
 mod text;
 mod vector;
 
+pub use bt_image::image_request;
 pub use error::RenderError;
 pub use grid::{GridStyle, grid_vectors};
 pub use headless::{HeadlessDevice, Picture, Render};
@@ -34,7 +35,7 @@ pub use input::{Camera, FrameInput, LayerVisibility, ObjectStyle, PreviewTile};
 pub use map_images::MapImages;
 pub use renderer::{MapRenderer, MapRendererBuilder};
 pub use stats::RenderStats;
-pub use supply::{ImageSupply, NestedSupply, image_request};
+pub use supply::{ImageSupply, NestedSupply};
 pub use text::{TextItem, TextStyle};
 pub use vector::{Dash, Placement, Stroke, VectorItem, VectorShape};
 pub use wgpu;

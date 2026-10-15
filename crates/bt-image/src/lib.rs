@@ -12,6 +12,7 @@ mod error;
 mod key;
 mod measure;
 mod probe;
+mod request;
 mod store;
 
 pub use decode::{DecodedImage, decode_bytes, decode_file, is_map_file};
@@ -20,4 +21,5 @@ pub use error::Error;
 pub use key::{ColorKey, ImageInput, ImageKey, ImageRequest};
 pub use measure::{alpha_bounds, bottom_center};
 pub use probe::{probe_size, probe_size_of_bytes};
+pub use request::image_request;
 pub use store::{ImagePoll, ImageStore, ImageStoreBuilder, MapImageSource, NestedImages};

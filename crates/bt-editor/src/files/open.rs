@@ -126,6 +126,14 @@ impl Editor {
             }
         }
         let mut effects = Vec::new();
+        if let LoadPurpose::Locate {
+            doc,
+            target,
+            version,
+        } = loaded.purpose
+        {
+            return self.finish_locating_file(doc, target, version, loaded);
+        }
         if let LoadPurpose::ChooseTemplate(doc) = loaded.purpose {
             return self.finish_choosing_template(doc, loaded);
         }
@@ -211,9 +219,14 @@ impl Editor {
         let mut map = (*map).clone();
         self.adopt_dependencies(files.dependencies);
         self.store.refresh_tilesets(&mut map);
+        let mut restoration_problems = Vec::new();
         let mut layers = match files.layers {
             Ok(layers) => layers,
             Err(problem) => {
+                restoration_problems.push(bt_automap::Problem::new(
+                    bt_automap::ProblemKind::PaintedNotRestored,
+                    problem.clone(),
+                ));
                 effects.push(Effect::Notify(Notice::warning(format!(
                     "The AutoMap layers of {} were not read: {problem}",
                     bt_utils::paths::display_name(&path)
@@ -267,6 +280,7 @@ impl Editor {
         }
         self.files.loaders.insert(asset, files.loader);
         self.sync_template_caches();
+        self.automap.restoration.insert(asset, restoration_problems);
         let doc = self.open_document(asset);
         if let Some(restored) = layers {
             let saved = loaded.recovered_from.is_none().then_some(saved);
@@ -331,7 +345,7 @@ impl Editor {
     }
 
     /// Puts the external tilesets a load read into the store, unless it has their files.
-    pub(super) fn adopt_dependencies(
+    pub(crate) fn adopt_dependencies(
         &mut self,
         dependencies: Vec<crate::files::load::LoadedAsset>,
     ) {
@@ -359,6 +373,7 @@ impl Editor {
             .get(asset)
             .map(crate::store::Asset::display_name)
             .unwrap_or_default();
+        self.store.set_warnings(asset, files.warnings.clone());
         self.adopt_dependencies(files.dependencies);
         match files.content {
             Root::World(world) => {
