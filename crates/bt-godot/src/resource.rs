@@ -1,6 +1,6 @@
 //! Validating Godot text resources without starting Godot.
 /// Checks the syntax of a Godot text scene or resource, including nested values.
-/// This is a syntax check; `verify` also resolves resources through Godot.
+/// This is a syntax check; [`crate::verify::verify`] also resolves resources through Godot.
 pub fn validate_resource_text(text: &str) -> Result<(), String> {
     crate::read::parse(text).map(|_| ())
 }
