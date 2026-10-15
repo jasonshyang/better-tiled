@@ -17,6 +17,7 @@ mod images_tests;
 mod issues;
 mod live;
 #[cfg(test)]
+#[cfg(unix)]
 mod live_tests;
 #[cfg(test)]
 mod m3_tests;

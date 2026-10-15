@@ -49,6 +49,7 @@ impl Run {
 
     /// A run of `bt` with `args`, with the editors listening in `live`, with `folders`.
     #[cfg(test)]
+    #[cfg(unix)]
     pub(crate) fn with_editors_in(args: &[&str], folders: Folders, live: &std::path::Path) -> Run {
         use clap::Parser;
         let cli = Cli::try_parse_from(std::iter::once("bt").chain(args.iter().copied()))

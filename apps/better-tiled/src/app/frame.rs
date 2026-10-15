@@ -335,7 +335,7 @@ impl App {
     }
 
     /// Whether the live link is listening (for the window's tests).
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn live_listening(&self) -> bool {
         self.live.is_listening()
     }

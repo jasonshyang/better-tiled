@@ -85,23 +85,34 @@ fn orthogonal_objects_keep_their_positions_rotations_and_image_anchors() {
         .map(|name| examples.join(format!("{name}.tmx")))
         .collect();
     maps.extend([dir.join("maps/features.tmx"), dir.join("maps/level.tmx")]);
-    // The Highlands chambers: 593 objects, tile objects mostly.
-    if let Some(chambers) = bt_test_data::test_data(
+    assert_eq!(check_orthogonal_objects(&maps, &dir), 276);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn highlands_objects_keep_their_positions_rotations_and_image_anchors() {
+    let Some(chambers) = bt_test_data::test_data(
         "assets/Epic RPG World - Highlands V1.4.1/Highlands Biome Map/tiled",
-    ) {
-        let mut found: Vec<PathBuf> = std::fs::read_dir(chambers)
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().is_some_and(|e| e == "tmx"))
-            .collect();
-        found.sort();
-        assert_eq!(found.len(), 8);
-        maps.extend(found);
-    }
+    ) else {
+        return;
+    };
+    let mut maps: Vec<PathBuf> = std::fs::read_dir(chambers)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "tmx"))
+        .collect();
+    maps.sort();
+    assert_eq!(maps.len(), 8);
+    let dir = project("objects-orthogonal-highlands");
+    assert_eq!(check_orthogonal_objects(&maps, &dir), 593);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+fn check_orthogonal_objects(maps: &[PathBuf], dir: &Path) -> usize {
     let mut checked = 0;
     for (i, map_path) in maps.iter().enumerate() {
         let target = dir.join(format!("scenes/{i}.tscn"));
-        let mut loader = loader(&dir);
+        let mut loader = loader(dir);
         export(map_path, &mut loader, &target, &Options::default()).unwrap();
         let loaded = loader.load_map(map_path).unwrap().value;
         let rule_slots = crate::resolve::rule_slots(&loaded);
@@ -189,8 +200,7 @@ fn orthogonal_objects_keep_their_positions_rotations_and_image_anchors() {
             checked += 1;
         }
     }
-    assert!(checked > 850, "{checked} objects");
-    std::fs::remove_dir_all(&dir).ok();
+    checked
 }
 
 /// An isometric map (10 rows of 64×32 tiles: Tiled's cell centres are Godot's plus (288, 0)).

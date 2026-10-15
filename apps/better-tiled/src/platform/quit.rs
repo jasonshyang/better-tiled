@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// How a quit the system asks for is answered.
+#[cfg(any(target_os = "macos", test))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SystemQuit {
     /// Nothing would be lost: the application quits.
@@ -28,15 +29,19 @@ pub(crate) enum SystemQuit {
 pub(crate) struct QuitGuard {
     unsaved: AtomicBool,
     asked: AtomicBool,
+    #[cfg(any(target_os = "macos", test))]
     waker: egui::Context,
 }
 
 impl QuitGuard {
     /// A guard that wakes `waker` when it holds a quit back.
     pub(crate) fn new(waker: egui::Context) -> Arc<QuitGuard> {
+        #[cfg(not(any(target_os = "macos", test)))]
+        drop(waker);
         Arc::new(QuitGuard {
             unsaved: AtomicBool::new(false),
             asked: AtomicBool::new(false),
+            #[cfg(any(target_os = "macos", test))]
             waker,
         })
     }
@@ -47,6 +52,7 @@ impl QuitGuard {
     }
 
     /// Answers a quit the system asks for; one held back waits for the frame loop to ask.
+    #[cfg(any(target_os = "macos", test))]
     pub(crate) fn answer_system_quit(&self) -> SystemQuit {
         if !self.unsaved.load(Ordering::Relaxed) {
             log::debug!("the system asks to quit, and nothing is unsaved");

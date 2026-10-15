@@ -296,7 +296,9 @@ pub fn executable(program: &str) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, mpsc};
+    use std::sync::Mutex;
+    #[cfg(unix)]
+    use std::sync::mpsc;
 
     #[test]
     fn unicode_split_across_output_reads_is_preserved() {

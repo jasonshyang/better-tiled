@@ -733,7 +733,6 @@ fn image_copies_changed_in_godot_are_kept_and_refused_once_their_image_changes()
 /// written it is replaced, not taken for a copy changed in Godot.
 #[test]
 fn a_copy_that_couldnt_be_written_is_replaced_once_it_can_be() {
-    use std::os::unix::fs::PermissionsExt;
     let dir = project("copy-unwritten");
     let game = game(&dir);
     let (map, target) = (dir.join("maps/level.tmx"), game.join("levels/level.tscn"));
@@ -743,7 +742,10 @@ fn a_copy_that_couldnt_be_written_is_replaced_once_it_can_be() {
     let recorded = std::fs::read(&manifest).unwrap();
 
     // Locked (read-only, as version control may leave it) when its image changes.
-    std::fs::set_permissions(&copy, std::fs::Permissions::from_mode(0o444)).unwrap();
+    let original_permissions = std::fs::metadata(&copy).unwrap().permissions();
+    let mut locked = original_permissions.clone();
+    locked.set_readonly(true);
+    std::fs::set_permissions(&copy, locked).unwrap();
     let mut edited = image::open(dir.join("maps/tiles.png")).unwrap().to_rgba8();
     edited.put_pixel(0, 0, image::Rgba([1, 2, 3, 255]));
     edited.save(dir.join("maps/tiles.png")).unwrap();
@@ -762,7 +764,7 @@ fn a_copy_that_couldnt_be_written_is_replaced_once_it_can_be() {
         "the list still says what the copy is"
     );
 
-    std::fs::set_permissions(&copy, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::fs::set_permissions(&copy, original_permissions).unwrap();
     let report = run(&map, &target, &Options::default()).unwrap();
     assert!(
         report
