@@ -346,3 +346,22 @@ tests cover the public export flows, saved-file semantics, remember/undo and aut
 refusal persistence. CI downloads pinned Godot 4.7 on Linux; only the other platforms may
 skip Godot through the existing explicit skip log. The weekly fuzzer includes
 `godot_resource` for the text scene/resource reader.
+
+
+## 15. As built at M6 (2026-10-15)
+
+The Rust 1.95.0 baseline passed 1,633 tests with the manual showcase recorder ignored.
+The completed M6 workspace run passed 1,703 tests, with zero failures and the same one ignored
+recorder. Workspace format and Clippy checks passed.
+M6 adds core integration suites for shortcut schemes, image export, stamp persistence,
+project commands, world assets, template assets, project workspaces, Issues and collision
+templates. They cover undo and redo, owner-relative references, session/recovery, stale
+picker/worker results, project switching, dependency-save ordering and failures. Command
+process tests cover streamed UTF-8 output, output limits, cancellation and shutdown.
+
+Window tests exercise the actual dialogs, menus, shortcut routing, panels and file requests.
+GPU tests draw world neighbours and frames, saved stamp thumbnails, template ghosts in map
+and collision canvases, project browsing and actionable Issues. The rendered screenshots were
+inspected during implementation. Shared renderer tests cover map files used as images,
+including recursion failures. The full workspace suite includes the existing corpus,
+headless Godot, CLI and live-link regressions. Format and Clippy checks run across all targets.

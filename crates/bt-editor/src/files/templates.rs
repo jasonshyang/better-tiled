@@ -2,6 +2,7 @@
 //! insertion adopts its tileset and the object in one transaction, as the preview showed.
 
 use super::{LoadKind, LoadPurpose, LoadSource, Loaded};
+use crate::objects::{ObjectHost, change_tile_shapes};
 use crate::{
     AssetId, DocumentId, EditError, Editor, Effect, NewAsset, Notice, Root, SnapToggle, ToolKind,
 };
@@ -11,15 +12,29 @@ use glam::DVec2;
 use std::{path::Path, sync::Arc};
 
 struct Placement {
-    asset: AssetId,
+    host: ObjectHost,
     layer: LayerId,
     map: Map,
     object: MapObject,
 }
 
 impl Editor {
+    /// The object editing view, including a tile's collision shapes.
+    pub(crate) fn template_editing_map(&self, doc: DocumentId) -> Option<Arc<Map>> {
+        self.collision_view(doc)
+            .map(Arc::new)
+            .or_else(|| self.map_of(doc).cloned())
+    }
+
+    fn template_owner(&self, doc: DocumentId) -> Option<AssetId> {
+        match self.object_host(doc)? {
+            ObjectHost::Map(asset) => Some(asset),
+            ObjectHost::Tile { home, .. } => Some(home.asset()),
+        }
+    }
+
     fn ensure_template_writer(&mut self, doc: DocumentId) {
-        if let Some(asset) = self.document(doc).map(|doc| doc.asset()) {
+        if let Some(asset) = self.template_owner(doc) {
             let types = Arc::new(self.custom_types().clone());
             self.files
                 .loaders
@@ -57,6 +72,16 @@ impl Editor {
         let Root::Template(template) = files.content else {
             return Vec::new();
         };
+        if matches!(self.object_host(doc), Some(ObjectHost::Tile { .. }))
+            && template
+                .object
+                .as_ref()
+                .is_some_and(|object| object.tile.is_some())
+        {
+            return vec![Effect::Notify(Notice::error(
+                "Tile-object templates cannot be used in collision groups",
+            ))];
+        }
         self.adopt_dependencies(files.dependencies);
         let asset = match self.store.by_path(&loaded.canonical) {
             Some(asset) if self.store.template(asset).is_some() => asset,
@@ -87,19 +112,21 @@ impl Editor {
         at: DVec2,
         snap: SnapToggle,
     ) -> Result<Placement, String> {
-        let asset = self
-            .document(doc)
-            .ok_or("The map is no longer open")?
-            .asset();
-        let mut map = (**self
-            .store
-            .map(asset)
-            .ok_or("Templates are placed on maps")?)
-        .clone();
-        let layer = self
-            .document(doc)
-            .and_then(|doc| doc.selection().current_layer)
-            .ok_or("Choose an object layer first")?;
+        let host = self
+            .object_host(doc)
+            .ok_or("Choose an object layer or collision tile first")?;
+        let mut map = self
+            .template_editing_map(doc)
+            .ok_or("The object editor is no longer open")?
+            .as_ref()
+            .clone();
+        let layer = match host {
+            ObjectHost::Tile { .. } => LayerId(2),
+            ObjectHost::Map(_) => self
+                .document(doc)
+                .and_then(|doc| doc.selection().current_layer)
+                .ok_or("Choose an object layer first")?,
+        };
         if map
             .layer(layer)
             .and_then(|layer| layer.as_object_layer())
@@ -123,8 +150,20 @@ impl Editor {
             .store
             .template(template)
             .ok_or("The template is no longer loaded")?;
+        if matches!(host, ObjectHost::Tile { .. })
+            && definition
+                .object
+                .as_ref()
+                .is_some_and(|object| object.tile.is_some())
+        {
+            return Err("Tile-object templates cannot be placed in collision groups".into());
+        }
+
         let source = self
-            .path_of(doc)
+            .template_owner(doc)
+            .and_then(|owner| self.store.get(owner))
+            .and_then(|asset| asset.path())
+            .map(Path::to_path_buf)
             .and_then(|owner| {
                 owner
                     .parent()
@@ -144,7 +183,7 @@ impl Editor {
             - (bounds.min + bounds.max) * 0.5;
         object.pos = self.snapped(doc, map.geometry().screen_to_pixel(anchor), snap);
         Ok(Placement {
-            asset,
+            host,
             layer,
             map,
             object,
@@ -175,14 +214,27 @@ impl Editor {
             Ok(placement) => placement,
             Err(problem) => return vec![Effect::Notify(Notice::error(problem))],
         };
+        let mut placement = placement;
+        let id = match add_object(&mut placement.map, placement.layer, placement.object, None) {
+            Ok(id) => id,
+            Err(problem) => return vec![Effect::Notify(Notice::error(problem.to_string()))],
+        };
         self.transact(doc, "Insert Template", |tx| {
-            *tx.map_mut(placement.asset)? = placement.map;
-            let id = add_object(
-                tx.map_mut(placement.asset)?,
-                placement.layer,
-                placement.object,
-                None,
-            )?;
+            match placement.host {
+                ObjectHost::Map(asset) => *tx.map_mut(asset)? = placement.map,
+                ObjectHost::Tile { home, tile } => {
+                    let objects = placement
+                        .map
+                        .layer(placement.layer)
+                        .and_then(|layer| layer.as_object_layer())
+                        .ok_or(EditError::NoSuchLayer(placement.layer))?
+                        .clone();
+                    change_tile_shapes(tx, home, tile, |shapes, _| {
+                        *shapes = objects;
+                        Ok(())
+                    })?;
+                }
+            }
             tx.selection.objects = vec![id];
             Ok::<_, EditError>(())
         })
@@ -207,10 +259,13 @@ impl Editor {
                 "That template is already loaded; edit its base instead",
             ))];
         }
-        let Some(asset) = self.document(doc).map(|doc| doc.asset()) else {
+        let Some(host) = self.object_host(doc) else {
             return Vec::new();
         };
-        let Some(map) = self.store.map(asset) else {
+        let Some(owner) = self.template_owner(doc) else {
+            return Vec::new();
+        };
+        let Some(map) = self.template_editing_map(doc) else {
             return Vec::new();
         };
         let Some(original) = map.object(object) else {
@@ -240,10 +295,13 @@ impl Editor {
                 "The object's layer is locked",
             ))];
         }
-        let mut template = ObjectTemplate::from_map_object(map, original);
+        let mut template = ObjectTemplate::from_map_object(&map, original);
         if let Some(from) = self
-            .path_of(doc)
-            .and_then(|path| path.parent().map(Path::to_path_buf))
+            .store
+            .get(owner)
+            .and_then(|asset| asset.path())
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
             && let Some(to) = path.parent()
             && let Some(base) = &mut template.object
         {
@@ -267,19 +325,28 @@ impl Editor {
         self.ensure_template_writer(doc);
         self.sync_template_caches();
         let source = self
-            .path_of(doc)
-            .and_then(|owner| {
-                owner
-                    .parent()
-                    .map(|folder| bt_utils::paths::reference_path(folder, &path))
-            })
+            .store
+            .get(owner)
+            .and_then(|asset| asset.path())
+            .and_then(Path::parent)
+            .map(|folder| bt_utils::paths::reference_path(folder, &path))
             .unwrap_or_else(|| path.to_string_lossy().into_owned());
-        let result = self.transact(doc, "Save As Template", |tx| {
-            let object = bt_edit::object_mut(tx.map_mut(asset)?, object)?;
+        let link = |object: &mut MapObject| {
             object.template = Some(FileRef::new(source, &path));
             object.overrides = ObjectOverrides::empty();
             if let Some(base) = &template.object {
                 object.properties = base.properties.clone();
+            }
+        };
+        let result = self.transact(doc, "Save As Template", |tx| {
+            match host {
+                ObjectHost::Map(asset) => link(bt_edit::object_mut(tx.map_mut(asset)?, object)?),
+                ObjectHost::Tile { home, tile } => {
+                    change_tile_shapes(tx, home, tile, |shapes, _| {
+                        link(bt_edit::object_mut_in(shapes, object)?);
+                        Ok(())
+                    })?
+                }
             }
             Ok::<_, EditError>(())
         });
@@ -296,7 +363,7 @@ impl Editor {
     pub(crate) fn edit_instance_template(&mut self, doc: DocumentId) -> Vec<Effect> {
         let path = self.document(doc).and_then(|document| {
             document.selection().objects.iter().find_map(|id| {
-                self.map_of(doc)?
+                self.template_editing_map(doc)?
                     .object(*id)?
                     .template
                     .as_ref()
@@ -330,8 +397,58 @@ impl Editor {
             .and_then(|asset| asset.path())
             .map(|path| path.to_path_buf());
         let folder = self
-            .path_of(doc)
-            .and_then(|path| path.parent().map(Path::to_path_buf));
+            .template_owner(doc)
+            .and_then(|owner| self.store.get(owner))
+            .and_then(|asset| asset.path())
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
+        let apply = |map: &mut Map, ids: &[ObjectId]| -> Result<(), bt_edit::EditError> {
+            for id in ids {
+                let previous = map
+                    .object(*id)
+                    .cloned()
+                    .ok_or(bt_edit::EditError::NoSuchObject(*id))?;
+                let file = if replace {
+                    chosen
+                        .as_ref()
+                        .map(|path| FileRef::new(path.to_string_lossy(), path))
+                } else {
+                    previous.template.clone()
+                };
+                let Some(file) = file else { continue };
+                let template = templates.get(&file.path);
+                let mut object = if detach {
+                    previous.clone()
+                } else {
+                    let template = template.ok_or_else(|| {
+                        bt_edit::EditError::TemplateUnavailable(file.path.clone())
+                    })?;
+                    instantiate_template(map, template, file.clone())?
+                };
+                if detach {
+                    if let (Some(from), Some(to), Some(base)) = (
+                        file.path.parent(),
+                        folder.as_deref(),
+                        template.and_then(|template| template.object.as_ref()),
+                    ) {
+                        let mut inherited = object
+                            .properties
+                            .iter()
+                            .filter(|(name, value)| base.properties.get(*name) == Some(*value))
+                            .map(|(name, value)| (name.clone(), value.clone()))
+                            .collect::<bt_core::Properties>();
+                        bt_tmx::rebase_properties(&mut inherited, from, to);
+                        object.properties.extend(inherited);
+                    }
+                    object.template = None;
+                    object.overrides = ObjectOverrides::empty();
+                }
+                object.id = previous.id;
+                object.pos = previous.pos;
+                *bt_edit::object_mut(map, *id)? = object;
+            }
+            Ok(())
+        };
         self.on_selected_objects(
             doc,
             if detach {
@@ -341,54 +458,31 @@ impl Editor {
             } else {
                 "Reset Template Instances"
             },
-            |map, ids| {
-                for id in ids {
-                    let previous = map
-                        .object(*id)
-                        .cloned()
-                        .ok_or(bt_edit::EditError::NoSuchObject(*id))?;
-                    let file = if replace {
-                        chosen
-                            .as_ref()
-                            .map(|path| FileRef::new(path.to_string_lossy(), path))
-                    } else {
-                        previous.template.clone()
-                    };
-                    let Some(file) = file else { continue };
-                    let template = templates.get(&file.path);
-                    let mut object = if detach {
-                        previous.clone()
-                    } else {
-                        let template = template.ok_or_else(|| {
-                            bt_edit::EditError::TemplateUnavailable(file.path.clone())
-                        })?;
-                        instantiate_template(map, template, file.clone())?
-                    };
-                    if detach {
-                        if let (Some(from), Some(to), Some(base)) = (
-                            file.path.parent(),
-                            folder.as_deref(),
-                            template.and_then(|template| template.object.as_ref()),
-                        ) {
-                            let mut inherited = object
-                                .properties
-                                .iter()
-                                .filter(|(name, value)| base.properties.get(*name) == Some(*value))
-                                .map(|(name, value)| (name.clone(), value.clone()))
-                                .collect::<bt_core::Properties>();
-                            bt_tmx::rebase_properties(&mut inherited, from, to);
-                            object.properties.extend(inherited);
-                        }
-                        object.template = None;
-                        object.overrides = ObjectOverrides::empty();
-                    }
-                    object.id = previous.id;
-                    object.pos = previous.pos;
-                    *bt_edit::object_mut(map, *id)? = object;
+            apply,
+            |objects, _, ids| {
+                let mut map = Map {
+                    layers: vec![bt_core::Layer::new(
+                        LayerId(1),
+                        "Collision",
+                        bt_core::LayerKind::Object(objects.clone()),
+                    )],
+                    ..Map::default()
+                };
+                apply(&mut map, ids)?;
+                if map
+                    .layer(LayerId(1))
+                    .and_then(|layer| layer.as_object_layer())
+                    .is_some_and(|layer| layer.objects.iter().any(|object| object.tile.is_some()))
+                {
+                    return Err(bt_edit::EditError::TileTemplateInCollision);
                 }
+                *objects = map
+                    .layer(LayerId(1))
+                    .and_then(|layer| layer.as_object_layer())
+                    .cloned()
+                    .ok_or(bt_edit::EditError::NotAnObjectLayer(LayerId(1)))?;
                 Ok(())
             },
-            |_, _, _| Ok(()),
         )
     }
 }

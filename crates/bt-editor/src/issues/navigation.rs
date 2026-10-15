@@ -15,6 +15,33 @@ impl Editor {
     }
     pub(crate) fn go_to_issue(&mut self, target: IssueTarget) -> Vec<Effect> {
         match target {
+            IssueTarget::CollisionObject { home, tile, object } => {
+                let Some(doc) = self.issue_document(home.asset()) else {
+                    return Vec::new();
+                };
+                let mut effects = match home {
+                    TilesetHome::Asset(_) => Vec::new(),
+                    TilesetHome::Embedded { slot, .. } => {
+                        self.apply(Intent::EditTileset { doc, slot })
+                    }
+                };
+                effects.extend(self.apply(Intent::SelectTilesetTiles {
+                    doc,
+                    tiles: vec![tile],
+                    current: Some(tile),
+                }));
+                effects.extend(self.apply(Intent::SetTilesetMode {
+                    doc,
+                    mode: crate::TilesetMode::Collision,
+                }));
+                effects.extend(self.apply(Intent::SelectObjects {
+                    doc,
+                    ids: vec![object],
+                    mode: SelectionMode::Replace,
+                }));
+                effects.extend(self.apply(Intent::CenterOnObject { doc, object }));
+                effects
+            }
             IssueTarget::File(path) => self.request_open(&path),
             IssueTarget::Asset(asset) => {
                 if self

@@ -2,6 +2,7 @@
 
 mod asset;
 mod asset_store;
+mod template_dependencies;
 mod template_view;
 mod tileset_home;
 

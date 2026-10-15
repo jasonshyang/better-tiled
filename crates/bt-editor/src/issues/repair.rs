@@ -50,7 +50,9 @@ impl Editor {
         }
         let kind = match target {
             LocateTarget::Tileset { .. } => LoadKind::Tileset,
-            LocateTarget::Template { .. } => LoadKind::Template,
+            LocateTarget::Template { .. } | LocateTarget::CollisionTemplate { .. } => {
+                LoadKind::Template
+            }
             LocateTarget::WorldMap { .. } => LoadKind::Map,
             LocateTarget::TilesetImage { .. } | LocateTarget::LayerImage { .. } => {
                 return vec![Effect::ReadIssueImage {
@@ -271,6 +273,42 @@ impl Editor {
                     Ok::<_, EditError>(())
                 })
             }
+            (LocateTarget::CollisionTemplate { home, tile, object }, Root::Template(template)) => {
+                if template
+                    .object
+                    .as_ref()
+                    .is_some_and(|base| base.tile.is_some())
+                {
+                    return error("Tile-object templates cannot be used in collision groups");
+                }
+                let previous = self
+                    .store
+                    .tileset_at(home)
+                    .and_then(|tileset| tileset.tile(tile))
+                    .and_then(|tile| tile.collision.as_ref())
+                    .and_then(|group| group.layer.objects.iter().find(|item| item.id == object))
+                    .and_then(|object| object.template.as_ref())
+                    .map(|file| file.path.clone());
+                let before = previous
+                    .as_deref()
+                    .and_then(|path| self.store.by_path(path))
+                    .and_then(|id| self.store.template(id))
+                    .and_then(|template| template.object.as_ref())
+                    .cloned()
+                    .unwrap_or_default();
+                let Some(base) = template.object.as_ref() else {
+                    return error("The template has no base object");
+                };
+                self.transact(doc, "Locate Collision Template", |tx| {
+                    crate::objects::change_tile_shapes(tx, home, tile, |group, _| {
+                        let instance = bt_edit::object_mut_in(group, object)?;
+                        old = instance.template.as_ref().map(|file| file.path.clone());
+                        bt_edit::refresh_template_object(instance, &before, base);
+                        instance.template = Some(reference);
+                        Ok(())
+                    })
+                })
+            }
             (LocateTarget::WorldMap { world, index }, Root::Map(map)) => {
                 let bounds = map.bounding_rect();
                 self.transact(doc, "Locate World Map", |tx| {
@@ -300,7 +338,10 @@ impl Editor {
             })
         });
         self.files.loaders.insert(asset, files.loader);
-        if matches!(target, LocateTarget::Template { .. }) {
+        if matches!(
+            target,
+            LocateTarget::Template { .. } | LocateTarget::CollisionTemplate { .. }
+        ) {
             let types = Arc::new(self.custom_types().clone());
             self.files
                 .loaders

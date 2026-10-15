@@ -54,7 +54,8 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
                 bt_editor::LocateTarget::Tileset { .. } => {
                     dialog.add_filter("Tiled tilesets", &["tsx", "tsj", "json"])
                 }
-                bt_editor::LocateTarget::Template { .. } => {
+                bt_editor::LocateTarget::Template { .. }
+                | bt_editor::LocateTarget::CollisionTemplate { .. } => {
                     dialog.add_filter("Object templates", &["tx", "tj", "json"])
                 }
                 bt_editor::LocateTarget::WorldMap { .. } => {

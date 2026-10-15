@@ -8,6 +8,9 @@ use crate::objects::node::Node;
 /// wrong kind. "Nothing to do" is not an error; it is an empty report.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EditError {
+    /// A collision group cannot contain tile-object templates.
+    #[error("Tile-object templates cannot be used in collision groups")]
+    TileTemplateInCollision,
     /// A template editor must retain one base object.
     #[error("a template must have exactly one base object")]
     TemplateBaseRequired,

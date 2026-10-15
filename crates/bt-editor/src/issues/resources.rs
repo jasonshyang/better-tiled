@@ -41,6 +41,28 @@ fn tileset_resources(tileset: &Tileset, home: TilesetHome, resources: &mut Vec<R
         resources.push(resource);
     }
     for (id, tile) in &tileset.tiles {
+        if let Some(group) = &tile.collision {
+            for object in group.layer.objects.iter() {
+                if let Some(file) = &object.template {
+                    resources.push(Resource {
+                        path: Some(file.path.clone()),
+                        image_key: None,
+                        kind: ResourceKind::Template,
+                        target: IssueTarget::CollisionObject {
+                            home,
+                            tile: *id,
+                            object: object.id,
+                        },
+                        fix: Some(LocateTarget::CollisionTemplate {
+                            home,
+                            tile: *id,
+                            object: object.id,
+                        }),
+                        image: None,
+                    });
+                }
+            }
+        }
         if let Some(image) = &tile.image
             && let Some(resource) = image_resource(
                 image,

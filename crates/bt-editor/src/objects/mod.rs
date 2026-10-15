@@ -13,7 +13,7 @@ mod stroke;
 
 pub(crate) use commands::Restack;
 pub use handles::HandleFrame;
-pub(crate) use host::ObjectHost;
+pub(crate) use host::{ObjectHost, change_tile_shapes};
 pub use listing::ObjectRow;
 pub(crate) use nodes::NodeCommand;
 pub use nodes::NodeHandle;

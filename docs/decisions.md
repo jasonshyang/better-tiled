@@ -1049,3 +1049,12 @@ adapter now lives in `bt-image`, shared by the renderer and diagnostic worker.
 Locate File captures the owner version before opening the picker and checks it again after
 reading a replacement. Reference changes use the document's existing transaction history,
 preserve cell IDs and object overrides, and keep already-edited dependency assets authoritative.
+
+## 2026-10-15 — Collision templates use the existing object host and dependency graph
+
+The tile collision editor accepts shape templates, as Tiled does. It uses the same template
+preparation and instance commands over its derived object view; transactions write the shapes
+back to the owning tileset. Template propagation and dependency collection include collision
+groups in standalone and embedded tilesets. Save order follows the resulting reference graph,
+rather than a fixed tileset-before-template ordering, and failed dependencies prevent owner
+writes. This preserves inherited properties and prevents a partially saved template chain.

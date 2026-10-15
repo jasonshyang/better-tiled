@@ -195,22 +195,12 @@ impl AssetStore {
             .collect::<Vec<_>>();
         for change in changed_templates {
             for asset in self.assets() {
-                let Some(map) = self.map(asset.id()) else {
-                    continue;
-                };
-                let mut map = match working.get(&asset.id()) {
-                    Some(Root::Map(map)) => (**map).clone(),
-                    _ => (**map).clone(),
-                };
-                if !bt_edit::refresh_template_instances(
-                    &mut map,
-                    &change.path,
-                    &change.before,
-                    &change.after,
-                )?
-                .is_empty()
-                {
-                    working.insert(asset.id(), Root::Map(Arc::new(map)));
+                let mut root = working
+                    .get(&asset.id())
+                    .unwrap_or_else(|| asset.root())
+                    .clone();
+                if root.refresh_template_instances(&change.path, &change.before, &change.after)? {
+                    working.insert(asset.id(), root);
                 }
             }
         }
@@ -241,43 +231,6 @@ impl AssetStore {
             .filter_map(|file| self.by_path(&file.path))
             .filter(|id| self.tileset(*id).is_some())
             .collect()
-    }
-
-    /// Loaded dependencies, in save order: external tilesets before template definitions.
-    pub(crate) fn dependencies_of(&self, id: AssetId) -> Vec<AssetId> {
-        let mut dependencies = Vec::new();
-        match self.get(id).map(Asset::root) {
-            Some(Root::Map(map)) => {
-                dependencies.extend(self.tilesets_of(map));
-                let mut templates = Vec::new();
-                map.for_each_layer(|layer, _| {
-                    if let Some(objects) = layer.as_object_layer() {
-                        for object in objects.objects.iter() {
-                            if let Some(id) = object
-                                .template
-                                .as_ref()
-                                .and_then(|file| self.by_path(&file.path))
-                                .filter(|id| self.template(*id).is_some())
-                                && !templates.contains(&id)
-                            {
-                                templates.push(id);
-                            }
-                        }
-                    }
-                });
-                for template in &templates {
-                    dependencies.extend(self.dependencies_of(*template));
-                }
-                dependencies.extend(templates);
-            }
-            Some(Root::Template(template)) => {
-                dependencies.extend(self.tileset_assets(&template.tilesets))
-            }
-            _ => {}
-        }
-        let mut seen = std::collections::HashSet::new();
-        dependencies.retain(|id| seen.insert(*id));
-        dependencies
     }
 
     /// Points a map's external tilesets at the store's roots for their files.
