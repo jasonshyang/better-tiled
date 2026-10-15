@@ -50,12 +50,27 @@ jobs:
           fi
           echo "BT_SOFTWARE_GPU=1" >> "$GITHUB_ENV"
 
+      - name: Godot 4.7 oracle (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/godot.zip" https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          chmod +x "$RUNNER_TEMP/godot/Godot_v4.7-stable_linux.x86_64"
+          echo "GODOT=$RUNNER_TEMP/godot/Godot_v4.7-stable_linux.x86_64" >> "$GITHUB_ENV"
+
       - name: Tests
         run: cargo test --workspace
 
-      # Only the packs may be skipped: a skip of reference/ means the fetch or a path is broken.
+      # Linux requires Godot; the other platforms may skip its headless checks.
       - name: Skips
-        run: cargo run --quiet -p bt-test-data --bin check-skips -- "${{ env.BT_SKIP_LOG }}" --allow assets/
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            cargo run --quiet -p bt-test-data --bin check-skips -- "$BT_SKIP_LOG" --allow assets/
+          else
+            cargo run --quiet -p bt-test-data --bin check-skips -- "$BT_SKIP_LOG" --allow assets/ --allow 'Godot 4'
+          fi
 
       - name: Keep what failed
         if: failure()

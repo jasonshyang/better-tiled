@@ -11,6 +11,7 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
+bt-godot = { path = "../crates/bt-godot" }
 bt-tmx = { path = "../crates/bt-tmx" }
 libfuzzer-sys = "0.4"
 
@@ -49,6 +50,13 @@ bench = false
 [[bin]]
 name = "project_world"
 path = "fuzz_targets/project_world.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "godot_resource"
+path = "fuzz_targets/godot_resource.rs"
 test = false
 doc = false
 bench = false

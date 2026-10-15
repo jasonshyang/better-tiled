@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [xml_map, json_map, tileset, layer_data, project_world]
+        target: [xml_map, json_map, tileset, layer_data, project_world, godot_resource]
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install nightly --profile minimal
