@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<template>
+ <tileset firstgid="1" source="tiles.tsj"/>
+ <object name="chest" type="Chest" gid="3" width="32" height="32">
+  <properties>
+   <property name="loot" type="class" propertytype="Loot">
+    <properties>
+     <property name="gold" type="int" value="10"/>
+    </properties>
+   </property>
+  </properties>
+ </object>
+</template>

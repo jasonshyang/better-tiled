@@ -1,0 +1,24 @@
+[
+    {
+        "color": "#ff729fcf",
+        "name": "NPC",
+        "properties": [
+            {
+                "name": "speed",
+                "type": "float",
+                "value": 1.5
+            }
+        ]
+    },
+    {
+        "color": "#fffcaf3e",
+        "name": "Trigger",
+        "properties": [
+            {
+                "name": "once",
+                "type": "bool",
+                "value": true
+            }
+        ]
+    }
+]

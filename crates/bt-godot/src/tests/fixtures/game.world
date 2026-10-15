@@ -1,0 +1,28 @@
+{
+    "maps": [
+        {
+            "fileName": "level.tmx",
+            "height": 96,
+            "width": 128,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "fileName": "level.tmj",
+            "height": 96,
+            "width": 128,
+            "x": 128,
+            "y": 0
+        }
+    ],
+    "onlyShowAdjacentMaps": false,
+    "patterns": [
+        {
+            "multiplierX": 64,
+            "multiplierY": 64,
+            "offsetX": 256,
+            "regexp": "region_(\\d+)_(\\d+)\\.json"
+        }
+    ],
+    "type": "world"
+}

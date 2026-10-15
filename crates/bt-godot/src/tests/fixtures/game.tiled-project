@@ -1,0 +1,142 @@
+{
+    "automappingRulesFile": "",
+    "commands": [
+    ],
+    "extensionsPath": "extensions",
+    "folders": [
+        "."
+    ],
+    "properties": [
+        {
+            "name": "author",
+            "type": "string",
+            "value": "better-tiled"
+        }
+    ],
+    "propertyTypes": [
+        {
+            "id": 1,
+            "name": "Dir",
+            "storageType": "string",
+            "type": "enum",
+            "values": [
+                "North",
+                "East",
+                "South",
+                "West"
+            ],
+            "valuesAsFlags": false
+        },
+        {
+            "id": 2,
+            "name": "Rarity",
+            "storageType": "int",
+            "type": "enum",
+            "values": [
+                "Common",
+                "Rare",
+                "Epic"
+            ],
+            "valuesAsFlags": false
+        },
+        {
+            "color": "#ffa0a0a4",
+            "drawFill": true,
+            "id": 3,
+            "members": [
+                {
+                    "name": "gold",
+                    "type": "int",
+                    "value": 0
+                },
+                {
+                    "name": "rarity",
+                    "propertyType": "Rarity",
+                    "type": "int",
+                    "value": 0
+                }
+            ],
+            "name": "Loot",
+            "type": "class",
+            "useAs": [
+                "property"
+            ]
+        },
+        {
+            "color": "#ffc8a030",
+            "drawFill": true,
+            "id": 4,
+            "members": [
+                {
+                    "name": "loot",
+                    "propertyType": "Loot",
+                    "type": "class",
+                    "value": {
+                        "gold": 1
+                    }
+                },
+                {
+                    "name": "open",
+                    "type": "bool",
+                    "value": false
+                }
+            ],
+            "name": "Chest",
+            "type": "class",
+            "useAs": [
+                "object"
+            ]
+        },
+        {
+            "color": "#ff8b5a2b",
+            "drawFill": false,
+            "id": 5,
+            "members": [
+                {
+                    "name": "facing",
+                    "propertyType": "Dir",
+                    "type": "string",
+                    "value": "South"
+                },
+                {
+                    "name": "locked",
+                    "type": "bool",
+                    "value": false
+                }
+            ],
+            "name": "Door",
+            "type": "class",
+            "useAs": [
+                "object",
+                "tile"
+            ]
+        },
+        {
+            "color": "#fffcaf3e",
+            "drawFill": true,
+            "id": 6,
+            "members": [
+                {
+                    "name": "script",
+                    "type": "file",
+                    "value": ""
+                },
+                {
+                    "name": "zones",
+                    "type": "list",
+                    "value": [
+                        {
+                            "type": "string",
+                            "value": "a"
+                        }
+                    ]
+                }
+            ],
+            "name": "Trigger",
+            "type": "class",
+            "useAs": [
+                "object"
+            ]
+        }
+    ]
+}

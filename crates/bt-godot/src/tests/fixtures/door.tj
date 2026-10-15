@@ -1,0 +1,18 @@
+{ "object":
+    {
+     "gid":2,
+     "height":32,
+     "name":"door",
+     "opacity":1,
+     "rotation":0,
+     "type":"",
+     "visible":true,
+     "width":32
+    },
+ "tileset":
+    {
+     "firstgid":1,
+     "source":"tiles.tsx"
+    },
+ "type":"template"
+}

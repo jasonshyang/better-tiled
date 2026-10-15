@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.12.2" class="Level" orientation="orthogonal" renderorder="right-down" width="4" height="3" tilewidth="32" tileheight="32" infinite="0" nextlayerid="5" nextobjectid="5">
+ <properties>
+  <property name="music" type="file" value="music/theme.ogg"/>
+  <property name="wind" propertytype="Dir" value="North"/>
+ </properties>
+ <tileset firstgid="1" source="tiles.tsx"/>
+ <tileset firstgid="5" name="props" tilewidth="32" tileheight="32" tilecount="4" columns="2">
+  <image source="tiles.png" width="64" height="64"/>
+ </tileset>
+ <layer id="1" name="ground" width="4" height="3">
+  <data encoding="csv">
+1,1,2,1,
+1,5,1,2147483649,
+4,4,4,4
+</data>
+ </layer>
+ <group id="2" name="things">
+  <objectgroup id="3" name="objects">
+   <object id="1" template="chest.tx" x="32" y="64"/>
+   <object id="2" template="chest.tx" name="rich chest" x="64" y="64">
+    <properties>
+     <property name="loot" type="class" propertytype="Loot">
+      <properties>
+       <property name="gold" type="int" value="500"/>
+       <property name="rarity" type="int" propertytype="Rarity" value="2"/>
+      </properties>
+     </property>
+    </properties>
+   </object>
+   <object id="3" template="door.tj" x="96" y="96"/>
+   <object id="4" name="area" type="Trigger" x="4" y="4" width="20" height="10">
+    <ellipse/>
+   </object>
+  </objectgroup>
+ </group>
+ <imagelayer id="4" name="sky" parallaxx="0.5">
+  <image source="tiles.png" width="64" height="64"/>
+ </imagelayer>
+</map>

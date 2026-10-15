@@ -51,5 +51,7 @@ pub use options::Options;
 pub use report::{Counts, Element, File, Note, Renamed, Report, Severity, State};
 pub use request::ExportRequest;
 
+#[cfg(test)]
+mod tests;
 
 pub use resource::validate_resource_text;
