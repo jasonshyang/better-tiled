@@ -2,5 +2,11 @@
 mod contract;
 mod front_door;
 mod images;
+mod inheritors;
+mod names;
+mod oracle;
 mod safety;
+mod shared;
 mod support;
+
+use crate::*;
