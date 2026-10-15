@@ -14,6 +14,8 @@ pub(crate) enum MenuEntry {
     Separator,
     /// The recently opened files.
     RecentFiles,
+    /// The open project's external commands.
+    ProjectCommands,
     /// A menu inside the menu.
     Submenu(&'static str, &'static [MenuEntry]),
 }
@@ -40,6 +42,18 @@ pub(crate) fn menu_entries(
                 ui.separator();
             }
             MenuEntry::RecentFiles => recent_files(ui, editor, out),
+            MenuEntry::ProjectCommands => {
+                for (index, command) in editor.project_commands().iter().enumerate() {
+                    let button = egui::Button::new(&command.name).shortcut_text(&command.shortcut);
+                    if ui
+                        .add_enabled(command.enabled && editor.current().is_some(), button)
+                        .clicked()
+                    {
+                        out.push(Intent::RunProjectCommand(index));
+                        ui.close();
+                    }
+                }
+            }
             MenuEntry::Submenu(title, inner) => {
                 ui.menu_button(*title, |ui| menu_entries(ui, editor, inner, out));
             }

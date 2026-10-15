@@ -19,6 +19,8 @@ use super::resize_map::ResizeMapDialog;
 /// Something modal.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Modal {
+    /// A draft of the project's external commands.
+    Commands(super::CommandsDialog),
     /// A question from the editor.
     Decision(Decision),
     /// An error with its details.
@@ -118,6 +120,7 @@ impl Modals {
             return;
         };
         let closed = match modal {
+            Modal::Commands(dialog) => dialog.show(ctx, out),
             Modal::Decision(decision) => show_decision(ctx, decision, out),
             Modal::Error(notice) => show_error(ctx, notice),
             Modal::Palette(palette) => palette.show(ctx, editor, out),

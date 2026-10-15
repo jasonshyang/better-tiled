@@ -3,6 +3,9 @@
 
 #[cfg(test)]
 mod automap_tests;
+mod commands;
+#[cfg(test)]
+mod commands_tests;
 #[cfg(test)]
 mod custom_types_tests;
 mod effects;

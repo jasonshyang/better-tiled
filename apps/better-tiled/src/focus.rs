@@ -145,6 +145,54 @@ pub(crate) fn quick_stamp_shortcuts(
 }
 
 /// A key pressed this frame.
+pub(crate) fn project_command_shortcuts(
+    ctx: &egui::Context,
+    editor: &Editor,
+) -> Vec<bt_editor::Intent> {
+    if editor.current().is_none() {
+        return Vec::new();
+    }
+    let typing = is_typing(ctx);
+    let mut run = Vec::new();
+    ctx.input_mut(|input| {
+        for event in input.events.clone() {
+            let egui::Event::Key {
+                key,
+                pressed: true,
+                repeat: false,
+                modifiers,
+                ..
+            } = event
+            else {
+                continue;
+            };
+            let Some(chord) = chord_of(key, modifiers, editor.keymap().is_mac()) else {
+                continue;
+            };
+            if typing
+                && (!chord.modifiers.command
+                    || matches!(
+                        key,
+                        egui::Key::A
+                            | egui::Key::C
+                            | egui::Key::V
+                            | egui::Key::X
+                            | egui::Key::Z
+                            | egui::Key::Y
+                    ))
+            {
+                continue;
+            }
+            if let Some(index) = editor.project_command_for(chord) {
+                input.consume_key(modifiers, key);
+                run.push(bt_editor::Intent::RunProjectCommand(index));
+            }
+        }
+    });
+    run
+}
+
+/// A key pressed this frame.
 #[derive(Copy, Clone, Debug)]
 struct KeyPress {
     key: egui::Key,

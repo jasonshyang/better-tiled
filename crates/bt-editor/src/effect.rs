@@ -14,6 +14,8 @@ use crate::recovery::Snapshot;
 /// A request to the window.
 #[derive(Clone, Debug)]
 pub enum Effect {
+    /// Run an external project command on a window worker.
+    RunCommand(crate::CommandJob),
     /// Read or edit the stamp library on a worker.
     Stamps(crate::StampJob),
     /// Run a load on a worker and hand the result back as [`crate::Intent::Loaded`].
@@ -61,6 +63,10 @@ pub enum Effect {
 /// A dialog of the window's.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Dialog {
+    /// Bring the window's process console forward.
+    Console,
+    /// Edit the current project's command list.
+    EditCommands(DocumentId),
     /// Export the shown map as a PNG.
     ExportImage(DocumentId),
     /// New Map.

@@ -152,6 +152,11 @@ impl Editor {
                 Vec::new()
             }
             ActionId::CustomTypesEditor => vec![Effect::Show(Dialog::CustomTypes)],
+            ActionId::ShowConsole => vec![Effect::Show(Dialog::Console)],
+            ActionId::EditCommands => current
+                .map(|doc| Effect::Show(Dialog::EditCommands(doc)))
+                .into_iter()
+                .collect(),
             ActionId::SnapNone => self.set_snapping(Snapping::None),
             ActionId::SnapToGrid => self.set_snapping(Snapping::Grid),
             ActionId::SnapToFineGrid => self.set_snapping(Snapping::FineGrid),

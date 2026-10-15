@@ -184,6 +184,13 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::RunProjectCommand(index) => self.run_project_command(index),
+            Intent::SetProjectCommands { doc, commands } => {
+                self.set_project_commands(doc, commands)
+            }
+            Intent::CommandFinished { .. } => vec![Effect::Notify(Notice::error(
+                "Command results need the window's console",
+            ))],
             Intent::Stamp(edit) => self.edit_stamp(edit),
             Intent::StampsLoaded(loaded) => self.stamps_loaded(loaded),
             Intent::AttributeImageRead {

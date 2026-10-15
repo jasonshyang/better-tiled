@@ -6,6 +6,7 @@
 mod actions;
 mod automap;
 mod clipboard;
+mod commands;
 mod document;
 mod editor;
 mod effect;
@@ -42,6 +43,7 @@ pub use automap::{
     AutoMapRules, CellExplanation, ExplainedRun, KnownTileset, LastRun, LiveEdit, RulesJob,
     RulesLoaded,
 };
+pub use commands::CommandJob;
 pub use document::{
     Document, DocumentId, Documents, Selection, TilesetEditing, TilesetMode, ViewState, ViewToggles,
 };
