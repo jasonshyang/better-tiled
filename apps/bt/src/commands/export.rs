@@ -30,6 +30,18 @@ pub(crate) fn export(run: &Run, args: &ExportArgs) -> anyhow::Result<Printed> {
         return export_resolved(run, input, out);
     }
     let extension = extension_of(out);
+    if extension == "tscn" {
+        if args.embed_tilesets || args.detach_templates || args.resolve_types || args.minimize {
+            bail!("Tiled serialization options do not apply to Godot scenes");
+        }
+        return super::godot::export_one(
+            run,
+            input,
+            Some(out),
+            &bt_godot::Options::default(),
+            false,
+        );
+    }
     if extension == "png" {
         return export_picture(run, args, input, out);
     }

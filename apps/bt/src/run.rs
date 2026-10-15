@@ -83,6 +83,7 @@ pub(crate) const GUIDE: &str = include_str!("guide.md");
 /// Runs the command `run` names.
 pub(crate) fn run(run: &Run) -> anyhow::Result<Printed> {
     match &run.cli.command {
+        Command::Godot { command } => commands::godot::run(run, command),
         Command::Guide => Ok(Printed::done(GUIDE)),
         Command::Export(args) => commands::export::export(run, args),
         Command::Undo(args) => commands::undo::undo(run, args),

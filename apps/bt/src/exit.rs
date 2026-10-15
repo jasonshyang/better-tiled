@@ -5,7 +5,6 @@ use std::process::ExitCode;
 
 /// How a command ended.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-#[expect(dead_code, reason = "out-of-date comes with the Godot export (M5)")]
 pub(crate) enum Status {
     /// It did what was asked: 0.
     Done,

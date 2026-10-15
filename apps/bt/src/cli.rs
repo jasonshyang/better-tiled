@@ -32,6 +32,12 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// How to work with maps from the command line: start here.
     Guide,
+    /// Set up, export, inspect or verify Godot scenes.
+    Godot {
+        /// The Godot operation.
+        #[command(subcommand)]
+        command: GodotCommand,
+    },
     /// Size, layers, tilesets, terrains, objects and properties.
     Info(MapArg),
     /// The map as text, one character per cell.
@@ -450,4 +456,81 @@ pub(crate) struct ExportArgs {
     /// Print the resolved JSON's schema.
     #[arg(long, conflicts_with_all = ["input", "out"])]
     pub(crate) schema: bool,
+}
+
+/// Godot export operations.
+#[derive(Debug, Subcommand)]
+pub(crate) enum GodotCommand {
+    /// Store a Godot project setup for the maps this project file covers.
+    Setup(GodotSetupArgs),
+    /// Export a saved map, or regenerate every generated scene in a project.
+    Export(GodotExportArgs),
+    /// Inspect generated scenes without writing anything.
+    Status(GodotStatusArgs),
+    /// Ask Godot to import and load a scene (writes Godot's import cache).
+    Verify {
+        /// The scene to check.
+        scene: PathBuf,
+    },
+}
+/// Godot setup options.
+#[derive(Debug, Args)]
+pub(crate) struct GodotSetupArgs {
+    /// A map covered by this setup.
+    pub(crate) map: PathBuf,
+    /// Folder containing project.godot; otherwise find it above the map.
+    #[arg(long, value_name = "DIR")]
+    pub(crate) godot_project: Option<PathBuf>,
+    /// Folder for generated scenes.
+    #[arg(long, default_value = "res://levels/")]
+    pub(crate) levels: String,
+    /// Folder for shared TileSets.
+    #[arg(long, default_value = "res://tilesets/")]
+    pub(crate) tilesets: String,
+    /// Folder for copies of external images.
+    #[arg(long, default_value = "res://images/")]
+    pub(crate) images: String,
+    /// Export after each successful editor save.
+    #[arg(long)]
+    pub(crate) export_on_save: bool,
+    /// Write a starter level scene once.
+    #[arg(long)]
+    pub(crate) level_scene: bool,
+}
+/// Godot export options.
+#[derive(Debug, Args)]
+pub(crate) struct GodotExportArgs {
+    /// Saved map to export (required without --all).
+    #[arg(required_unless_present = "all", conflicts_with = "all")]
+    pub(crate) map: Option<PathBuf>,
+    /// Target .tscn; otherwise use the map's export or its setup.
+    #[arg(conflicts_with = "all")]
+    pub(crate) out: Option<PathBuf>,
+    /// Export every generated scene in the Godot project.
+    #[arg(long)]
+    pub(crate) all: bool,
+    /// Godot project for --all; otherwise the current folder.
+    #[arg(long, requires = "all", value_name = "DIR")]
+    pub(crate) godot_project: Option<PathBuf>,
+    /// Report what would change, writing nothing; exit 4 if out of date.
+    #[arg(long, conflicts_with = "remember")]
+    pub(crate) check: bool,
+    /// Keep a backup before replacing edited or foreign generated files.
+    #[arg(long)]
+    pub(crate) replace: bool,
+    /// Give a new export its own UID when the derived UID is in use.
+    #[arg(long)]
+    pub(crate) new_uid: bool,
+    /// Remember this export in the map (one undo step in an open editor).
+    #[arg(long, conflicts_with = "all")]
+    pub(crate) remember: bool,
+}
+/// Godot status options.
+#[derive(Debug, Args)]
+pub(crate) struct GodotStatusArgs {
+    /// One map; without it inspect all generated scenes in the project.
+    pub(crate) map: Option<PathBuf>,
+    /// Godot project for a project-wide status.
+    #[arg(long, value_name = "DIR")]
+    pub(crate) godot_project: Option<PathBuf>,
 }

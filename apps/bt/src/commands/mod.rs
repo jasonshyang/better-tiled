@@ -17,3 +17,8 @@ pub(crate) mod render;
 pub(crate) mod testing;
 pub(crate) mod undo;
 pub(crate) mod view;
+
+pub(crate) mod godot;
+
+#[cfg(test)]
+mod godot_tests;

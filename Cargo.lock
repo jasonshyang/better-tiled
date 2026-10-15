@@ -563,6 +563,7 @@ dependencies = [
  "anyhow",
  "bt-automap",
  "bt-core",
+ "bt-godot",
  "bt-image",
  "bt-live",
  "bt-project",

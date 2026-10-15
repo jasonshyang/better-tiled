@@ -13,6 +13,7 @@ name = "bt"
 path = "src/main.rs"
 
 [dependencies]
+bt-godot.workspace = true
 anyhow.workspace = true
 # A map's AutoMap layers, read back from its project file when it is loaded.
 bt-automap.workspace = true

@@ -14,7 +14,7 @@ use crate::run::GUIDE;
 fn table() -> Named {
     let cli = Cli::command();
     let mut named = Named::default();
-    let add_options = |command: &clap::Command, named: &mut Named| {
+    fn add_options(command: &clap::Command, named: &mut Named) {
         for argument in command.get_arguments() {
             if let Some(long) = argument.get_long()
                 && long != "help"
@@ -23,7 +23,10 @@ fn table() -> Named {
                 named.options.insert(long.to_owned());
             }
         }
-    };
+        for child in command.get_subcommands() {
+            add_options(child, named);
+        }
+    }
     add_options(&cli, &mut named);
     for command in cli.get_subcommands() {
         if command.get_name() == "help" {

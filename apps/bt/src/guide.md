@@ -542,3 +542,32 @@ shows. Rows reaching outside a finite map leave those cells out, with a note.
     bt check c9.tmx
 
 The editor (`better-tiled MAP`) opens the same file.
+
+## Godot scenes
+
+Use `bt godot setup MAP --godot-project DIR` once. DIR contains project.godot.
+`--levels res://levels/`, `--tilesets res://tilesets/` and `--images res://images/`
+choose the output folders. `--level-scene` creates a starter level scene once;
+`--export-on-save` repeats exports after successful saves in the editor. Settings live in
+better-tiled.json beside the maps or the open Tiled project, preserving other sections.
+The global `--project FILE` still names a .tiled-project for custom types.
+
+`bt godot export MAP [OUT.tscn]` exports the saved file. Without OUT it uses the map's
+remembered target, then the setup's levels folder. An open editor's unsaved changes are
+reported; save them first to include them. `bt export MAP OUT.tscn` is the same exporter.
+`--remember` records the target in the map: an undoable step when it is open in the editor.
+`--check` writes nothing and exits 4 if the export is out of date. `--replace` keeps a backup
+before replacing an edited scene; `--new-uid` gives a new export its own identity when its UID
+is already in use. `bt godot export --all --godot-project DIR` checks all generated scenes
+before regenerating them, including a missing shared TileSet. User scenes are left alone.
+
+`bt godot status [MAP] [--godot-project DIR]` inspects one map or the project's generated
+scenes without writing. `bt godot verify SCENE.tscn` runs Godot headless: imports, then loads
+for two physics frames and reports missing cells and engine messages. It writes Godot's import
+cache, never the scene. Set GODOT to the executable if it is not on PATH or in the standard
+macOS application location. Export itself never starts Godot.
+
+All commands accept `--json` with a versioned schema. Exit codes: 0 success, 1 failure,
+2 usage, 3 refused, 4 out of date. A refusal explains the file and a concrete way to proceed.
+Generated scenes are replaced: put scripts, player nodes and overrides in a scene inheriting
+the export (the starter level scene), and paint your own tiles on a new TileMapLayer there.
