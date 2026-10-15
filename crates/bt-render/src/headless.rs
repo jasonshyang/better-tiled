@@ -248,6 +248,17 @@ impl Render {
         self.run_with(&device.device, &device.queue, renderer, images)
     }
 
+    /// Uses the shared GPU renderer with the caller's image store (including its map-image
+    /// source), rather than the device's default raster-only store.
+    pub fn run_with_images(
+        self,
+        device: &HeadlessDevice,
+        images: &mut dyn ImageSupply,
+    ) -> Result<Picture, RenderError> {
+        let mut shared = device.shared.lock().unwrap_or_else(PoisonError::into_inner);
+        self.run_with(&device.device, &device.queue, &mut shared.renderer, images)
+    }
+
     /// Draws the picture with a renderer and images of the caller's (a map drawn as an image
     /// uses the images decoded for it).
     pub fn run_with(

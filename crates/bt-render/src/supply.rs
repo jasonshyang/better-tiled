@@ -66,6 +66,15 @@ impl<'n> NestedSupply<'n> {
             decoded: HashMap::new(),
         }
     }
+
+    /// A failed nested image, including a recursive map reference. Map-image rendering reports
+    /// this instead of caching a picture of the renderer's missing-image marker.
+    pub(crate) fn failure(&self) -> Option<&bt_image::Error> {
+        self.decoded.values().find_map(|poll| match poll {
+            ImagePoll::Failed(error) => Some(error),
+            _ => None,
+        })
+    }
 }
 
 impl ImageSupply for NestedSupply<'_> {

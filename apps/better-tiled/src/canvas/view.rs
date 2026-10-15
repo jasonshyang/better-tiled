@@ -501,6 +501,7 @@ impl Canvas {
             LayerVisibility::default()
         };
         let objects = ObjectStyle::default()
+            .custom_types(frame.editor.custom_types())
             .line_width(frame.settings.interface.object_line_width * pixels_per_point);
         let mut input = FrameInput::new(
             Arc::clone(frame.map),

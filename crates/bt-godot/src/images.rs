@@ -600,8 +600,26 @@ fn render_map_image(source: &Path) -> Result<Vec<u8>, String> {
         .load_map(source)
         .map_err(|e| e.to_string())?;
     let device = bt_render::HeadlessDevice::acquire().map_err(|e| e.to_string())?;
+    let mut images = bt_image::ImageStore::builder()
+        .map_images(std::sync::Arc::new(bt_render::MapImages::new(|path| {
+            let map = bt_tmx::Loader::default()
+                .load_map(path)
+                .map_err(|error| error.to_string())?
+                .value;
+            let background = map
+                .background_color
+                .unwrap_or(bt_core::Color::rgba(0, 0, 0, 0));
+            Ok(bt_render::Render::of(std::sync::Arc::new(map)).background(background))
+        })))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let background = loaded
+        .value
+        .background_color
+        .unwrap_or(bt_core::Color::rgba(0, 0, 0, 0));
     let picture = bt_render::Render::of(std::sync::Arc::new(loaded.value))
-        .run(device)
+        .background(background)
+        .run_with_images(device, &mut images)
         .map_err(|e| e.to_string())?;
     bt_image::encode_png(
         source,

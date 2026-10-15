@@ -363,6 +363,9 @@ impl App {
             .build()
             .map_err(|error| format!("the key bindings in settings.toml are not valid: {error}"))?;
         let mut images = ImageStore::builder()
+            .map_images(super::images::map_image_source(Arc::new(
+                editor.custom_types().clone(),
+            )))
             .build()
             .map_err(|error| format!("the image decoders did not start: {error}"))?;
         let waker = ctx.clone();

@@ -99,6 +99,7 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
             let dialog = rfd::AsyncFileDialog::new()
                 .set_title("Choose Image")
                 .add_filter("Images", &IMAGE_EXTENSIONS)
+                .add_filter("Tiled maps as images", &MAP_EXTENSIONS)
                 .add_filter("All files", &["*"]);
             let picked = pollster::block_on(dialog.pick_file());
             vec![Intent::FilePicked {
