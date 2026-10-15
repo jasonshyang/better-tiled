@@ -25,6 +25,10 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Choose, save or edit a stamp.
+    Stamp(crate::StampEdit),
+    /// A stamp-library worker finished.
+    StampsLoaded(crate::StampsLoaded),
     /// An image chosen for a built-in attribute, probed on a worker.
     AttributeImageRead {
         /// The document.

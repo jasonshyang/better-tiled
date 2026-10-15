@@ -44,6 +44,7 @@ pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
         for effect in editor.apply(intent) {
             match effect {
                 Effect::Load(job) => pending.push(Intent::Loaded(Box::new(job.run()))),
+                Effect::Stamps(job) => pending.push(Intent::StampsLoaded(job.run())),
                 Effect::LoadRules(job) => pending.push(Intent::RulesLoaded(Box::new(job.run()))),
                 Effect::ReadTilesetImage(job) => {
                     pending.push(Intent::TilesetImageRead(Box::new(job.run())));

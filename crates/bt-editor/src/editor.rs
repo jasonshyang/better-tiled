@@ -85,6 +85,12 @@ impl EditorBuilder {
     }
 
     fn assemble(self, keymap: Keymap) -> Editor {
+        let stamps_folder = self
+            .settings
+            .general
+            .stamps_folder
+            .clone()
+            .unwrap_or_else(|| self.recovery_folder.with_file_name("stamps"));
         Editor {
             store: AssetStore::new(),
             documents: Documents::default(),
@@ -96,6 +102,7 @@ impl EditorBuilder {
             layout_searches: Default::default(),
             keymap,
             tools: ToolState::default(),
+            stamps: crate::StampStore::new(stamps_folder),
             palette: PaletteState::default(),
             clipboard: Clipboard::default(),
             files: Files {
@@ -133,6 +140,7 @@ pub struct Editor {
     pub(crate) layout_searches: crate::terrain_helpers::LayoutSearches,
     pub(crate) keymap: Keymap,
     pub(crate) tools: ToolState,
+    pub(crate) stamps: crate::StampStore,
     pub(crate) palette: PaletteState,
     pub(crate) clipboard: Clipboard,
     pub(crate) files: Files,
@@ -176,6 +184,8 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::Stamp(edit) => self.edit_stamp(edit),
+            Intent::StampsLoaded(loaded) => self.stamps_loaded(loaded),
             Intent::AttributeImageRead {
                 doc,
                 inspected,
@@ -551,6 +561,7 @@ impl Editor {
         if settings == self.settings {
             return Vec::new();
         }
+        let stamps_changed = settings.general.stamps_folder != self.settings.general.stamps_folder;
         self.keymap = keymap;
         self.settings = settings;
         for document in self.documents.iter_mut() {
@@ -558,7 +569,17 @@ impl Editor {
                 .history
                 .set_limit(self.settings.general.history_limit);
         }
-        vec![Effect::WriteSettings(Box::new(self.settings.clone()))]
+        let mut effects = vec![Effect::WriteSettings(Box::new(self.settings.clone()))];
+        if stamps_changed {
+            let folder = self
+                .settings
+                .general
+                .stamps_folder
+                .clone()
+                .unwrap_or_else(|| self.recovery.folder().with_file_name("stamps"));
+            effects.extend(self.set_stamp_folder(folder));
+        }
+        effects
     }
 
     /// The tool and its options.
@@ -611,7 +632,9 @@ impl Editor {
         let open = session.open_files.clone();
         self.restore_current = session.current.clone();
         self.session = session;
-        open.iter().flat_map(|path| self.open(path)).collect()
+        let mut effects = self.restore_quick_stamps();
+        effects.extend(open.iter().flat_map(|path| self.open(path)));
+        effects
     }
 
     /// While a restored session's files load, its current file stays current.

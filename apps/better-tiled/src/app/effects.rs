@@ -21,6 +21,16 @@ impl App {
 
     fn carry_out(&mut self, ctx: &egui::Context, effect: Effect) {
         match effect {
+            Effect::Stamps(job) => {
+                let job = std::sync::Arc::new(job);
+                let worker_job = std::sync::Arc::clone(&job);
+                let spawned = self.workers.spawn("stamps", move || {
+                    vec![Intent::StampsLoaded(worker_job.run())]
+                });
+                if let Err(problem) = spawned {
+                    self.intents.push(Intent::StampsLoaded(job.failed(problem)));
+                }
+            }
             Effect::Godot { doc, operation } => self.start_godot(ctx, doc, operation),
             Effect::Load(job) => {
                 let spawned = self

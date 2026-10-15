@@ -14,6 +14,8 @@ use crate::recovery::Snapshot;
 /// A request to the window.
 #[derive(Clone, Debug)]
 pub enum Effect {
+    /// Read or edit the stamp library on a worker.
+    Stamps(crate::StampJob),
     /// Run a load on a worker and hand the result back as [`crate::Intent::Loaded`].
     Load(LoadJob),
     /// Read a map's rules on a worker and hand them back as [`crate::Intent::RulesLoaded`].
@@ -82,6 +84,8 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// An existing folder of Tiled `.stamp` files.
+    StampsFolder,
     /// An image for a built-in Image attribute in Properties.
     AttributeImage {
         /// The document that owns the attribute.

@@ -85,6 +85,65 @@ pub(crate) fn shortcuts(ctx: &egui::Context, editor: &Editor) -> Vec<ActionId> {
     run
 }
 
+/// Tiled's nine fixed quick-stamp shortcuts, outside text fields and modal dialogs.
+pub(crate) fn quick_stamp_shortcuts(
+    ctx: &egui::Context,
+    editor: &Editor,
+) -> Vec<bt_editor::Intent> {
+    if is_typing(ctx)
+        || editor.current().is_none_or(|doc| {
+            editor.map_of(doc).is_none()
+                || editor
+                    .document(doc)
+                    .is_some_and(|doc| doc.tileset_editing().is_some())
+        })
+    {
+        return Vec::new();
+    }
+    let keys = [
+        egui::Key::Num1,
+        egui::Key::Num2,
+        egui::Key::Num3,
+        egui::Key::Num4,
+        egui::Key::Num5,
+        egui::Key::Num6,
+        egui::Key::Num7,
+        egui::Key::Num8,
+        egui::Key::Num9,
+    ];
+    let mut run = Vec::new();
+    ctx.input_mut(|input| {
+        let presses = input.events.clone();
+        for event in presses {
+            let egui::Event::Key {
+                key,
+                pressed: true,
+                repeat: false,
+                modifiers,
+                ..
+            } = event
+            else {
+                continue;
+            };
+            let Some(slot) = keys.iter().position(|candidate| *candidate == key) else {
+                continue;
+            };
+            let mods = modifiers_of(modifiers, editor.keymap().is_mac());
+            if mods.alt || mods.control || (mods.shift && !mods.command) {
+                continue;
+            }
+            let edit = match (mods.command, mods.shift) {
+                (true, true) => bt_editor::StampEdit::ExtendQuick(slot),
+                (true, false) => bt_editor::StampEdit::SaveQuick(slot),
+                _ => bt_editor::StampEdit::ChooseQuick(slot),
+            };
+            input.consume_key(modifiers, key);
+            run.push(bt_editor::Intent::Stamp(edit));
+        }
+    });
+    run
+}
+
 /// A key pressed this frame.
 #[derive(Copy, Clone, Debug)]
 struct KeyPress {

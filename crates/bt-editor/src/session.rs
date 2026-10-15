@@ -18,6 +18,8 @@ const RECENT_FILES: usize = 20;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Session {
+    /// The nine quick stamps, as Tiled stamp JSON with the owning path used for references.
+    pub quick_stamps: Vec<SessionStamp>,
     /// The files open, in tab order.
     pub open_files: Vec<PathBuf>,
     /// The current file.
@@ -28,6 +30,17 @@ pub struct Session {
     pub view_states: Vec<FileViewState>,
     /// The window's panel layout, kept as the window wrote it.
     pub layout: serde_json::Value,
+}
+
+/// A quick stamp kept across sessions, with the location its relative references resolve from.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SessionStamp {
+    /// The quick-stamp slot (0–8).
+    pub slot: usize,
+    /// The virtual stamp file used when writing the JSON.
+    pub path: PathBuf,
+    /// A Tiled `.stamp` document.
+    pub text: String,
 }
 
 /// A file's camera and current layer.

@@ -68,6 +68,18 @@ fn check_tilesets(clip: &TileClip) -> Result<(), EditError> {
 }
 
 impl Brush {
+    /// A saved brush with its original variation weights. Cells must name listed tilesets.
+    pub fn from_variations(variations: Vec<Variation>) -> Result<Brush, EditError> {
+        for variation in &variations {
+            check_tilesets(&variation.clip)?;
+        }
+        Ok(Brush {
+            variations,
+            mode: BrushMode::Stamp,
+            size: 1,
+        })
+    }
+
     /// A stamp brush of one clip, as Paste makes one of the clipboard (`clip.trimmed()`). A cell
     /// naming a tileset the clip does not list is an error.
     pub fn from_clip(clip: TileClip) -> Result<Brush, EditError> {
