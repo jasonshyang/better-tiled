@@ -3,6 +3,11 @@
 A tilemap editor for [Tiled](https://www.mapeditor.org) maps, written in Rust, with a command
 line for coding agents and an export to Godot 4.
 
+![Build a Tiny Swords island in Better Tiled, from an empty map to cliffs, a village and animated characters](docs/media/tiny-swords-showcase.gif)
+
+Edit visually, work with agents through `bt`, and export to Godot.
+[Showcase credits and recording instructions](docs/media/README.md).
+
 - **Tiled's files stay Tiled's.** Maps, tilesets, templates, worlds and projects are read in
   every dialect Tiled has written since 1.0 and saved byte for byte as Tiled would save them.
 - **Tiled's rules give Tiled's results.** Terrain sets and automapping rules behave as they do

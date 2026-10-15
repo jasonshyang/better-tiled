@@ -222,6 +222,21 @@ impl App {
         Ok(app)
     }
 
+    /// The real canvas renderer in an offscreen harness, without native dialogs or watchers.
+    #[cfg(test)]
+    pub(crate) fn for_recording(
+        cc: &eframe::CreationContext<'_>,
+        startup: Startup,
+    ) -> Result<App, String> {
+        let render_state = cc
+            .wgpu_render_state
+            .as_ref()
+            .ok_or_else(|| "recording requires the harness's wgpu renderer".to_owned())?;
+        let mut app = App::without_gpu(&cc.egui_ctx, startup)?;
+        app.gpu = Some(CanvasGpu::install(render_state, Arc::clone(&app.images)));
+        Ok(app)
+    }
+
     /// The file dialogs asked for and not answered yet (for the window's tests).
     #[cfg(test)]
     pub(crate) fn take_file_requests(&mut self) -> Vec<FileRequest> {

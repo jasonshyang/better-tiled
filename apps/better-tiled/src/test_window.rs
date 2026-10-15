@@ -15,6 +15,8 @@ use crate::app::{App, Startup};
 use crate::cli::Cli;
 use crate::platform::SystemQuit;
 
+mod showcase;
+
 /// How long the window may take to finish its work after an input.
 const SETTLE_TIMEOUT: Duration = Duration::from_secs(30);
 
