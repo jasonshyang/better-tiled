@@ -18,7 +18,7 @@ pub enum Kind {
 
 /// A corpus file.
 pub struct CorpusFile {
-    /// Its path as shown (relative to the workspace).
+    /// Its path as shown (relative to the workspace, with forward slashes).
     pub shown: String,
     /// Where it is.
     pub path: PathBuf,
@@ -44,8 +44,8 @@ pub fn corpus(dirs: &[&str]) -> Vec<CorpusFile> {
             let relative = path
                 .strip_prefix(&found)
                 .unwrap_or(&path)
-                .display()
-                .to_string();
+                .to_string_lossy()
+                .replace('\\', "/");
             out.push(CorpusFile {
                 shown: format!("{dir}/{relative}"),
                 path,
