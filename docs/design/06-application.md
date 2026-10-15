@@ -647,3 +647,16 @@ available in the wrapping toolbar and the Tools menu. Object commands create a t
 one selected object, edit its base, reset or detach instances, and replace selected objects
 with the chosen template. Window tests pick an external tile template, inspect its real ghost,
 place it, edit the base through Properties and verify propagation, detach and undo.
+
+
+### M6 project workspace as built
+
+A project settings tab provides a history owner before any maps are open. Its overview links
+to Project Properties, Custom Types and Edit Commands. The Project browser remains visible
+there and is also a tab beside the map's Layers panel. It shows naturally sorted folder trees,
+filters files, opens supported Tiled assets, adds/removes browser roots and refreshes. Long
+paths truncate with full paths on hover; nested folders begin collapsed. Project Properties
+uses the shared typed custom-property draft rows and rejects a draft if its source changed.
+Switching projects uses Save/Discard/Cancel, including asynchronous filename choices, and
+remembers the documents of each project. Tests exercise switches, late loads and scans,
+recovery, compatibility, rules settings and real-window browsing and editing.

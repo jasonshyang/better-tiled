@@ -42,10 +42,13 @@ impl Editor {
             }
         }
         for world in worlds {
-            if self.store.get(world).is_some_and(|asset| asset.is_dirty())
-                && let Err(notice) = self.write_auxiliary(world)
-            {
-                effects.push(Effect::Notify(notice));
+            if self.store.get(world).is_some_and(|asset| asset.is_dirty()) {
+                match self.write_auxiliary(world) {
+                    Ok(()) => {
+                        effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(world)))
+                    }
+                    Err(notice) => effects.push(Effect::Notify(notice)),
+                }
             }
         }
         effects
@@ -63,11 +66,10 @@ impl Editor {
         {
             return Vec::new();
         }
-        self.write_project(project)
-            .err()
-            .map(Effect::Notify)
-            .into_iter()
-            .collect()
+        match self.write_project(project) {
+            Ok(()) => vec![Effect::DeleteSnapshot(self.recovery.snapshot_path(project))],
+            Err(notice) => vec![Effect::Notify(notice)],
+        }
     }
 
     /// Saves a document: its asset's file, or a file to pick when it has none.
@@ -85,7 +87,7 @@ impl Editor {
         if self.store.get(asset).is_some_and(|asset| {
             matches!(
                 asset.kind(),
-                crate::AssetKind::Template | crate::AssetKind::World
+                crate::AssetKind::Template | crate::AssetKind::World | crate::AssetKind::Project
             )
         }) {
             let mut effects = self.save_dependencies(asset);
@@ -118,6 +120,13 @@ impl Editor {
 
     /// The file request of Save As for a document.
     pub(crate) fn save_as_request(&self, doc: DocumentId) -> Effect {
+        if let Some(project) = self
+            .document(doc)
+            .map(|doc| doc.asset())
+            .filter(|id| self.store.project(*id).is_some())
+        {
+            return Effect::PickFile(FileRequest::ProjectAs(project));
+        }
         let suggested = self
             .path_of(doc)
             .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
@@ -277,7 +286,8 @@ impl Editor {
                 .ok_or_else(|| Notice::error(format!("{asset} is not a map")))?,
         };
         let text = {
-            let mut request = WriteRequest::for_map(&map, path);
+            let mut request = WriteRequest::for_map(&map, path)
+                .compatibility_version(self.compatibility_version());
             if let Some(loader) = self.files.loaders.get(&asset) {
                 request = request.loader(loader);
             }
@@ -316,6 +326,7 @@ impl Editor {
             .and_then(|a| a.path().map(Path::to_path_buf))
             .ok_or_else(|| Notice::error(format!("{asset} has no file")))?;
         let text = WriteRequest::for_tileset(&tileset, &path)
+            .compatibility_version(self.compatibility_version())
             .render()
             .map_err(|error| cannot_save(&path, &error.to_string()))?
             .text;
@@ -343,6 +354,7 @@ impl Editor {
             .text;
         self.write_bytes(&path, text.as_bytes())?;
         self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
+        self.recovery.forget(asset);
         Ok(())
     }
 
@@ -358,6 +370,7 @@ impl Editor {
         let text = source
             .root()
             .write_request(&path)
+            .compatibility_version(self.compatibility_version())
             .render()
             .map_err(|error| cannot_save(&path, &error.to_string()))?
             .text;

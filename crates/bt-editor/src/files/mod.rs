@@ -7,6 +7,7 @@ mod load;
 mod new;
 mod open;
 mod project;
+mod project_scan;
 mod save;
 mod templates;
 mod worlds;
@@ -23,6 +24,8 @@ pub use autotiles::{AutotilesJob, ExpandedAutotiles};
 pub use load::{LoadJob, Loaded};
 pub(crate) use load::{LoadKind, LoadPurpose, LoadSource, LoadedFiles, ProjectChoice, hash_file};
 pub use new::{NewMap, NewTileset, NewTilesetSource};
+pub(crate) use project::ProjectSwitch;
+pub use project_scan::{ProjectEntry, ProjectFiles, ProjectProblem, ProjectScanJob};
 pub use worlds::world_problem;
 
 /// What the editor knows about files beyond the assets: the loaders the maps were read with
@@ -32,6 +35,12 @@ pub use worlds::world_problem;
 pub(crate) struct Files {
     pub(crate) loaders: HashMap<AssetId, Loader>,
     pub(crate) project: Option<AssetId>,
+    pub(crate) switching_project: Option<ProjectSwitch>,
+    pub(crate) epoch: u64,
+    pub(crate) restore_project: Option<crate::Session>,
+    pub(crate) project_scan: Option<ProjectFiles>,
+    pub(crate) project_scan_request: Option<ProjectScanJob>,
+    pub(crate) project_scan_generation: u64,
     pub(crate) active_world: Option<AssetId>,
     /// Pattern-derived world maps; explicit positions remain in the world asset.
     pub(crate) world_patterns: HashMap<AssetId, Vec<bt_core::WorldMap>>,
@@ -56,6 +65,8 @@ pub(crate) enum Pending {
     Close(DocumentId),
     /// Unloading a world asks before its unsaved placements are discarded.
     UnloadWorld(AssetId),
+    /// Save, discard or cancel before replacing the project's workspace.
+    ProjectSwitch(ProjectSwitch),
     /// Quitting with unsaved work.
     Quit,
     /// Opening snapshots of an earlier run again.

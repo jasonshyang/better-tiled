@@ -25,6 +25,24 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Apply a Project Properties draft to its captured project asset.
+    SetProject {
+        /// History owner.
+        doc: DocumentId,
+        /// Project asset.
+        project: crate::AssetId,
+        /// Replacement draft.
+        value: Box<bt_core::Project>,
+    },
+    /// Remove a browser root folder from this project, keeping its files on disk.
+    RemoveProjectFolder {
+        /// Captured project asset.
+        project: crate::AssetId,
+        /// Resolved root folder path.
+        path: PathBuf,
+    },
+    /// A worker finished scanning the project's folders.
+    ProjectFilesScanned(crate::ProjectFiles),
     /// Place the chosen template in the current object layer.
     PlaceTemplate {
         /// Destination map document.

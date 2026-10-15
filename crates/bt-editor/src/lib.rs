@@ -57,7 +57,10 @@ pub use external::{
     BaseRules, ExternalBase, ExternalEdit, ExternalEditError, ExternalUndo, ExternalUndoError,
     ExternalUndone, MARK_COLORS, Mark, MarkCells,
 };
-pub use files::{AutotilesJob, ExpandedAutotiles, world_problem};
+pub use files::{
+    AutotilesJob, ExpandedAutotiles, ProjectEntry, ProjectFiles, ProjectProblem, ProjectScanJob,
+    world_problem,
+};
 pub use files::{LoadJob, Loaded, NewMap, NewTileset, NewTilesetSource};
 pub use history::{
     AssetChange, DEFAULT_HISTORY_LIMIT, History, HistoryEntry, MergeKey, SelectionChange,
@@ -80,7 +83,7 @@ pub use properties::{
 pub use recovery::{
     Orphan, Snapshot, SnapshotMeta, delete_snapshot, orphans, remove_heartbeat, touch_heartbeat,
 };
-pub use session::{FileViewState, Session, SessionStamp};
+pub use session::{FileViewState, ProjectSession, Session, SessionStamp};
 pub use settings::{
     Behaviour, General, Interface, MAX_FINE_GRID_DIVISIONS, MajorGrid, MigrateError,
     ObjectSelection, SETTINGS_VERSION, SettingColor, Settings, SettingsError, Snapping, Theme,

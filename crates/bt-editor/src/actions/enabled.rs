@@ -112,6 +112,18 @@ impl Editor {
             })
         });
         match id {
+            ActionId::CloseProject
+            | ActionId::ProjectProperties
+            | ActionId::SaveProjectAs
+            | ActionId::AddProjectFolder
+            | ActionId::RefreshProject
+                if self.project_asset().is_none() =>
+            {
+                Enabled::Disabled(Some("Open a project first".into()))
+            }
+            ActionId::ProjectProperties if self.project_path().is_none() => {
+                Enabled::Disabled(Some("Save the project to a file first".into()))
+            }
             ActionId::ChooseTemplate
             | ActionId::InsertTemplateTool
             | ActionId::SaveAsTemplate

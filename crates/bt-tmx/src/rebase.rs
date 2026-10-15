@@ -27,6 +27,16 @@ pub fn rebase_file_references(map: &mut Map, from_dir: &Path, to_dir: &Path) {
     }
 }
 
+/// Rewrites project properties and file-valued class defaults for a new project filename.
+pub fn rebase_project_references(project: &mut bt_core::Project, from_dir: &Path, to_dir: &Path) {
+    rebase_properties(&mut project.properties, from_dir, to_dir);
+    for custom in &mut project.custom_types.types {
+        if let bt_core::CustomTypeKind::Class(class) = &mut custom.kind {
+            rebase_properties(&mut class.members, from_dir, to_dir);
+        }
+    }
+}
+
 /// Rewrites a tileset's `file` properties (its own, its tiles', their collision shapes', its
 /// terrain sets' and terrains').
 pub(crate) fn rebase_tileset(tileset: &mut Tileset, from_dir: &Path, to_dir: &Path) {

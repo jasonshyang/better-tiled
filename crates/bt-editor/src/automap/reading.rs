@@ -41,6 +41,14 @@ impl Editor {
         if seen {
             return effects;
         }
+        let rules_changed = self
+            .automap
+            .types_seen
+            .as_ref()
+            .and_then(|project| project.automapping_rules_file.as_ref())
+            != project
+                .as_ref()
+                .and_then(|project| project.automapping_rules_file.as_ref());
         self.automap.types_seen = project;
         let types = self.custom_types();
         let stale: Vec<AssetId> = self
@@ -48,10 +56,11 @@ impl Editor {
             .maps
             .iter()
             .filter(|(_, rules)| {
-                rules
-                    .rules
-                    .as_ref()
-                    .is_some_and(|set| set.classes_changed(types))
+                rules_changed
+                    || rules
+                        .rules
+                        .as_ref()
+                        .is_some_and(|set| set.classes_changed(types))
             })
             .map(|(asset, _)| *asset)
             .collect();

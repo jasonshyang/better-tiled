@@ -609,6 +609,18 @@ action_table! {
         .on(TileLayer)
         .keys(&[plain('s')])
         .tool(ToolKind::SameTile),
+    /// Create a project and switch to its workspace.
+    NewProject => ActionSpec::new(ActionId::NewProject, "new_project", "New Project…", "project create workspace").tiled("NewProject"),
+    /// Close the current project after handling unsaved documents.
+    CloseProject => ActionSpec::new(ActionId::CloseProject, "close_project", "Close Project", "project close workspace").tiled("CloseProject"),
+    /// Edit project settings and custom properties.
+    ProjectProperties => ActionSpec::new(ActionId::ProjectProperties, "project_properties", "Project Properties…", "project settings folders properties").tiled("ProjectProperties"),
+    /// Save the project to another file.
+    SaveProjectAs => ActionSpec::new(ActionId::SaveProjectAs, "save_project_as", "Save Project As…", "project filename copy"),
+    /// Add a browser root folder.
+    AddProjectFolder => ActionSpec::new(ActionId::AddProjectFolder, "add_project_folder", "Add Folder to Project…", "project browse folder"),
+    /// Read the project's tree again.
+    RefreshProject => ActionSpec::new(ActionId::RefreshProject, "refresh_project", "Refresh Project", "project files tree rescan"),
     /// Create a world containing the current saved map.
     NewWorld => ActionSpec::new(ActionId::NewWorld, "new_world", "New World…", "create world map").tiled("NewWorld").on(Map),
     /// Add a map to the current world.

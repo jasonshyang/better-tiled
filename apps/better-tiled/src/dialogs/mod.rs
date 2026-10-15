@@ -27,3 +27,6 @@ pub(crate) use export_image::ExportImageDialog;
 
 mod world;
 pub(crate) use world::WorldDialog;
+
+mod project;
+pub(crate) use project::ProjectDialog;

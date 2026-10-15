@@ -48,6 +48,30 @@ impl FileDialogs {
 /// Asks for a file on a worker.
 fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
     workers.spawn("file-dialog", move || match &request {
+        FileRequest::NewProject | FileRequest::ProjectAs(_) => {
+            let picked = pollster::block_on(
+                rfd::AsyncFileDialog::new()
+                    .set_title("Save Project")
+                    .add_filter("Tiled projects", &["tiled-project"])
+                    .set_file_name("game.tiled-project")
+                    .save_file(),
+            );
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
+        FileRequest::ProjectFolder(_) => {
+            let picked = pollster::block_on(
+                rfd::AsyncFileDialog::new()
+                    .set_title("Add Folder to Project")
+                    .pick_folder(),
+            );
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::ObjectTemplate(_) | FileRequest::SaveAsTemplate { .. } => {
             let dialog = rfd::AsyncFileDialog::new()
                 .set_title("Object Template")

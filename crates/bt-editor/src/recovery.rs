@@ -162,10 +162,10 @@ fn unsaved_assets(store: &AssetStore) -> Vec<UnsavedAsset> {
         .filter(|asset| {
             let snapshotted = match asset.kind() {
                 AssetKind::Map => true,
-                AssetKind::Tileset | AssetKind::Template | AssetKind::World => {
-                    asset.path().is_some()
-                }
-                AssetKind::Project => false,
+                AssetKind::Tileset
+                | AssetKind::Template
+                | AssetKind::World
+                | AssetKind::Project => asset.path().is_some(),
             };
             snapshotted && asset.is_dirty()
         })

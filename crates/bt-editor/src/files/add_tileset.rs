@@ -33,6 +33,7 @@ impl Editor {
             }
         };
         vec![Effect::Load(LoadJob {
+            epoch: self.files.epoch,
             path,
             source: LoadSource::File,
             project: ProjectChoice::Known(Arc::new(self.custom_types().clone())),

@@ -31,3 +31,6 @@ pub(crate) use value_fields::{Field, Fields};
 
 mod property_draft;
 pub(crate) use property_draft::PropertyDraft;
+
+mod project;
+pub(crate) use project::ProjectPanel;

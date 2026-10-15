@@ -1021,3 +1021,16 @@ snapshot after apply, undo, redo and cancellation, preventing inherited properti
 written as instance overrides. Dependency saves order external tilesets, templates and maps.
 World positions share map history; resize shifts use projected bounds rather than object
 pixel offsets, which differ on isometric maps.
+
+
+## 2026-10-15 — Project settings share document history and scans use request generations
+
+An explicit project gets a settings document rather than a second undo implementation. This
+makes project types, commands, properties and folder edits usable before a map exists. Nearest
+project adoption retains the map workflow and creates no extra tab. Project switches retain
+per-project document sets and invalidate earlier load epochs before changing workspaces.
+Folder scans depend on the project identity and folder list, with a separate request generation
+for Refresh. This avoids rescanning a large tree on each custom-property edit and prevents a
+late refresh from replacing newer filesystem results. Whole-root property drafts require their
+captured source version to remain current. Named project edits now have recovery snapshots;
+map saves and project Save As remove snapshots after successful dependent writes.

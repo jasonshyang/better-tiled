@@ -14,6 +14,8 @@ use crate::recovery::Snapshot;
 /// A request to the window.
 #[derive(Clone, Debug)]
 pub enum Effect {
+    /// Scan the current project's folders away from the frame thread.
+    ScanProject(crate::ProjectScanJob),
     /// Run an external project command on a window worker.
     RunCommand(crate::CommandJob),
     /// Read or edit the stamp library on a worker.
@@ -63,6 +65,8 @@ pub enum Effect {
 /// A dialog of the window's.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Dialog {
+    /// Project settings and custom properties.
+    ProjectProperties(DocumentId),
     /// Edit the current map's world settings and placements.
     WorldProperties(DocumentId),
     /// Bring the window's process console forward.
@@ -92,6 +96,12 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// Where to create a new project.
+    NewProject,
+    /// Save this project under a new filename.
+    ProjectAs(crate::AssetId),
+    /// A folder to add to this project.
+    ProjectFolder(crate::AssetId),
     /// Choose the template placed by the insertion tool.
     ObjectTemplate(DocumentId),
     /// Save this captured object's current state as a template.
@@ -230,6 +240,8 @@ pub enum Question {
 /// Why unsaved work is asked about.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Purpose {
+    /// The current project is being closed or replaced.
+    SwitchProject,
     /// A document is closing.
     Close,
     /// The editor is quitting.
