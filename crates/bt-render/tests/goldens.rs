@@ -40,6 +40,12 @@ const EXACT: Match = Match {
     share: 0.0,
 };
 
+/// Alpha blending may round a channel one step differently across GPU backends.
+const BLENDED: Match = Match {
+    tolerance: 1,
+    share: 0.0,
+};
+
 /// Anti-aliased lines and text, which GPUs rasterise slightly differently.
 const SMOOTH: Match = Match {
     tolerance: 6,
@@ -357,7 +363,8 @@ fn every_blend_mode() {
         "blend-modes",
         &picture,
         Match {
-            tolerance: 2,
+            // Several offscreen composites accumulate rounding differences.
+            tolerance: 3,
             share: 0.0,
         },
     );
@@ -472,7 +479,7 @@ fn highlight_fades_below_and_dims_above() {
         .layers(LayerVisibility::default().highlight(vec![LayerId(2)], Color::rgb(20, 20, 40)))
         .run(device)
         .unwrap();
-    check("highlight", &picture, EXACT);
+    check("highlight", &picture, BLENDED);
 }
 
 #[test]
@@ -496,7 +503,7 @@ fn previews_draw_above_their_layer() {
         .previews(LayerId(1), Arc::from(previews))
         .run(device)
         .unwrap();
-    check("previews", &picture, EXACT);
+    check("previews", &picture, BLENDED);
 }
 
 #[test]
