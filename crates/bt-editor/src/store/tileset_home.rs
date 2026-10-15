@@ -38,7 +38,7 @@ impl AssetStore {
         match home {
             TilesetHome::Asset(asset) => self.tileset(asset),
             TilesetHome::Embedded { map, slot } => self
-                .map(map)?
+                .editing_map(map)?
                 .tilesets
                 .get(slot.index())
                 .filter(|reference| reference.file.is_none())
@@ -49,7 +49,7 @@ impl AssetStore {
     /// Where the tileset in a map's slot lives: the asset of its file when it is external (and
     /// the store has it), else the map.
     pub fn home_of_slot(&self, map: AssetId, slot: TilesetSlot) -> Option<TilesetHome> {
-        let reference = self.map(map)?.tilesets.get(slot.index())?;
+        let reference = self.editing_map(map)?.tilesets.get(slot.index())?;
         match &reference.file {
             Some(file) => self.by_path(&file.path).map(TilesetHome::Asset),
             None => Some(TilesetHome::Embedded { map, slot }),

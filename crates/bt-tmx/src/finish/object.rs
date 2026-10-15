@@ -201,8 +201,9 @@ impl Finisher<'_> {
         let loaded = match self.loader.load_template_cached(&file.path) {
             Ok(loaded) => loaded,
             Err(error) => {
-                self.warnings.record_about(
+                self.warnings.record_file(
                     WarningKind::MissingFile,
+                    &file.path,
                     Some(Target::Object(id)),
                     format!("the template “{}” cannot be read ({error}); object {id} keeps only its own values", file.source),
                 );

@@ -54,6 +54,12 @@ pub(crate) enum LoadKind {
 /// Why a file is loaded.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum LoadPurpose {
+    /// Load a replacement for an exact Issues reference.
+    Locate {
+        doc: crate::DocumentId,
+        target: crate::LocateTarget,
+        version: u64,
+    },
     /// To open it.
     Open,
     /// Cache a visible neighbouring map without opening a document tab.

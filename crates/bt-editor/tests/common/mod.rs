@@ -43,6 +43,7 @@ pub fn apply(editor: &mut Editor, intent: Intent) -> Vec<Effect> {
     while let Some(intent) = pending.pop() {
         for effect in editor.apply(intent) {
             match effect {
+                Effect::CheckIssues(job) => pending.push(Intent::IssuesChecked(job.run())),
                 Effect::Load(job) => pending.push(Intent::Loaded(Box::new(job.run()))),
                 Effect::ScanProject(job) => pending.push(Intent::ProjectFilesScanned(job.run())),
                 Effect::Stamps(job) => pending.push(Intent::StampsLoaded(job.run())),

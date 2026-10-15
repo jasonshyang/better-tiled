@@ -15,8 +15,9 @@ use bt_image::{ImageInput, ImageKey, ImagePoll, ImageRequest};
 use bt_utils::IRect;
 use glam::{IVec2, UVec2};
 
+use crate::image_request;
 use crate::pages::{GUTTER, Pages, Region};
-use crate::supply::{ImageSupply, image_request};
+use crate::supply::ImageSupply;
 use crate::text::{GlyphKey, rasterize};
 
 /// The texels are in the pages (0, the default, is pending: nothing is drawn yet).

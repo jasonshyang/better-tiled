@@ -11,7 +11,7 @@ use crate::tile_layer::TileBounds;
 use crate::wang::WangSet;
 
 /// An invariant a map breaks.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Violation {
     /// Two layers have this id.
     DuplicateLayerId(LayerId),

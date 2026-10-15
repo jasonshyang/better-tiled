@@ -105,7 +105,7 @@ pub(super) fn map_image_source(types: Arc<bt_core::CustomTypes>) -> Arc<dyn MapI
     }))
 }
 
-fn read_image_reference(path: &std::path::Path) -> Result<ImageRef, String> {
+pub(super) fn read_image_reference(path: &std::path::Path) -> Result<ImageRef, String> {
     let size = if bt_image::is_map_file(path) {
         let map = bt_tmx::Loader::builder()
             .build()

@@ -216,6 +216,10 @@ impl Editor {
                 Vec::new()
             }
             ActionId::CustomTypesEditor => vec![Effect::Show(Dialog::CustomTypes)],
+            ActionId::ShowIssues => current
+                .map(|doc| Effect::Show(Dialog::Issues(doc)))
+                .into_iter()
+                .collect(),
             ActionId::ShowConsole => vec![Effect::Show(Dialog::Console)],
             ActionId::EditCommands => current
                 .map(|doc| Effect::Show(Dialog::EditCommands(doc)))

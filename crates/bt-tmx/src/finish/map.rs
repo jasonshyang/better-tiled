@@ -348,8 +348,9 @@ impl Finisher<'_> {
                     };
                 }
                 Err(error) => {
-                    self.warnings.record_about(
+                    self.warnings.record_file(
                         WarningKind::MissingFile,
+                        &file.path,
                         Some(Target::Tileset(file_stem(&source).to_owned())),
                         format!("the tileset “{source}” cannot be read ({error}); a placeholder keeps its tiles"),
                     );

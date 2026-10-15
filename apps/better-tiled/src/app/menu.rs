@@ -204,6 +204,7 @@ const MENUS: [Menu; 8] = [
             Separator,
             Action(ActionId::EditCommands),
             Action(ActionId::ShowConsole),
+            Action(ActionId::ShowIssues),
         ],
     },
 ];

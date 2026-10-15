@@ -803,3 +803,17 @@ crates/bt-editor/src/
 | External edits | version conflicts, undo of the latest only, marks |
 
 Everything runs without a window and without a GPU.
+
+### M6 Issues as built
+
+`Editor::issues` combines worker snapshots with current AutoMap diagnostics, including painted
+state restoration notes. `Effect::CheckIssues` performs full model validation, file access and
+image-header checks away from the frame thread. A store revision and request generation reject
+stale completions. Checks repeat every two seconds; Refresh checks immediately. Runtime image
+failures use the same file/embedded-image request keys as rendering, so header and pixel errors
+of one reference form one issue. Replaced references drop obsolete loader warnings.
+
+`GoToIssue` opens the owning editor, selects layers, objects or tiles and centres objects.
+`LocateIssue` captures an owner version; both picker and load completions reject a changed
+owner. Tileset, template, atlas/collection image, nested image-layer and explicit world-map
+repairs are transactions. Existing edited dependency roots remain authoritative.

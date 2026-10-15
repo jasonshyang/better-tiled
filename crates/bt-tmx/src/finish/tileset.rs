@@ -296,7 +296,12 @@ impl Finisher<'_> {
                 } else {
                     WarningKind::MissingFile
                 };
-                self.record(kind, format!("{what} “{source}” cannot be read ({error})"));
+                self.warnings.record_file(
+                    kind,
+                    path,
+                    None,
+                    format!("{what} “{source}” cannot be read ({error})"),
+                );
                 None
             }
         }

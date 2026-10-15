@@ -660,3 +660,12 @@ uses the shared typed custom-property draft rows and rejects a draft if its sour
 Switching projects uses Save/Discard/Cancel, including asynchronous filename choices, and
 remembers the documents of each project. Tests exercise switches, late loads and scans,
 recovery, compatibility, rules settings and real-window browsing and editing.
+
+### M6 unified Issues panel
+
+View ▸ Show Issues and the status-bar count open the same panel in map, tileset, template and
+project documents. Rows show source and severity, filter by text/source/severity, and provide
+Go to Source and Locate File where applicable. Full paths are available on hover; OS and
+decoder details remain concise. The panel combines cached file/model checks, current AutoMap
+sources and the latest Godot export/verification diagnostics. A worker-start failure is a
+visible issue and the next scheduled check retries.

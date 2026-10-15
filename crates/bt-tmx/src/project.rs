@@ -103,8 +103,10 @@ pub fn parse_project(text: &str, path: &Path) -> Result<Loaded<Project>, Error> 
                     ),
                 );
             }
-            Err(error) => warnings.record(
+            Err(error) => warnings.record_file(
                 WarningKind::MissingFile,
+                &file.path,
+                None,
                 format!(
                     "the object types file “{}” cannot be read ({error}); it stays named",
                     file.source

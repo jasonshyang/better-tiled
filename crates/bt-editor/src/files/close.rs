@@ -275,6 +275,11 @@ impl Editor {
             return Vec::new();
         };
         match request {
+            FileRequest::LocateFile {
+                doc,
+                target,
+                version,
+            } => self.locate_file_picked(doc, target, version, &path),
             FileRequest::NewProject => self.begin_project_switch(super::ProjectSwitch::New(path)),
             FileRequest::ProjectAs(project) => {
                 let mut effects = self.save_project_as(project, &path);

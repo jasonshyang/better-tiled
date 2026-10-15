@@ -14,6 +14,7 @@ mod godot;
 mod images;
 #[cfg(test)]
 mod images_tests;
+mod issues;
 mod live;
 #[cfg(test)]
 mod live_tests;
@@ -51,3 +52,6 @@ mod world_tests;
 
 #[cfg(test)]
 mod project_tests;
+
+#[cfg(test)]
+mod issues_tests;

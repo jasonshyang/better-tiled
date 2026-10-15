@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, mpsc};
 
-use bt_core::{CustomTypes, LayerId, Map, ObjectId};
+use bt_core::{CustomTypes, Map};
 use bt_editor::{DocumentId, GodotOperation, Intent, Notice};
 use bt_godot::{Element, Error, Found, Options, Report};
 
@@ -49,8 +49,10 @@ enum Message {
 }
 pub(super) struct Issue {
     text: String,
+    code: String,
     elements: Vec<Element>,
     error: bool,
+    info: bool,
 }
 #[derive(Clone)]
 struct SetupDialog {
@@ -250,8 +252,10 @@ impl App {
                                     .iter()
                                     .map(|n| Issue {
                                         text: format!("{}: {}", n.code, n.message),
+                                        code: n.code.to_string(),
                                         elements: n.elements.clone(),
                                         error: false,
+                                        info: n.severity == bt_godot::Severity::Info,
                                     })
                                     .collect(),
                             );
@@ -290,8 +294,10 @@ impl App {
                                 doc,
                                 vec![Issue {
                                     text: text.clone(),
+                                    code: "verify".into(),
                                     elements: Vec::new(),
                                     error: true,
+                                    info: false,
                                 }],
                             );
                         }
@@ -335,8 +341,10 @@ impl App {
             doc,
             vec![Issue {
                 text: text.clone(),
+                code: "export".into(),
                 elements: Vec::new(),
                 error: true,
+                info: false,
             }],
         );
         self.notify(Notice::error(text.clone()));
@@ -344,75 +352,56 @@ impl App {
             self.godot.dialog = Some(Dialog::Result(text));
         }
     }
-    pub(super) fn show_godot_issues(&mut self, ui: &mut egui::Ui, doc: DocumentId) {
-        if self.godot.busy.contains(&doc) {
-            ui.spinner();
-            ui.label("Exporting to Godot…");
-        }
-        let Some(issues) = self.godot.issues.get(&doc) else {
-            ui.label("No export issues. Export to Godot to check this map.");
-            return;
+    pub(super) fn godot_issues(&self, doc: DocumentId) -> Vec<bt_editor::Issue> {
+        let Some(map) = self.editor.document(doc).map(|doc| doc.asset()) else {
+            return Vec::new();
         };
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for issue in issues {
-                let color = if issue.error {
-                    egui::Color32::LIGHT_RED
+        self.godot
+            .issues
+            .get(&doc)
+            .into_iter()
+            .flatten()
+            .map(|issue| {
+                let mut result = bt_editor::Issue::new(
+                    bt_editor::IssueKind::Godot(issue.code.clone()),
+                    issue.text.clone(),
+                )
+                .severity(if issue.error {
+                    bt_editor::Severity::Error
+                } else if issue.info {
+                    bt_editor::Severity::Info
                 } else {
-                    ui.visuals().text_color()
-                };
-                ui.colored_label(color, &issue.text);
+                    bt_editor::Severity::Warning
+                });
                 for element in &issue.elements {
-                    if ui.small_button(format!("Go to {element:?}")).clicked() {
-                        match *element {
-                            Element::Layer(id) => self.intents.push(Intent::SelectLayer {
-                                doc,
-                                layer: LayerId(id),
-                            }),
-                            Element::Object(id) => {
-                                if let Some(map) = self.editor.map_of(doc) {
-                                    map.for_each_layer(|layer, _| {
-                                        if let bt_core::LayerKind::Object(objects) = &layer.kind
-                                            && let Some(object) = objects
-                                                .objects
-                                                .iter()
-                                                .find(|o| o.id == ObjectId(id))
-                                        {
-                                            self.intents.push(Intent::SelectLayer {
-                                                doc,
-                                                layer: layer.id,
-                                            });
-                                            self.intents.push(Intent::SelectObjects {
-                                                doc,
-                                                ids: vec![ObjectId(id)],
-                                                mode: bt_editor::SelectionMode::Replace,
-                                            });
-                                            self.intents.push(Intent::CenterOnObject {
-                                                doc,
-                                                object: object.id,
-                                            });
-                                        }
-                                    });
-                                }
-                            }
-                            Element::Tileset(slot) | Element::Tile { tileset: slot, .. } => {
-                                if let Some(slot) = bt_core::TilesetSlot::new(slot) {
-                                    self.intents.push(Intent::EditTileset { doc, slot });
-                                    if let Element::Tile { id, .. } = *element {
-                                        let tile = bt_core::TileId(id);
-                                        self.intents.push(Intent::SelectTilesetTiles {
-                                            doc,
-                                            tiles: vec![tile],
-                                            current: Some(tile),
-                                        });
-                                    }
-                                }
-                            }
+                    let target = match *element {
+                        Element::Layer(id) => Some(bt_editor::IssueTarget::Layer {
+                            map,
+                            layer: bt_core::LayerId(id),
+                        }),
+                        Element::Object(id) => Some(bt_editor::IssueTarget::Object {
+                            map,
+                            object: bt_core::ObjectId(id),
+                        }),
+                        Element::Tileset(slot) | Element::Tile { tileset: slot, .. } => {
+                            bt_core::TilesetSlot::new(slot)
+                                .and_then(|slot| self.editor.store().home_of_slot(map, slot))
+                                .map(|home| bt_editor::IssueTarget::Tileset {
+                                    home,
+                                    tile: match *element {
+                                        Element::Tile { id, .. } => Some(bt_core::TileId(id)),
+                                        _ => None,
+                                    },
+                                })
                         }
+                    };
+                    if let Some(target) = target {
+                        result = result.target(target);
                     }
                 }
-                ui.separator();
-            }
-        });
+                result
+            })
+            .collect()
     }
     pub(super) fn show_godot_dialog(&mut self, ctx: &egui::Context) {
         let Some(mut dialog) = self.godot.dialog.take() else {

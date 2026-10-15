@@ -13,6 +13,8 @@ pub struct Warning {
     /// The file the problem is in: a map's warnings name the tileset or template file a problem
     /// came from.
     pub file: PathBuf,
+    /// The referenced file involved in an IO or decode problem, without parsing its message.
+    pub related_file: Option<PathBuf>,
     /// What kind of problem it is.
     pub kind: WarningKind,
     /// What happened, in a sentence.
@@ -108,6 +110,24 @@ impl Warnings {
     ) {
         self.list.push(Warning {
             file: self.file.clone(),
+            related_file: None,
+            kind,
+            message: message.into(),
+            target,
+        });
+    }
+
+    /// Records a problem with a specific referenced file.
+    pub(crate) fn record_file(
+        &mut self,
+        kind: WarningKind,
+        file: &Path,
+        target: Option<Target>,
+        message: impl Into<String>,
+    ) {
+        self.list.push(Warning {
+            file: self.file.clone(),
+            related_file: Some(file.to_path_buf()),
             kind,
             message: message.into(),
             target,

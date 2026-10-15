@@ -281,6 +281,18 @@ impl ImageStore {
         }
     }
 
+    /// Failed image requests currently in the cache, taking in newly finished decodes first.
+    pub fn failures(&mut self) -> HashMap<ImageKey, Error> {
+        self.take_finished();
+        self.entries
+            .iter()
+            .filter_map(|(key, entry)| match &entry.state {
+                EntryState::Failed(error) => Some((key.clone(), error.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The image for `request`, decoding it on this thread when the store does not have it:
     /// for headless pictures and tests, which have nothing better to do meanwhile.
     pub fn decode_now(&mut self, request: ImageRequest) -> Result<Arc<DecodedImage>, Error> {
