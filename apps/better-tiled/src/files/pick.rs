@@ -100,6 +100,22 @@ fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> 
                 path: picked.map(|file| file.path().to_path_buf()),
             }]
         }
+        FileRequest::GodotScene { suggested, .. } => {
+            let mut dialog = rfd::AsyncFileDialog::new()
+                .set_title("Export to Godot")
+                .add_filter("Godot scenes", &["tscn"]);
+            if let Some(folder) = suggested.parent() {
+                dialog = dialog.set_directory(folder);
+            }
+            if let Some(name) = suggested.file_name() {
+                dialog = dialog.set_file_name(name.to_string_lossy());
+            }
+            let picked = pollster::block_on(dialog.save_file());
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::SaveAs { suggested, .. } => {
             let mut dialog = rfd::AsyncFileDialog::new()
                 .set_title("Save As")

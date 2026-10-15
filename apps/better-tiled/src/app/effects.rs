@@ -21,6 +21,7 @@ impl App {
 
     fn carry_out(&mut self, ctx: &egui::Context, effect: Effect) {
         match effect {
+            Effect::Godot { doc, operation } => self.start_godot(ctx, doc, operation),
             Effect::Load(job) => {
                 let spawned = self
                     .workers

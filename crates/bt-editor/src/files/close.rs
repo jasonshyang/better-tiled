@@ -255,6 +255,10 @@ impl Editor {
             return Vec::new();
         };
         match request {
+            FileRequest::GodotScene { doc, .. } => vec![Effect::Godot {
+                doc,
+                operation: crate::GodotOperation::ExportTo(path),
+            }],
             FileRequest::Open => self.open(&path),
             // The window's own request: the New Tileset dialog takes the answer.
             FileRequest::TilesetImage => Vec::new(),

@@ -7,6 +7,7 @@ mod automap_tests;
 mod custom_types_tests;
 mod effects;
 mod frame;
+mod godot;
 mod live;
 #[cfg(test)]
 mod live_tests;
@@ -26,3 +27,6 @@ mod toolbar;
 
 pub(crate) use frame::{App, PanelTab};
 pub(crate) use startup::Startup;
+
+#[cfg(test)]
+mod godot_tests;

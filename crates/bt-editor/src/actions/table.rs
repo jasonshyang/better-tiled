@@ -245,6 +245,14 @@ action_table! {
     SaveAs => ActionSpec::new(ActionId::SaveAs, "save_as", "Save As…", "file write rename")
         .on(Document)
         .keys(&[cmd_shift('s')]),
+    /// Repeat the Godot export.
+    Export => ActionSpec::new(ActionId::Export, "export", "Export to Godot", "file godot scene").on(Map).keys(&[cmd('e')]),
+    /// Choose a Godot scene target.
+    ExportAs => ActionSpec::new(ActionId::ExportAs, "export_as", "Export As…", "file godot scene").on(Map).keys(&[cmd_shift('e')]),
+    /// Configure Godot export for this project.
+    GodotSetup => ActionSpec::new(ActionId::GodotSetup, "godot_setup", "Godot Setup…", "file project godot").on(Map),
+    /// Import and load the export in Godot.
+    VerifyGodot => ActionSpec::new(ActionId::VerifyGodot, "verify_godot", "Verify in Godot", "file godot check scene").on(Map),
     /// Save everything unsaved.
     SaveAll => ActionSpec::new(ActionId::SaveAll, "save_all", "Save All", "file write every")
         .keys(&[cmd_alt('s')]),

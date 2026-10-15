@@ -39,6 +39,13 @@ pub enum Effect {
     WriteSettings(Box<crate::settings::Settings>),
     /// Show a dialog of the window's; it reports back with intents.
     Show(Dialog),
+    /// Run a Godot operation in the window on a worker.
+    Godot {
+        /// The source map.
+        doc: DocumentId,
+        /// What to do.
+        operation: GodotOperation,
+    },
     /// Close the window: nothing unsaved is left, or the user chose to lose it.
     Quit,
     /// Read a tileset's pixels on a worker for a labelling helper, and hand the result back as
@@ -84,6 +91,13 @@ pub enum FileRequest {
         /// The document.
         doc: DocumentId,
         /// The file suggested.
+        suggested: PathBuf,
+    },
+    /// The Godot scene chosen by Export As.
+    GodotScene {
+        /// The source map.
+        doc: DocumentId,
+        /// The suggested scene path.
         suggested: PathBuf,
     },
     /// The file of a custom property's value (the Properties panel's file field); the answer
@@ -181,4 +195,21 @@ pub enum Choice {
     KeepMine,
     /// Take what is on disk, losing the unsaved changes (the reload can be undone).
     Reload,
+}
+
+/// Godot commands contain no exporter or window types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GodotOperation {
+    /// Export to the remembered target or the project's default.
+    Export,
+    /// Pick a different .tscn target.
+    ExportAs,
+    /// Export to the selected target.
+    ExportTo(PathBuf),
+    /// Edit the map's project setup.
+    Setup,
+    /// Ask Godot to import and load the existing export.
+    Verify,
+    /// A successful save may repeat the export, without questions.
+    AfterSave,
 }

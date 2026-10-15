@@ -46,7 +46,8 @@ pub use document::{
 };
 pub use editor::{Editor, EditorBuilder};
 pub use effect::{
-    Choice, Decision, DecisionId, Dialog, Effect, FileRequest, Purpose, Question, ViewRequest,
+    Choice, Decision, DecisionId, Dialog, Effect, FileRequest, GodotOperation, Purpose, Question,
+    ViewRequest,
 };
 pub use error::EditError;
 pub use external::{

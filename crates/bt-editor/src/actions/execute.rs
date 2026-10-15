@@ -79,6 +79,20 @@ impl Editor {
             ActionId::Open => vec![Effect::PickFile(FileRequest::Open)],
             ActionId::Save => on_document(self, &Editor::save),
             ActionId::SaveAs => on_document(self, &|editor, doc| vec![editor.save_as_request(doc)]),
+            ActionId::Export
+            | ActionId::ExportAs
+            | ActionId::GodotSetup
+            | ActionId::VerifyGodot => current
+                .map(|doc| {
+                    let operation = match id {
+                        ActionId::ExportAs => crate::GodotOperation::ExportAs,
+                        ActionId::GodotSetup => crate::GodotOperation::Setup,
+                        ActionId::VerifyGodot => crate::GodotOperation::Verify,
+                        _ => crate::GodotOperation::Export,
+                    };
+                    vec![Effect::Godot { doc, operation }]
+                })
+                .unwrap_or_default(),
             ActionId::SaveAll => {
                 let mut effects = self.save_all();
                 let untitled = self

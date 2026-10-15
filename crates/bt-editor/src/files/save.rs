@@ -147,6 +147,12 @@ impl Editor {
         match self.write_map(asset, path) {
             Ok(warnings) => {
                 self.recovery.forget(asset);
+                if let Some(document) = self.documents.in_order().find(|d| d.asset() == asset) {
+                    effects.push(Effect::Godot {
+                        doc: document.id(),
+                        operation: crate::GodotOperation::AfterSave,
+                    });
+                }
                 effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)));
                 effects.extend(warnings.into_iter().map(Effect::Notify));
                 effects.push(Effect::Notify(Notice::info(format!(
@@ -177,6 +183,14 @@ impl Editor {
             match written {
                 Ok(warnings) => {
                     self.recovery.forget(id);
+                    if self.store.map(id).is_some()
+                        && let Some(document) = self.documents.in_order().find(|d| d.asset() == id)
+                    {
+                        effects.push(Effect::Godot {
+                            doc: document.id(),
+                            operation: crate::GodotOperation::AfterSave,
+                        });
+                    }
                     effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(id)));
                     effects.extend(warnings.into_iter().map(Effect::Notify));
                 }

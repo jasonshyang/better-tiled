@@ -46,6 +46,7 @@ const FLASH_PROBLEM_FOR: Duration = Duration::from_secs(10);
 /// The window.
 pub(crate) struct App {
     pub(super) editor: Editor,
+    pub(super) godot: super::godot::GodotState,
     pub(super) canvases: HashMap<DocumentId, Canvas>,
     layers_panel: LayersPanel,
     objects_panel: ObjectsPanel,
@@ -105,11 +106,18 @@ pub(crate) enum LeftTab {
     Objects,
     /// The AutoMap panel.
     AutoMap,
+    /// Export and verification diagnostics.
+    Issues,
 }
 
 impl LeftTab {
     /// The group's tabs, in order.
-    const ALL: [LeftTab; 3] = [LeftTab::Layers, LeftTab::Objects, LeftTab::AutoMap];
+    const ALL: [LeftTab; 4] = [
+        LeftTab::Layers,
+        LeftTab::Objects,
+        LeftTab::AutoMap,
+        LeftTab::Issues,
+    ];
 
     /// The tab's title.
     fn title(self) -> &'static str {
@@ -117,6 +125,7 @@ impl LeftTab {
             LeftTab::Layers => "Layers",
             LeftTab::Objects => "Objects",
             LeftTab::AutoMap => "AutoMap",
+            LeftTab::Issues => "Issues",
         }
     }
 }
@@ -347,6 +356,7 @@ impl App {
         let checking = startup.screenshot.is_some() || startup.bench;
         let mut app = App {
             editor,
+            godot: super::godot::GodotState::default(),
             canvases: HashMap::new(),
             layers_panel: LayersPanel::default(),
             objects_panel: ObjectsPanel::default(),
@@ -635,7 +645,24 @@ impl App {
                 .map(|map| &**map),
             hint: canvas.and_then(Canvas::hint),
         };
-        egui::Panel::bottom("status_bar").show(ui, |ui| status_bar(ui, &input));
+        let count = current
+            .and_then(|doc| self.godot.issues.get(&doc))
+            .map_or(0, Vec::len);
+        let mut open_issues = false;
+        egui::Panel::bottom("status_bar").show(ui, |ui| {
+            if count > 0 {
+                open_issues = ui
+                    .button(
+                        egui::RichText::new(format!("{count} Godot issues"))
+                            .color(ui.visuals().error_fg_color),
+                    )
+                    .clicked();
+            }
+            status_bar(ui, &input);
+        });
+        if open_issues {
+            self.left_tab = LeftTab::Issues;
+        }
     }
 
     fn show_panels(&mut self, ui: &mut egui::Ui) {
@@ -668,6 +695,7 @@ impl App {
                             self.objects_panel
                                 .show(ui, &self.editor, doc, &mut self.intents);
                         }
+                        LeftTab::Issues => self.show_godot_issues(ui, doc),
                         LeftTab::AutoMap => {
                             self.automap_panel
                                 .show(ui, &self.editor, doc, &mut self.intents);
@@ -883,6 +911,7 @@ impl App {
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame_started = Instant::now();
+        self.take_godot_results(ctx);
         let finished = self.workers.take_results();
         for intent in finished {
             match intent {
@@ -924,7 +953,7 @@ impl eframe::App for App {
         for path in dropped_files(&ctx) {
             self.intents.push(Intent::Open(path));
         }
-        if !self.modals.is_open() {
+        if !self.modals.is_open() && !self.godot.dialog_open() {
             enforce_focus(&ctx);
             for id in shortcuts(&ctx, &self.editor) {
                 self.intents.push(Intent::Run(id));
@@ -935,6 +964,7 @@ impl eframe::App for App {
             egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, &self.editor, &mut self.intents));
         }
         self.show_status_bar(ui);
+        self.show_godot_dialog(&ctx);
         self.show_panels(ui);
         self.show_center(ui);
         let mut requests = Vec::new();
