@@ -32,6 +32,8 @@ pub(crate) struct Files {
     pub(crate) project: Option<AssetId>,
     /// Pattern-derived world maps; explicit positions remain in the world asset.
     pub(crate) world_patterns: HashMap<AssetId, Vec<bt_core::WorldMap>>,
+    /// Requested neighbour loads, including failed ones until explicitly retried.
+    pub(crate) world_requested: std::collections::HashSet<PathBuf>,
     pub(crate) pending: HashMap<DecisionId, Pending>,
     pub(crate) next_decision: u64,
     /// The user chose to save before quitting: quit once nothing is unsaved.

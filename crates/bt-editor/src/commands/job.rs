@@ -136,7 +136,13 @@ pub(super) fn prepare(
             "objecttype",
             current_object.map(|object| object.class.clone()),
         ),
-        ("worldfile", None),
+        (
+            "worldfile",
+            editor
+                .world_of(doc)
+                .and_then(|world| editor.store().get(world)?.path())
+                .map(|path| path.to_string_lossy().into_owned()),
+        ),
     ]);
     let program = command.command.trim();
     let program = if program.starts_with('"') {

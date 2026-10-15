@@ -21,6 +21,8 @@ pub enum ToolKind {
     MagicWand,
     /// Selects every like tile.
     SameTile,
+    /// Moves and resizes maps in a world.
+    World,
     /// Moves layers' offsets.
     OffsetLayers,
     /// Selects, moves, resizes and turns objects.
@@ -69,7 +71,7 @@ impl ToolKind {
             | ToolKind::RectSelect
             | ToolKind::MagicWand
             | ToolKind::SameTile => ToolFamily::Tile,
-            ToolKind::OffsetLayers | ToolKind::Explain => ToolFamily::Any,
+            ToolKind::World | ToolKind::OffsetLayers | ToolKind::Explain => ToolFamily::Any,
             ToolKind::SelectObjects
             | ToolKind::InsertRectangle
             | ToolKind::InsertEllipse

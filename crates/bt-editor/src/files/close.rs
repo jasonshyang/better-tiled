@@ -59,6 +59,9 @@ impl Editor {
             );
         }
         if !self.documents.in_order().any(|d| d.asset() == asset) && !self.map_uses(asset) {
+            if let Some(path) = self.store.get(asset).and_then(|asset| asset.path()) {
+                self.files.world_requested.remove(path);
+            }
             self.store.remove(asset);
             self.files.loaders.remove(&asset);
             self.forget_rules(asset);

@@ -609,6 +609,9 @@ action_table! {
         .on(TileLayer)
         .keys(&[plain('s')])
         .tool(ToolKind::SameTile),
+    /// Move and resize maps in the containing world.
+    WorldTool => ActionSpec::new(ActionId::WorldTool, "world_tool", "World", "world move map resize neighbours tool").tiled("WorldMoveMapTool")
+        .on(Map).keys(&[plain('n')]).tool(ToolKind::World),
     /// Offset Layers.
     OffsetLayersTool => ActionSpec::new(ActionId::OffsetLayersTool, "offset_layers_tool", "Offset Layers", "move layer tool").tiled("LayerOffsetTool")
         .on(Map)
@@ -678,6 +681,7 @@ pub fn tool_action(tool: ToolKind) -> ActionId {
         ToolKind::RectSelect => ActionId::RectSelectTool,
         ToolKind::MagicWand => ActionId::MagicWandTool,
         ToolKind::SameTile => ActionId::SameTileTool,
+        ToolKind::World => ActionId::WorldTool,
         ToolKind::OffsetLayers => ActionId::OffsetLayersTool,
         ToolKind::Explain => ActionId::ExplainTool,
         ToolKind::SelectObjects => ActionId::SelectObjectsTool,

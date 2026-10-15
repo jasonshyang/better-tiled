@@ -9,7 +9,7 @@ use bt_editor::{
     DocumentId, Editor, Intent, Settings, TileRegion, ViewRequest, ViewState, ViewToggles,
 };
 use bt_render::{FrameInput, LayerVisibility, ObjectStyle};
-use bt_utils::IRect;
+use bt_utils::{DRect, IRect};
 use egui::{CursorIcon, Event, MouseWheelUnit, PointerButton, Pos2, Sense, Vec2};
 use glam::{DVec2, IVec2, UVec2};
 
@@ -215,8 +215,9 @@ impl Canvas {
         if let Some(gpu) = frame.gpu {
             let time_ms = (ui.input(|input| input.time) * 1000.0) as u64;
             let input = self.frame_input(frame, &view, time_ms);
+            let inputs = self.world_inputs(frame, &view, input, time_ms, out);
             ui.painter()
-                .add(gpu.callback(view.rect, input, time_ms, ui.ctx().clone()));
+                .add(gpu.callback(view.rect, inputs, time_ms, ui.ctx().clone()));
         }
         let state = self.camera.view_state();
         if frame.role == CanvasRole::Map && self.framed && self.told != Some(state) {
@@ -472,7 +473,7 @@ impl Canvas {
         } else {
             None
         };
-        let overlays = overlay_vectors(&OverlayInput {
+        let mut overlays = overlay_vectors(&OverlayInput {
             map: frame.map,
             visible: view.render_camera().visible_rect(viewport_px(view)),
             zoom_px: view.zoom_px,
@@ -492,6 +493,35 @@ impl Canvas {
             marks: &marks,
             edited: edited.as_ref(),
         });
+        if let Some(origin) = frame.editor.world_origin(frame.doc) {
+            let mut vectors = overlays.to_vec();
+            let visible = view.render_camera().visible_rect(viewport_px(view));
+            for entry in frame.editor.world_maps_in_view(frame.doc, visible) {
+                let area = DRect::from_min_size(
+                    entry.rect.min().as_dvec2() - origin,
+                    entry.rect.size().as_dvec2(),
+                );
+                let current = Some(&entry.file.path) == frame.editor.path_of(frame.doc).as_ref();
+                let color = if current {
+                    bt_core::Color::rgba(80, 185, 240, 240)
+                } else {
+                    bt_core::Color::rgba(200, 200, 200, 160)
+                };
+                vectors.push(
+                    bt_render::VectorItem::rect(area)
+                        .stroke(color, if current { 2.0 } else { 1.0 }),
+                );
+                vectors.push(bt_render::VectorItem::text(
+                    bt_render::TextItem::new(
+                        bt_utils::paths::display_name(&entry.file.path),
+                        area.min,
+                    )
+                    .screen_size(12.0 * pixels_per_point)
+                    .color(color),
+                ));
+            }
+            overlays = vectors.into();
+        }
         let layers = if frame.toggles.highlight_current_layer {
             LayerVisibility::default().highlight(
                 frame.selected_layers.to_vec(),
@@ -517,6 +547,71 @@ impl Canvas {
             .objects(objects)
             .vectors(overlays)
             .background(frame.map.background_color)
+    }
+
+    /// Neighbours use their own map geometry and camera, sharing the canvas viewport/device.
+    fn world_inputs(
+        &self,
+        frame: &CanvasFrame<'_>,
+        view: &ViewTransform,
+        mut current: FrameInput,
+        time_ms: u64,
+        out: &mut Vec<Intent>,
+    ) -> Vec<FrameInput> {
+        if frame.role != CanvasRole::Map || frame.editor.template_of(frame.doc).is_some() {
+            return vec![current];
+        }
+        let Some(origin) = frame.editor.world_origin(frame.doc) else {
+            return vec![current];
+        };
+        let camera = view.render_camera();
+        let viewport = viewport_px(view);
+        let visible = camera.visible_rect(viewport);
+        if frame.editor.needs_world_maps(frame.doc, visible) {
+            out.push(Intent::LoadWorldMaps {
+                doc: frame.doc,
+                visible,
+            });
+        }
+        let current_path = frame.editor.path_of(frame.doc);
+        let mut inputs = Vec::new();
+        for entry in frame.editor.world_maps_in_view(frame.doc, visible) {
+            if Some(&entry.file.path) == current_path.as_ref() {
+                continue;
+            }
+            let Some(asset) = frame.editor.store().by_path(&entry.file.path) else {
+                continue;
+            };
+            let Some(map) = frame.editor.store().map(asset) else {
+                continue;
+            };
+            let offset =
+                entry.rect.min().as_dvec2() - origin - map.bounding_rect().min().as_dvec2();
+            let bounds = DRect::from_min_size(
+                map.bounding_rect().min().as_dvec2(),
+                map.bounding_rect().size().as_dvec2(),
+            );
+            inputs.push(
+                FrameInput::new(
+                    Arc::clone(map),
+                    bt_render::Camera {
+                        origin: camera.origin - offset,
+                        ..camera
+                    },
+                    viewport,
+                )
+                .time_ms(time_ms)
+                .objects(ObjectStyle::default().custom_types(frame.editor.custom_types()))
+                .background(map.background_color)
+                .background_bounds(bounds),
+            );
+        }
+        current = current.background_bounds(DRect::from_min_size(
+            frame.map.bounding_rect().min().as_dvec2(),
+            frame.map.bounding_rect().size().as_dvec2(),
+        ));
+        inputs.push(current);
+        inputs
     }
 
     fn apply_wheel(&mut self, ui: &egui::Ui, view: &ViewTransform, at: Pos2, settings: &Settings) {

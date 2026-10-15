@@ -46,6 +46,7 @@ impl Default for ToolBox {
                 Box::new(LikeTiles::magic_wand()),
                 Box::new(LikeTiles::same_tile()),
                 Box::new(OffsetLayers::default()),
+                Box::new(super::world::WorldTool::default()),
                 Box::new(ExplainTool::default()),
                 Box::new(SelectObjects::default()),
                 Box::new(EditPolygons::default()),

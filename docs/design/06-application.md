@@ -624,3 +624,15 @@ their cameras; an exit nobody answered leaves the work to recover at the next st
 What a person checks in the real window, each release: the feel of pan and zoom at 120 Hz on
 the largest pack map, the latency of a stroke, the readability of hints and flashes, and the
 dialogs' layout at the smallest supported window size.
+
+
+### M6 world rendering as built
+
+Visible world neighbours are additional `FrameInput`s through the shared GPU renderer. Their
+cameras translate each map's bounding rectangle into the active map's coordinates. Each map
+can limit its background to its own rectangle, preserving the surrounding canvas and other
+maps; the active map draws last with its tool overlays. Frames and filenames show map extents.
+Neighbour loads run on workers and reuse asset identities when opened as documents. The World
+tool previews movement and all eight resize handles, commits on release, and cancels with
+Escape. Its window test drives movement, cancellation, resize, arrows and neighbour opening
+with the real GPU renderer.

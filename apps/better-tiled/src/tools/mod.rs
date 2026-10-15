@@ -19,6 +19,7 @@ mod selecting;
 mod terrain;
 mod tool;
 mod toolbox;
+mod world;
 
 pub(crate) use selecting::region_polygons;
 pub(crate) use tool::{Overlay, ToolContext};

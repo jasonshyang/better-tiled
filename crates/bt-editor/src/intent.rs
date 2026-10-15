@@ -25,6 +25,24 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Request visible world neighbours for the canvas; duplicate requests are coalesced.
+    LoadWorldMaps {
+        /// The active map document.
+        doc: DocumentId,
+        /// Visible rectangle in that map's drawing coordinates.
+        visible: bt_utils::DRect,
+    },
+    /// Move an explicitly listed world map in the active map document's history.
+    MoveWorldMap {
+        /// History owner.
+        doc: DocumentId,
+        /// The world asset.
+        world: crate::AssetId,
+        /// Resolved map path.
+        path: PathBuf,
+        /// New top-left in world pixels.
+        position: glam::IVec2,
+    },
     /// Run an enabled project command after any required save.
     RunProjectCommand(usize),
     /// Apply the Edit Commands draft as one project transaction.
