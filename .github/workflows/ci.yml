@@ -27,6 +27,8 @@ jobs:
         run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Format
         run: cargo fmt --all --check
@@ -60,7 +62,7 @@ jobs:
           echo "GODOT=$RUNNER_TEMP/godot/Godot_v4.7-stable_linux.x86_64" >> "$GITHUB_ENV"
 
       - name: Tests
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       # Linux requires Godot; the other platforms may skip its headless checks.
       - name: Skips
