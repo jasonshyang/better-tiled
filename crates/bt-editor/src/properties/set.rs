@@ -54,6 +54,29 @@ impl<'a> PropertySet<'a> {
         rows(&self.targets, self.types)
     }
 
+    /// Applies a change to a standalone property collection. Refused unless this set contains
+    /// exactly the standalone target it was built from; failed plans leave the collection intact.
+    pub fn apply_to_properties(
+        &self,
+        properties: &mut Properties,
+        change: &Change,
+    ) -> Result<bool, PropertyError> {
+        let Some(target) = self
+            .targets
+            .first()
+            .filter(|target| self.targets.len() == 1 && target.id() == TargetId::Properties)
+        else {
+            return Err(PropertyError::StandaloneRequired);
+        };
+        let plan = Plan::new(change, &self.targets, self.types)?;
+        if let Some(changed) = plan.applied_to(target, properties) {
+            *properties = changed;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Applies `change` to the targets in `map` (the map, its layers, its objects), each
     /// target's own properties on their own. Returns whether any changed; nothing changes when
     /// the change is refused.

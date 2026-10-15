@@ -22,6 +22,7 @@ pub use autotiles::{AutotilesJob, ExpandedAutotiles};
 pub use load::{LoadJob, Loaded};
 pub(crate) use load::{LoadKind, LoadPurpose, LoadSource, LoadedFiles, ProjectChoice, hash_file};
 pub use new::{NewMap, NewTileset, NewTilesetSource};
+pub use worlds::world_problem;
 
 /// What the editor knows about files beyond the assets: the loaders the maps were read with
 /// (holding their templates, for writing), the open project, questions awaiting answers, and
@@ -30,9 +31,12 @@ pub use new::{NewMap, NewTileset, NewTilesetSource};
 pub(crate) struct Files {
     pub(crate) loaders: HashMap<AssetId, Loader>,
     pub(crate) project: Option<AssetId>,
+    pub(crate) active_world: Option<AssetId>,
     /// Pattern-derived world maps; explicit positions remain in the world asset.
     pub(crate) world_patterns: HashMap<AssetId, Vec<bt_core::WorldMap>>,
     /// Requested neighbour loads, including failed ones until explicitly retried.
+    pub(crate) world_pattern_requests: HashMap<AssetId, u64>,
+    pub(crate) world_pattern_results: HashMap<AssetId, u64>,
     pub(crate) world_requested: std::collections::HashSet<PathBuf>,
     pub(crate) pending: HashMap<DecisionId, Pending>,
     pub(crate) next_decision: u64,
@@ -49,6 +53,8 @@ pub(crate) struct Files {
 pub(crate) enum Pending {
     /// Closing a document with unsaved work.
     Close(DocumentId),
+    /// Unloading a world asks before its unsaved placements are discarded.
+    UnloadWorld(AssetId),
     /// Quitting with unsaved work.
     Quit,
     /// Opening snapshots of an earlier run again.

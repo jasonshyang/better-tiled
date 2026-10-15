@@ -21,6 +21,8 @@ pub(crate) enum LoadSource {
     File,
     /// A recovery snapshot of it.
     Snapshot(PathBuf),
+    /// In-memory auxiliary content to parse and expand without writing a temporary file.
+    Text(String),
 }
 
 /// Which custom types a load decodes properties with.
@@ -54,6 +56,13 @@ pub(crate) enum LoadPurpose {
     Open,
     /// Cache a visible neighbouring map without opening a document tab.
     WorldMap(crate::store::AssetId),
+    /// Probe and adopt a map before adding its rectangle to a world.
+    WorldPatterns { world: crate::AssetId, version: u64 },
+    /// Probe a map before adding it to a world.
+    AddWorldMap {
+        doc: crate::DocumentId,
+        world: crate::AssetId,
+    },
     /// It changed on disk: its asset takes the new content.
     Reload(crate::store::AssetId),
     /// Add External Tileset: the map of a document refers to it.
@@ -138,7 +147,7 @@ impl LoadJob {
     /// Reads the files; run it on a worker.
     pub fn run(&self) -> Loaded {
         let recovered_from = match &self.source {
-            LoadSource::File => None,
+            LoadSource::File | LoadSource::Text(_) => None,
             LoadSource::Snapshot(snapshot) => Some(snapshot.clone()),
         };
         let canonical = std::fs::canonicalize(&self.path).unwrap_or_else(|_| self.path.clone());
@@ -175,12 +184,17 @@ impl LoadJob {
             self.kind,
             LoadKind::World | LoadKind::Template | LoadKind::Project
         ) {
-            let source = match &self.source {
-                LoadSource::File => &self.path,
-                LoadSource::Snapshot(snapshot) => snapshot,
+            let text = match &self.source {
+                LoadSource::Text(text) => text.clone(),
+                LoadSource::File | LoadSource::Snapshot(_) => {
+                    let source = match &self.source {
+                        LoadSource::Snapshot(path) => path,
+                        _ => &self.path,
+                    };
+                    std::fs::read_to_string(source)
+                        .map_err(|error| format!("Cannot read {}: {error}", source.display()))?
+                }
             };
-            let text = std::fs::read_to_string(source)
-                .map_err(|error| format!("Cannot read {}: {error}", source.display()))?;
             let loaded = match self.kind {
                 LoadKind::World => {
                     let loaded = loader
@@ -243,6 +257,9 @@ impl LoadJob {
                         .map_err(|error| error.to_string())?,
                     Some(hash_file(&self.path)?),
                 ),
+                LoadSource::Text(_) => {
+                    return Err("In-memory loads require an auxiliary file kind".into());
+                }
                 LoadSource::Snapshot(snapshot) => {
                     let text = std::fs::read_to_string(snapshot)
                         .map_err(|error| format!("cannot read {}: {error}", snapshot.display()))?;
@@ -268,6 +285,9 @@ impl LoadJob {
             LoadSource::File => loader
                 .load_map(&self.path)
                 .map_err(|error| error.to_string())?,
+            LoadSource::Text(_) => {
+                return Err("In-memory loads require an auxiliary file kind".into());
+            }
             LoadSource::Snapshot(snapshot) => {
                 let text = std::fs::read_to_string(snapshot)
                     .map_err(|error| format!("cannot read {}: {error}", snapshot.display()))?;
@@ -278,7 +298,7 @@ impl LoadJob {
         };
         let content_hash = match &self.source {
             LoadSource::File => Some(hash_file(&self.path)?),
-            LoadSource::Snapshot(_) => None,
+            LoadSource::Snapshot(_) | LoadSource::Text(_) => None,
         };
         let mut dependencies = loaded_tilesets(&loaded.value.tilesets);
         let mut templates = std::collections::BTreeSet::new();
@@ -310,6 +330,7 @@ impl LoadJob {
         // A recovered map is what was painted already; AutoMap layers are read for the file.
         let layers = match &self.source {
             LoadSource::File => read_layers(canonical, self.home.as_deref(), &loaded.value),
+            LoadSource::Text(_) => Ok(None),
             LoadSource::Snapshot(_) => Ok(self
                 .recovered_layers
                 .as_ref()

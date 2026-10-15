@@ -9,6 +9,8 @@ use bt_core::{CustomTypeId, LayerId, ObjectId, TileId};
 /// class's members).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TargetId {
+    /// A standalone property collection, such as a world or project's properties.
+    Properties,
     /// The map.
     Map,
     /// A layer of the map.
@@ -35,6 +37,7 @@ pub enum TargetId {
 impl fmt::Display for TargetId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            TargetId::Properties => f.write_str("the properties"),
             TargetId::Map => f.write_str("the map"),
             TargetId::Layer(id) => write!(f, "layer {id}"),
             TargetId::Object(id) => write!(f, "object {id}"),

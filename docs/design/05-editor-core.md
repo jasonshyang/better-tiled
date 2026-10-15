@@ -687,6 +687,16 @@ with Escape. Its grid is the world's configured grid or the target map's tile si
 bypasses snapping. Arrows move the active map by grid steps, Shift by five and Command by
 pixels. Pattern placements refuse individual moves. `%worldfile` uses the containing world.
 
+New World creates a file containing the current saved map. Add Map to World probes the chosen
+map on a worker, reuses its cached asset, and records its placement in the current document's
+history. World Properties edits grid, adjacency, explicit placements, filename patterns and
+custom properties in a Cancel/OK draft. It validates patterns through the file-format crate's
+shared validator. Pattern expansion parses an in-memory world snapshot on a worker; results
+carry the root version and cannot replace newer edits or undo. The toolbar names the active
+world and shows its unsaved marker. Unload asks about unsaved world edits, removes world-only
+history entries and retains the map changes of mixed transactions. A document save also saves
+dirty worlds touched by its history, including after removing that map's placement.
+
 Map resize/crop updates explicit world rectangles in the map's transaction; the position shift
 uses projected grid bounds, including for isometric maps. Worlds participate in Save All,
 watching and recovery.

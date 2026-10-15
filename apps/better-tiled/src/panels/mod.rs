@@ -28,3 +28,6 @@ pub(crate) use tile_grid::{ShownTiles, TileGrid, TileSource, cell_size, paint_ti
 pub(crate) use tile_images::TileImages;
 pub(crate) use tiles::TilesPanel;
 pub(crate) use value_fields::{Field, Fields};
+
+mod property_draft;
+pub(crate) use property_draft::PropertyDraft;

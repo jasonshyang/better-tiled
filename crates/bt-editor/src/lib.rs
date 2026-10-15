@@ -57,7 +57,7 @@ pub use external::{
     BaseRules, ExternalBase, ExternalEdit, ExternalEditError, ExternalUndo, ExternalUndoError,
     ExternalUndone, MARK_COLORS, Mark, MarkCells,
 };
-pub use files::{AutotilesJob, ExpandedAutotiles};
+pub use files::{AutotilesJob, ExpandedAutotiles, world_problem};
 pub use files::{LoadJob, Loaded, NewMap, NewTileset, NewTilesetSource};
 pub use history::{
     AssetChange, DEFAULT_HISTORY_LIMIT, History, HistoryEntry, MergeKey, SelectionChange,

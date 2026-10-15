@@ -76,6 +76,25 @@ impl Editor {
             ActionId::NewTileset => {
                 on_document(self, &|_, doc| vec![Effect::Show(Dialog::NewTileset(doc))])
             }
+            ActionId::NewWorld => on_document(self, &|_, doc| {
+                vec![Effect::PickFile(FileRequest::NewWorld(doc))]
+            }),
+            ActionId::WorldProperties => on_document(self, &|_, doc| {
+                vec![Effect::Show(Dialog::WorldProperties(doc))]
+            }),
+            ActionId::AddMapToWorld => on_document(self, &|editor, doc| {
+                editor
+                    .world_of(doc)
+                    .map(|world| Effect::PickFile(FileRequest::WorldMap { doc, world }))
+                    .into_iter()
+                    .collect()
+            }),
+            ActionId::UnloadWorld => on_document(self, &|editor, doc| {
+                editor
+                    .world_of(doc)
+                    .map(|world| editor.unload_world(world))
+                    .unwrap_or_default()
+            }),
             ActionId::Open => vec![Effect::PickFile(FileRequest::Open)],
             ActionId::Save => on_document(self, &Editor::save),
             ActionId::SaveAs => on_document(self, &|editor, doc| vec![editor.save_as_request(doc)]),

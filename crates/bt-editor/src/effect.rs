@@ -63,6 +63,8 @@ pub enum Effect {
 /// A dialog of the window's.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Dialog {
+    /// Edit the current map's world settings and placements.
+    WorldProperties(DocumentId),
     /// Bring the window's process console forward.
     Console,
     /// Edit the current project's command list.
@@ -90,6 +92,15 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// A new world containing the saved map.
+    NewWorld(DocumentId),
+    /// An existing map to place in a loaded world.
+    WorldMap {
+        /// History owner.
+        doc: DocumentId,
+        /// Destination world.
+        world: crate::AssetId,
+    },
     /// An existing folder of Tiled `.stamp` files.
     StampsFolder,
     /// An image for a built-in Image attribute in Properties.

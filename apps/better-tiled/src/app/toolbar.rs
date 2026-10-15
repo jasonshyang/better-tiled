@@ -126,6 +126,27 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
             }
         }
     });
+    if let Some(world) = doc.and_then(|doc| editor.world_of(doc))
+        && let Some(asset) = editor.store().get(world)
+    {
+        ui.horizontal(|ui| {
+            let title = format!(
+                "World: {}{}",
+                asset.display_name(),
+                if asset.is_dirty() { " *" } else { "" }
+            );
+            ui.label(title);
+            for action in [
+                ActionId::WorldProperties,
+                ActionId::AddMapToWorld,
+                ActionId::UnloadWorld,
+            ] {
+                if ui.small_button(action.spec().label).clicked() {
+                    out.push(Intent::Run(action));
+                }
+            }
+        });
+    }
 }
 
 fn tool_button(

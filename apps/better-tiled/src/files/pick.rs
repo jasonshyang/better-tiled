@@ -48,6 +48,31 @@ impl FileDialogs {
 /// Asks for a file on a worker.
 fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
     workers.spawn("file-dialog", move || match &request {
+        FileRequest::NewWorld(_) => {
+            let picked = pollster::block_on(
+                rfd::AsyncFileDialog::new()
+                    .set_title("New World")
+                    .add_filter("Tiled worlds", &["world"])
+                    .set_file_name("game.world")
+                    .save_file(),
+            );
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
+        FileRequest::WorldMap { .. } => {
+            let picked = pollster::block_on(
+                rfd::AsyncFileDialog::new()
+                    .set_title("Add Map to World")
+                    .add_filter("Tiled maps", &MAP_EXTENSIONS)
+                    .pick_file(),
+            );
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::StampsFolder => {
             let picked = pollster::block_on(
                 rfd::AsyncFileDialog::new()

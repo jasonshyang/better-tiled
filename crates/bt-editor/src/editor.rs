@@ -183,6 +183,7 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::SetWorld { doc, world, value } => self.set_world(doc, world, *value),
             Intent::LoadWorldMaps { doc, visible } => self.load_world_maps(doc, visible),
             Intent::MoveWorldMap {
                 doc,
@@ -410,8 +411,9 @@ impl Editor {
     /// What follows any change: AutoMap layers' results and the Explain tool's explanations made
     /// again where what they come from changed.
     pub(crate) fn after_changes(&mut self) -> Vec<Effect> {
-        let effects = self.sync_live();
+        let mut effects = self.sync_live();
         self.sync_explanations();
+        effects.extend(self.sync_world_patterns());
         effects
     }
 

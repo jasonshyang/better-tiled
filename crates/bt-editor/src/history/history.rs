@@ -89,6 +89,25 @@ impl History {
         self.entries.last_mut()
     }
 
+    /// Drops references to an explicitly unloaded asset; mixed map/world transactions retain
+    /// their map changes, and world-only entries are removed without disturbing the cursor.
+    pub(crate) fn forget_asset(&mut self, asset: crate::AssetId) {
+        let mut position = 0;
+        let mut index = 0;
+        self.entries.retain_mut(|entry| {
+            let touched = entry.changes.iter().any(|change| change.asset == asset);
+            entry.changes.retain(|change| change.asset != asset);
+            let keep = !touched || !entry.changes.is_empty();
+            if keep && index < self.position {
+                position += 1;
+            }
+            index += 1;
+            keep
+        });
+        self.position = position;
+        self.merge_open = false;
+    }
+
     /// Sets the limit (a setting).
     pub(crate) fn set_limit(&mut self, limit: usize) {
         self.limit = limit.max(1);
