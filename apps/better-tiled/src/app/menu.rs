@@ -13,7 +13,7 @@ struct Menu {
 use MenuEntry::{Action, Separator, Submenu};
 
 /// The menus, in order.
-const MENUS: [Menu; 7] = [
+const MENUS: [Menu; 8] = [
     Menu {
         title: "File",
         entries: &[
@@ -177,6 +177,15 @@ const MENUS: [Menu; 7] = [
             Action(ActionId::BrushSizeDown),
         ],
     },
+    Menu {
+        title: "Commands",
+        entries: &[
+            MenuEntry::ProjectCommands,
+            Separator,
+            Action(ActionId::EditCommands),
+            Action(ActionId::ShowConsole),
+        ],
+    },
 ];
 
 /// Draws the menu bar; a chosen command goes to `out`.
@@ -201,7 +210,7 @@ mod tests {
                 match entry {
                     MenuEntry::Action(id) => listed.push(*id),
                     MenuEntry::Submenu(_, inner) => collect(inner, listed),
-                    MenuEntry::Separator | MenuEntry::RecentFiles => {}
+                    MenuEntry::Separator | MenuEntry::RecentFiles | MenuEntry::ProjectCommands => {}
                 }
             }
         }

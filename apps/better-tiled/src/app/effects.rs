@@ -21,6 +21,22 @@ impl App {
 
     fn carry_out(&mut self, ctx: &egui::Context, effect: Effect) {
         match effect {
+            Effect::RunCommand(job) => {
+                if job.shows_output() {
+                    self.console_open = true;
+                }
+                if let Err(error) = self.console.start(ctx, &mut self.workers, job) {
+                    self.notify(Notice::error(error));
+                }
+            }
+            Effect::Show(Dialog::Console) => self.console_open = true,
+            Effect::Show(Dialog::EditCommands(doc)) => {
+                self.modals
+                    .push(Modal::Commands(crate::dialogs::CommandsDialog::new(
+                        doc,
+                        &self.editor,
+                    )))
+            }
             Effect::Stamps(job) => {
                 let job = std::sync::Arc::new(job);
                 let worker_job = std::sync::Arc::clone(&job);

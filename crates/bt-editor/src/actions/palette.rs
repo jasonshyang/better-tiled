@@ -16,6 +16,8 @@ use crate::effect::{Effect, ViewRequest};
 /// What a palette entry does.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PaletteTarget {
+    /// Runs a project command.
+    ProjectCommand(usize),
     /// Runs a command.
     Action(ActionId),
     /// Opens a file.
@@ -84,6 +86,14 @@ impl Editor {
         }
         let words: Vec<&str> = query.split_whitespace().collect();
         let mut candidates = Vec::new();
+        for (index, command) in self.project_commands().iter().enumerate() {
+            candidates.push(Candidate {
+                target: PaletteTarget::ProjectCommand(index),
+                label: command.name.clone(),
+                detail: command.shortcut.clone(),
+                enabled: command.enabled && self.current().is_some(),
+            });
+        }
         for spec in ACTIONS.iter().filter(|s| s.id != ActionId::SearchActions) {
             candidates.push(Candidate {
                 target: PaletteTarget::Action(spec.id),
@@ -166,6 +176,7 @@ impl Editor {
         self.palette.recent.insert(0, target.clone());
         self.palette.recent.truncate(RECENT);
         match target {
+            PaletteTarget::ProjectCommand(index) => self.run_project_command(index),
             PaletteTarget::Action(id) => self.run(id),
             PaletteTarget::File(path) => self.open(&path),
             PaletteTarget::Layer(layer) => {

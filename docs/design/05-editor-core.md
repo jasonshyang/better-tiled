@@ -676,6 +676,25 @@ the document. `set_marks(doc, marks)` replaces or adds the outlines `bt mark` as
 - The **project** is an asset; custom types edited in the Custom Types editor are a transaction
   on it; the project file is watched and reloaded, keeping unsaved types.
 
+As built in M6, Edit Commands applies its draft as one undoable project transaction. Saving
+the owning document writes the project file too. Project commands appear in their menu and the
+command palette, and their Qt-format shortcuts run through the window's focus routing.
+`RunProjectCommand` performs a required save before preparing `CommandJob`; a save error or an
+untitled document refuses execution. Missing context for a requested placeholder also refuses
+execution. The job snapshots map/export/project paths, layer name, selected tile ids and the
+current object's id/class (`%objecttype` remains an alias). `%executablepath` resolves on the
+worker. Arguments use [Qt's grouping conventions](https://doc.qt.io/qt-6/qprocess.html#splitCommand),
+with an error for an unfinished quote. Placeholder values are substituted after grouping so
+spaces and quotes in filenames and names stay inside one argument. An explicit interpreter
+command can run shell syntax; other commands pass literal argument values to the program.
+
+The window's console streams stdout/stderr, reports exit status and startup failures, and can
+stop a running command. Processes and their output readers run off the frame thread; output is
+bounded and Unicode sequences split across reads are preserved. On Unix, stopping and closing
+the app terminate the command's process group, including children holding output pipes. Windows
+cancellation terminates the immediate process. The console keeps twenty runs and the last
+128 KiB per run; hidden-output commands still report failures.
+
 ## 19. Module layout
 
 ```

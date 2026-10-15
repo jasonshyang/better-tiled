@@ -1,6 +1,7 @@
 //! Dialogs and modals: questions from the editor, errors and dialogs, one at a time.
 
 mod choose_layer;
+mod commands;
 mod custom_types;
 mod export_image;
 mod form;
@@ -21,4 +22,5 @@ pub(crate) use offset_map::OffsetMapDialog;
 pub(crate) use palette::PaletteDialog;
 pub(crate) use resize_map::ResizeMapDialog;
 
+pub(crate) use commands::CommandsDialog;
 pub(crate) use export_image::ExportImageDialog;

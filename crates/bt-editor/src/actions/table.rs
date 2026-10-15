@@ -362,6 +362,10 @@ action_table! {
     ShowPainted => ActionSpec::new(ActionId::ShowPainted, "show_painted", "Show What I Painted", "view automap layers live result rules")
         .on(Map)
         .toggle(),
+    /// Edit the project's external commands.
+    EditCommands => ActionSpec::new(ActionId::EditCommands, "edit_commands", "Edit Commands…", "project external executable arguments").on(Document),
+    /// Show process output and execution controls.
+    ShowConsole => ActionSpec::new(ActionId::ShowConsole, "show_console", "Show Console", "commands output process log"),
     /// The project's classes and enums.
     CustomTypesEditor => ActionSpec::new(ActionId::CustomTypesEditor, "custom_types_editor", "Custom Types Editor", "classes enums project property types").tiled("CustomTypesEditor")
         .on(Document),

@@ -25,6 +25,22 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Run an enabled project command after any required save.
+    RunProjectCommand(usize),
+    /// Apply the Edit Commands draft as one project transaction.
+    SetProjectCommands {
+        /// The document whose history records it.
+        doc: DocumentId,
+        /// The replacement command list.
+        commands: Vec<bt_core::Command>,
+    },
+    /// A process worker finished; consumed by the window's console.
+    CommandFinished {
+        /// The window's process identity.
+        id: u64,
+        /// Its exit status, or a startup/read failure.
+        result: Result<bt_utils::process::ProcessExit, String>,
+    },
     /// Choose, save or edit a stamp.
     Stamp(crate::StampEdit),
     /// A stamp-library worker finished.

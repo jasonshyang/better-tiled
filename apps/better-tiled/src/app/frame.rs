@@ -45,6 +45,8 @@ const FLASH_PROBLEM_FOR: Duration = Duration::from_secs(10);
 
 /// The window.
 pub(crate) struct App {
+    pub(super) console: super::commands::CommandConsole,
+    pub(super) console_open: bool,
     pub(super) editor: Editor,
     pub(super) godot: super::godot::GodotState,
     pub(super) canvases: HashMap<DocumentId, Canvas>,
@@ -378,6 +380,8 @@ impl App {
         let writer = BackgroundWriter::start(startup.recovery_folder.clone(), pid)?;
         let checking = startup.screenshot.is_some() || startup.bench;
         let mut app = App {
+            console: super::commands::CommandConsole::default(),
+            console_open: false,
             editor,
             godot: super::godot::GodotState::default(),
             canvases: HashMap::new(),
@@ -958,6 +962,12 @@ impl eframe::App for App {
         let finished = self.workers.take_results();
         for intent in finished {
             match intent {
+                Intent::CommandFinished { id, result } => {
+                    if let Some(notice) = self.console.finish(id, result) {
+                        self.console_open = true;
+                        self.notify(notice);
+                    }
+                }
                 Intent::FilePicked {
                     request: FileRequest::AttributeImage { doc, inspected },
                     path,
@@ -1043,12 +1053,28 @@ impl eframe::App for App {
             }
             self.intents
                 .extend(crate::focus::quick_stamp_shortcuts(&ctx, &self.editor));
+            self.intents
+                .extend(crate::focus::project_command_shortcuts(&ctx, &self.editor));
         }
         egui::Panel::top("menu_bar").show(ui, |ui| menu_bar(ui, &self.editor, &mut self.intents));
         if self.editor.current().is_some() {
             egui::Panel::top("toolbar").show(ui, |ui| toolbar(ui, &self.editor, &mut self.intents));
         }
         self.show_status_bar(ui);
+        if self.console_open {
+            egui::Panel::bottom("command-console")
+                .resizable(true)
+                .default_size(180.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.heading("Console");
+                        if ui.button("Hide Console").clicked() {
+                            self.console_open = false;
+                        }
+                    });
+                    self.console.show(ui);
+                });
+        }
         self.show_godot_dialog(&ctx);
         self.show_panels(ui);
         self.show_center(ui);
@@ -1066,6 +1092,7 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self) {
+        self.stop_commands();
         self.watcher.stop();
         if !self.quit_allowed {
             // The run ends without a quit anyone answered (the system's, when the quit guard
