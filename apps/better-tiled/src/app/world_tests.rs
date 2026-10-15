@@ -83,3 +83,76 @@ fn world_neighbours_move_resize_cancel_and_open_without_duplicate_assets() {
     window.apply(Intent::Run(ActionId::SaveAll));
     window.exit();
 }
+
+#[test]
+fn world_management_dialogs_create_add_cancel_edit_and_save() {
+    use bt_editor::FileRequest;
+    let scratch = Scratch::new("window-world-properties").unwrap();
+    let path = scratch.join("map.tmx");
+    let second = scratch.join("second.tmx");
+    for path in [&path, &second] {
+        let map = MapBuilder::new(UVec2::splat(16), UVec2::new(3, 2))
+            .tile_layer("ground", ".")
+            .build()
+            .unwrap();
+        bt_tmx::WriteRequest::for_map(&map, path).write().unwrap();
+    }
+    let mut window = TestWindow::with_gpu(&scratch.join("data"));
+    window.drop_file(&path);
+    let doc = window.editor().current().unwrap();
+    window.apply(Intent::Run(ActionId::NewWorld));
+    let world_path = scratch.join("new.world");
+    window.answer_file_dialog(FileRequest::NewWorld(doc), &world_path);
+    let world = window.editor().world_of(doc).unwrap();
+    window.apply(Intent::Run(ActionId::AddMapToWorld));
+    window.answer_file_dialog(FileRequest::WorldMap { doc, world }, &second);
+    assert_eq!(window.editor().world_maps(world).len(), 2);
+    window.apply(Intent::Run(ActionId::WorldProperties));
+    window.click("Only show adjacent maps");
+    window.click("Cancel");
+    assert!(
+        !window
+            .editor()
+            .store()
+            .world(world)
+            .unwrap()
+            .only_show_adjacent_maps
+    );
+    window.apply(Intent::Run(ActionId::WorldProperties));
+    window.click("Only show adjacent maps");
+    window.click_last("Add Property");
+    window.type_text("biome");
+    window.click("Add");
+    window.focus("biome");
+    window.type_text("forest");
+    window.press(Modifiers::NONE, Key::Enter);
+    if let Some(path) = std::env::var_os("BT_WORLD_PROPERTIES_SCREENSHOT") {
+        window.save_picture(std::path::Path::new(&path));
+    }
+    window.click("OK");
+    assert!(
+        window
+            .editor()
+            .store()
+            .world(world)
+            .unwrap()
+            .only_show_adjacent_maps
+    );
+    assert_eq!(
+        window.editor().store().world(world).unwrap().properties["biome"].value,
+        bt_core::Value::String("forest".into())
+    );
+    window.apply(Intent::Run(ActionId::Save));
+    assert_eq!(
+        bt_tmx::Loader::default()
+            .load_world(&world_path)
+            .unwrap()
+            .value
+            .properties["biome"]
+            .value,
+        bt_core::Value::String("forest".into())
+    );
+    window.apply(Intent::Run(ActionId::UnloadWorld));
+    assert!(window.editor().world_of(doc).is_none());
+    window.exit();
+}

@@ -19,6 +19,7 @@ const MENUS: [Menu; 8] = [
         entries: &[
             Action(ActionId::NewMap),
             Action(ActionId::NewTileset),
+            Action(ActionId::NewWorld),
             Separator,
             Action(ActionId::Open),
             MenuEntry::RecentFiles,
@@ -103,6 +104,10 @@ const MENUS: [Menu; 8] = [
             Action(ActionId::LiveAutoMap),
             Separator,
             Action(ActionId::MapProperties),
+            Separator,
+            Action(ActionId::AddMapToWorld),
+            Action(ActionId::WorldProperties),
+            Action(ActionId::UnloadWorld),
         ],
     },
     Menu {

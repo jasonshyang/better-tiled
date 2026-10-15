@@ -123,7 +123,7 @@ impl WorldReader<'_> {
                 ),
                 regexp,
             };
-            if let Some(problem) = pattern_problem(&found) {
+            if let Some(problem) = world_pattern_problem(&found) {
                 self.json.warnings.record(
                     WarningKind::InvalidPattern,
                     format!(
@@ -170,7 +170,7 @@ impl WorldReader<'_> {
 
 /// Why a pattern finds no maps, if it does not: Tiled requires two capture groups (column and
 /// row), multipliers that are not zero and a positive map size.
-fn pattern_problem(pattern: &WorldPattern) -> Option<String> {
+pub fn world_pattern_problem(pattern: &WorldPattern) -> Option<String> {
     match regex::Regex::new(&pattern.regexp) {
         Err(error) => Some(format!("does not compile ({error})")),
         Ok(regex) if regex.captures_len() != 3 => Some(format!(
@@ -203,7 +203,7 @@ pub fn resolve_world_maps(world: &World, world_path: &Path) -> Vec<WorldMap> {
         .unwrap_or_default();
     names.sort();
     for pattern in &world.patterns {
-        if pattern_problem(pattern).is_some() {
+        if world_pattern_problem(pattern).is_some() {
             continue;
         }
         let Ok(regex) = regex::Regex::new(&pattern.regexp) else {

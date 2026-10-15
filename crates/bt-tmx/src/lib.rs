@@ -48,5 +48,5 @@ pub use rebase::rebase_file_references;
 pub use rules::{IncludeCycle, RuleMapEntry, RulesFile, parse_rules_file, read_rules_file};
 pub use stamp::{Stamp, StampVariation};
 pub use warning::{Target, Warning, WarningKind};
-pub use world::resolve_world_maps;
+pub use world::{resolve_world_maps, world_pattern_problem};
 pub use write::{Rendered, WriteRequest};

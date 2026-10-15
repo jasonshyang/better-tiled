@@ -24,3 +24,6 @@ pub(crate) use resize_map::ResizeMapDialog;
 
 pub(crate) use commands::CommandsDialog;
 pub(crate) use export_image::ExportImageDialog;
+
+mod world;
+pub(crate) use world::WorldDialog;

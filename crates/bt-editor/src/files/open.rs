@@ -99,6 +99,12 @@ impl Editor {
             }
         }
         let mut effects = Vec::new();
+        if let LoadPurpose::WorldPatterns { world, version } = loaded.purpose {
+            return self.finish_world_patterns(world, version, loaded);
+        }
+        if let LoadPurpose::AddWorldMap { doc, world } = loaded.purpose {
+            return self.finish_adding_world_map(doc, world, loaded);
+        }
         if let LoadPurpose::WorldMap(world) = loaded.purpose {
             return self.cache_world_map(world, loaded);
         }
@@ -496,7 +502,16 @@ impl Editor {
         }
         match kind {
             AssetKind::World => {
+                self.files.active_world = Some(asset);
                 self.files.world_patterns.insert(asset, pattern_maps);
+                if let Some(value) = self.store.get(asset) {
+                    self.files
+                        .world_pattern_results
+                        .insert(asset, value.version());
+                    self.files
+                        .world_pattern_requests
+                        .insert(asset, value.version());
+                }
                 let first = self
                     .store
                     .world(asset)

@@ -193,3 +193,145 @@ fn a_map_adopts_nearby_worlds_and_loads_visible_neighbours_once_without_tabs() {
     apply(&mut editor, Intent::Run(ActionId::Undo));
     assert_eq!(editor.world_maps(world)[1].rect.x, 48);
 }
+
+#[test]
+fn create_add_properties_save_and_unload_keep_map_history_usable() {
+    use bt_editor::{Choice, FileRequest};
+    let scratch = Scratch::new("world-management").unwrap();
+    let map = write_map(scratch.path(), "map.tmx");
+    let second = write_map(scratch.path(), "second.tmx");
+    let path = scratch.join("new.world");
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(map));
+    let doc = editor.current().unwrap();
+    apply(
+        &mut editor,
+        Intent::FilePicked {
+            request: FileRequest::NewWorld(doc),
+            path: Some(path.clone()),
+        },
+    );
+    let world = editor.world_of(doc).unwrap();
+    assert_eq!(
+        bt_tmx::Loader::default()
+            .load_world(&path)
+            .unwrap()
+            .value
+            .maps
+            .len(),
+        1
+    );
+    apply(
+        &mut editor,
+        Intent::FilePicked {
+            request: FileRequest::WorldMap { doc, world },
+            path: Some(second),
+        },
+    );
+    assert_eq!(editor.world_maps(world).len(), 2);
+    let mut value = (**editor.store().world(world).unwrap()).clone();
+    value.grid_size = IVec2::splat(8);
+    apply(
+        &mut editor,
+        Intent::SetWorld {
+            doc,
+            world,
+            value: Box::new(value),
+        },
+    );
+    apply(
+        &mut editor,
+        Intent::ResizeMap {
+            doc,
+            size: glam::UVec2::new(4, 3),
+            offset: IVec2::ZERO,
+            remove_objects_outside: false,
+        },
+    );
+    let effects = apply(&mut editor, Intent::Run(ActionId::UnloadWorld));
+    let decision = common::ask(&effects).id;
+    apply(
+        &mut editor,
+        Intent::Decided {
+            decision,
+            choice: Choice::Cancel,
+        },
+    );
+    assert!(editor.world_of(doc).is_some());
+    let effects = apply(&mut editor, Intent::Run(ActionId::UnloadWorld));
+    let decision = common::ask(&effects).id;
+    apply(
+        &mut editor,
+        Intent::Decided {
+            decision,
+            choice: Choice::Save,
+        },
+    );
+    assert!(editor.world_of(doc).is_none());
+    let saved = bt_tmx::Loader::default().load_world(&path).unwrap().value;
+    assert_eq!(saved.grid_size, IVec2::splat(8));
+    assert_eq!(saved.maps.len(), 2);
+    assert!(
+        editor.undo(doc).is_ok(),
+        "unloading must not block undoing the map half of resize"
+    );
+    assert_eq!(editor.map_of(doc).unwrap().width, 3);
+}
+
+#[test]
+fn pattern_edits_expand_current_unsaved_state_and_ignore_late_worker_results() {
+    use bt_core::WorldPattern;
+    let scratch = Scratch::new("world-pattern-jobs").unwrap();
+    let map = write_map(scratch.path(), "map_0_0.tmx");
+    write_map(scratch.path(), "map_1_0.tmx");
+    let path = scratch.join("patterns.world");
+    let world = World {
+        maps: vec![WorldMap {
+            file: FileRef::new("map_0_0.tmx", &map),
+            rect: IRect::from_min_size(IVec2::ZERO, IVec2::new(48, 32)),
+        }],
+        ..World::default()
+    };
+    bt_tmx::WriteRequest::for_world(&world, &path)
+        .write()
+        .unwrap();
+    let mut editor = editor_in(&scratch);
+    apply(&mut editor, Intent::Open(path));
+    let doc = editor.current().unwrap();
+    let world = editor.world_of(doc).unwrap();
+    let mut value = (**editor.store().world(world).unwrap()).clone();
+    value.patterns.push(WorldPattern {
+        multiplier: IVec2::new(48, 32),
+        map_size: IVec2::new(48, 32),
+        ..WorldPattern::new(r"map_(\d+)_(\d+)\.tmx")
+    });
+    let jobs = editor.apply(Intent::SetWorld {
+        doc,
+        world,
+        value: Box::new(value),
+    });
+    let late = jobs
+        .into_iter()
+        .find_map(|effect| {
+            if let bt_editor::Effect::Load(job) = effect {
+                Some(job.run())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    apply(&mut editor, Intent::Run(ActionId::Undo));
+    apply(&mut editor, Intent::Loaded(Box::new(late)));
+    assert_eq!(
+        editor.world_maps(world).len(),
+        1,
+        "old expansion must not revive an undone pattern"
+    );
+    apply(&mut editor, Intent::Run(ActionId::Redo));
+    assert_eq!(editor.world_maps(world).len(), 2);
+    assert!(
+        editor.store().get(world).unwrap().is_dirty(),
+        "expanding patterns must not replace or mark the definition saved"
+    );
+    assert_eq!(editor.world_maps(world)[1].rect.x, 48);
+}

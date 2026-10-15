@@ -65,6 +65,15 @@ pub struct Target<'a> {
 }
 
 impl<'a> Target<'a> {
+    /// A standalone property collection, with no inherited base.
+    pub fn properties(properties: &'a Properties) -> Target<'a> {
+        Target {
+            id: TargetId::Properties,
+            stored: properties,
+            inherited: Vec::new(),
+        }
+    }
+
     /// The map: its properties, under its class's members.
     pub fn map(map: &'a Map, types: &'a CustomTypes) -> Target<'a> {
         Target::of_class(

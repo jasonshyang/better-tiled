@@ -24,13 +24,28 @@ impl Editor {
     pub(crate) fn save(&mut self, doc: DocumentId) -> Vec<Effect> {
         let mut effects = self.save_document(doc);
         effects.extend(self.save_project());
-        if let Some(path) = self.path_of(doc) {
-            for world in self.worlds_for_path(&path) {
-                if self.store.get(world).is_some_and(|asset| asset.is_dirty())
-                    && let Err(notice) = self.write_auxiliary(world)
-                {
-                    effects.push(Effect::Notify(notice));
+        let mut worlds = self
+            .path_of(doc)
+            .map(|path| self.worlds_for_path(&path))
+            .unwrap_or_default();
+        if let Some(document) = self.document(doc) {
+            for change in document
+                .history
+                .entries
+                .iter()
+                .take(document.history.position())
+                .flat_map(|entry| entry.changes())
+            {
+                if self.store.world(change.asset).is_some() && !worlds.contains(&change.asset) {
+                    worlds.push(change.asset);
                 }
+            }
+        }
+        for world in worlds {
+            if self.store.get(world).is_some_and(|asset| asset.is_dirty())
+                && let Err(notice) = self.write_auxiliary(world)
+            {
+                effects.push(Effect::Notify(notice));
             }
         }
         effects
@@ -331,7 +346,7 @@ impl Editor {
         Ok(())
     }
 
-    fn write_auxiliary(&mut self, asset: AssetId) -> Result<(), Notice> {
+    pub(super) fn write_auxiliary(&mut self, asset: AssetId) -> Result<(), Notice> {
         let source = self
             .store
             .get(asset)

@@ -30,6 +30,11 @@ impl App {
                 }
             }
             Effect::Show(Dialog::Console) => self.console_open = true,
+            Effect::Show(Dialog::WorldProperties(doc)) => {
+                if let Some(dialog) = crate::dialogs::WorldDialog::new(doc, &self.editor) {
+                    self.modals.push(Modal::World(Box::new(dialog)));
+                }
+            }
             Effect::Show(Dialog::EditCommands(doc)) => {
                 self.modals
                     .push(Modal::Commands(crate::dialogs::CommandsDialog::new(

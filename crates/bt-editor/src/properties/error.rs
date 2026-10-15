@@ -10,6 +10,9 @@ use super::target_id::TargetId;
 /// change is left as it was.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum PropertyError {
+    /// A draft property operation received a different kind of target.
+    #[error("this operation requires one standalone property collection")]
+    StandaloneRequired,
     /// The map has no layer with this id.
     #[error("the map has no layer {0}")]
     NoSuchLayer(LayerId),

@@ -191,6 +191,14 @@ impl Editor {
                 | Choice::KeepMine
                 | Choice::Reload => Vec::new(),
             },
+            Pending::UnloadWorld(world) => match choice {
+                Choice::Save => match self.write_auxiliary(world) {
+                    Ok(()) => self.unload_world_now(world),
+                    Err(notice) => vec![Effect::Notify(notice)],
+                },
+                Choice::DontSave => self.unload_world_now(world),
+                _ => Vec::new(),
+            },
             Pending::Quit => match choice {
                 Choice::Save => {
                     self.files.quitting = true;
@@ -257,6 +265,8 @@ impl Editor {
             return Vec::new();
         };
         match request {
+            FileRequest::NewWorld(doc) => self.create_world(doc, &path),
+            FileRequest::WorldMap { doc, world } => self.add_world_map(doc, world, &path),
             FileRequest::StampsFolder => {
                 let mut settings = self.settings().clone();
                 settings.general.stamps_folder = Some(path);

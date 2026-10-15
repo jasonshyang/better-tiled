@@ -31,7 +31,8 @@ pub(crate) fn map_properties(map: &Map, id: TargetId) -> Result<&Properties, Pro
             .object(object)
             .map(|object| &object.properties)
             .ok_or(PropertyError::NoSuchObject(object)),
-        TargetId::Tileset
+        TargetId::Properties
+        | TargetId::Tileset
         | TargetId::Tile(_)
         | TargetId::TerrainSet(_)
         | TargetId::Terrain { .. }
@@ -53,7 +54,8 @@ pub(crate) fn map_properties_mut(
         TargetId::Object(object) => object_mut(map, object)
             .map(|object| &mut object.properties)
             .ok_or(PropertyError::NoSuchObject(object)),
-        TargetId::Tileset
+        TargetId::Properties
+        | TargetId::Tileset
         | TargetId::Tile(_)
         | TargetId::TerrainSet(_)
         | TargetId::Terrain { .. }
@@ -83,9 +85,11 @@ pub(crate) fn tileset_properties(
             .and_then(|found| found.colors.get(usize::from(color).wrapping_sub(1)))
             .map(|terrain| &terrain.properties)
             .ok_or(PropertyError::NoSuchTerrain { set, color }),
-        TargetId::Map | TargetId::Layer(_) | TargetId::Object(_) | TargetId::Members(_) => {
-            Err(PropertyError::NotInTileset(id))
-        }
+        TargetId::Properties
+        | TargetId::Map
+        | TargetId::Layer(_)
+        | TargetId::Object(_)
+        | TargetId::Members(_) => Err(PropertyError::NotInTileset(id)),
     }
 }
 
@@ -111,9 +115,11 @@ pub(crate) fn tileset_properties_mut(
             .and_then(|found| found.colors.get_mut(usize::from(color).wrapping_sub(1)))
             .map(|terrain| &mut terrain.properties)
             .ok_or(PropertyError::NoSuchTerrain { set, color }),
-        TargetId::Map | TargetId::Layer(_) | TargetId::Object(_) | TargetId::Members(_) => {
-            Err(PropertyError::NotInTileset(id))
-        }
+        TargetId::Properties
+        | TargetId::Map
+        | TargetId::Layer(_)
+        | TargetId::Object(_)
+        | TargetId::Members(_) => Err(PropertyError::NotInTileset(id)),
     }
 }
 

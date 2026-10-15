@@ -609,6 +609,14 @@ action_table! {
         .on(TileLayer)
         .keys(&[plain('s')])
         .tool(ToolKind::SameTile),
+    /// Create a world containing the current saved map.
+    NewWorld => ActionSpec::new(ActionId::NewWorld, "new_world", "New World…", "create world map").tiled("NewWorld").on(Map),
+    /// Add a map to the current world.
+    AddMapToWorld => ActionSpec::new(ActionId::AddMapToWorld, "add_map_to_world", "Add Map to World…", "world neighbour insert map").tiled("AddMapToWorld").on(Map),
+    /// Edit the containing world's settings.
+    WorldProperties => ActionSpec::new(ActionId::WorldProperties, "world_properties", "World Properties…", "world grid patterns maps settings").tiled("WorldProperties").on(Map),
+    /// Unload the current world's context.
+    UnloadWorld => ActionSpec::new(ActionId::UnloadWorld, "unload_world", "Unload World", "world close neighbours").on(Map),
     /// Move and resize maps in the containing world.
     WorldTool => ActionSpec::new(ActionId::WorldTool, "world_tool", "World", "world move map resize neighbours tool").tiled("WorldMoveMapTool")
         .on(Map).keys(&[plain('n')]).tool(ToolKind::World),

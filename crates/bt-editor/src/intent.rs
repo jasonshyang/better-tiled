@@ -25,6 +25,15 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// Commit the World Properties draft in the map document's history.
+    SetWorld {
+        /// History owner.
+        doc: DocumentId,
+        /// World being edited.
+        world: crate::AssetId,
+        /// Replacement draft.
+        value: Box<bt_core::World>,
+    },
     /// Request visible world neighbours for the canvas; duplicate requests are coalesced.
     LoadWorldMaps {
         /// The active map document.
