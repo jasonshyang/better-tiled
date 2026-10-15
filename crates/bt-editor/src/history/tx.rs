@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use bt_automap::layers::Setup;
-use bt_core::{Map, Project, Tileset};
+use bt_core::{Map, ObjectTemplate, Project, Tileset, World};
 
 use crate::document::Selection;
 use crate::error::EditError;
@@ -58,7 +58,7 @@ impl<'s> Tx<'s> {
             }),
             None => self
                 .store
-                .map(asset)
+                .editing_map(asset)
                 .map(Arc::as_ref)
                 .ok_or(EditError::NoSuchAsset(asset)),
         }
@@ -66,6 +66,14 @@ impl<'s> Tx<'s> {
 
     /// A map to change.
     pub fn map_mut(&mut self, asset: AssetId) -> Result<&mut Map, EditError> {
+        if !self.working.contains_key(&asset) && self.store.template(asset).is_some() {
+            let map = self
+                .store
+                .editing_map(asset)
+                .cloned()
+                .ok_or(EditError::NoSuchAsset(asset))?;
+            self.working.insert(asset, Root::Map(map));
+        }
         self.take(asset, AssetKind::Map)?;
         match self.working.get_mut(&asset) {
             Some(Root::Map(map)) => Ok(Arc::make_mut(map)),
@@ -113,6 +121,30 @@ impl<'s> Tx<'s> {
             _ => Err(EditError::WrongKind {
                 asset,
                 expected: AssetKind::Project,
+            }),
+        }
+    }
+
+    /// A world to change as part of its map document's transaction.
+    pub fn world_mut(&mut self, asset: AssetId) -> Result<&mut World, EditError> {
+        self.take(asset, AssetKind::World)?;
+        match self.working.get_mut(&asset) {
+            Some(Root::World(world)) => Ok(Arc::make_mut(world)),
+            _ => Err(EditError::WrongKind {
+                asset,
+                expected: AssetKind::World,
+            }),
+        }
+    }
+
+    /// A template definition to change, with inherited instances included at commit.
+    pub fn template_mut(&mut self, asset: AssetId) -> Result<&mut ObjectTemplate, EditError> {
+        self.take(asset, AssetKind::Template)?;
+        match self.working.get_mut(&asset) {
+            Some(Root::Template(template)) => Ok(Arc::make_mut(template)),
+            _ => Err(EditError::WrongKind {
+                asset,
+                expected: AssetKind::Template,
             }),
         }
     }

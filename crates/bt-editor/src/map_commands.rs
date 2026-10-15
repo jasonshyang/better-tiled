@@ -80,15 +80,54 @@ impl Editor {
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return Vec::new();
         };
+        let worlds = self
+            .path_of(doc)
+            .map(|path| {
+                self.worlds_for_path(&path)
+                    .into_iter()
+                    .map(|asset| WorldOwner {
+                        asset,
+                        path: path.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let result = self.transact(doc, label, |tx| {
             let map = tx.map_mut(asset)?;
+            let geometry = map.geometry();
+            let old_bounds = geometry.map_bounding_rect();
             let report = resize(map).map_err(EditError::from)?;
+            let new_bounds = geometry.bounding_rect(bt_utils::IRect::from_min_size(
+                IVec2::ZERO.saturating_sub(report.tile_offset),
+                IVec2::new(map.width as i32, map.height as i32),
+            ));
+            // Worlds use the grid's projected bounding rectangle, not the object pixel offset.
+            let delta = new_bounds.min() - old_bounds.min();
+            let extent = map.geometry().map_bounding_rect().size();
+            for world in &worlds {
+                if let Some(entry) = tx
+                    .world_mut(world.asset)?
+                    .maps
+                    .iter_mut()
+                    .find(|entry| entry.file.path == world.path)
+                {
+                    entry.rect.x = entry.rect.x.saturating_add(delta.x);
+                    entry.rect.y = entry.rect.y.saturating_add(delta.y);
+                    entry.rect.w = extent.x;
+                    entry.rect.h = extent.y;
+                }
+            }
             let moved = tx.selection.tiles.translated(report.tile_offset);
             tx.selection.tiles = moved;
             Ok::<_, EditError>(())
         });
         result.err().map(warn).into_iter().collect()
     }
+}
+
+struct WorldOwner {
+    asset: crate::AssetId,
+    path: std::path::PathBuf,
 }
 
 #[cfg(test)]

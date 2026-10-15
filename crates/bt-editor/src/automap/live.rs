@@ -89,7 +89,7 @@ impl Editor {
             .filter(|_| document.automap.is_some() && !document.view.show_painted);
         match live {
             Some(live) => Some(live.layers.result()),
-            None => self.store.map(document.asset()),
+            None => self.map_of(doc),
         }
     }
 

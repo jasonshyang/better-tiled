@@ -50,7 +50,7 @@ impl Editor {
             .current()
             .and_then(|doc| self.documents.get(doc));
         let map = document
-            .and_then(|d| self.store.map(d.asset()))
+            .and_then(|d| self.store.editing_map(d.asset()))
             .map(AsRef::as_ref);
         let layer = map.and_then(|m| {
             let id = document?.selection().current_layer?;
@@ -67,6 +67,26 @@ impl Editor {
     /// otherwise do nothing for no visible reason.
     pub fn enabled(&self, id: ActionId) -> Enabled {
         let here = self.situation();
+        if self
+            .current()
+            .is_some_and(|doc| self.template_of(doc).is_some())
+        {
+            let map_command = matches!(id.spec().context, Context::Map | Context::TileLayer);
+            let insert_tool = matches!(id.spec().kind, ActionKind::Tool(tool) if !matches!(tool, ToolKind::SelectObjects | ToolKind::EditPolygons));
+            let changes_base_count = matches!(
+                id,
+                ActionId::Cut
+                    | ActionId::Delete
+                    | ActionId::Paste
+                    | ActionId::PasteInPlace
+                    | ActionId::DuplicateObjects
+                    | ActionId::MoveObjectsToLayer
+                    | ActionId::SaveAs
+            );
+            if map_command || insert_tool || changes_base_count {
+                return Enabled::Disabled(Some("The template editor edits one base object; map and insertion commands apply to its instances".into()));
+            }
+        }
         if let Some(reason) = context_blocker(id.spec(), &here) {
             return Enabled::Disabled(reason);
         }

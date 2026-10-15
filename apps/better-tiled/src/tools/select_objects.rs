@@ -189,6 +189,12 @@ impl Tool for SelectObjects {
                 let Some(press) = &mut self.press else {
                     return;
                 };
+                if press.grabbed.is_none()
+                    && press.on.is_some()
+                    && cx.editor.template_of(cx.doc).is_some()
+                {
+                    return;
+                }
                 if press.drag.is_none() && drag.moved {
                     press.drag = Some(match (press.grabbed, press.on) {
                         (Some(grab), _) => {
@@ -348,6 +354,11 @@ impl Tool for SelectObjects {
             }
             HandleMode::Rotate => format!("drag a handle to rotate ({command}: in steps of 15°)"),
         };
+        if cx.editor.template_of(cx.doc).is_some() {
+            return format!(
+                "Edit the template base in Properties; {handles} · click the object to switch its handles"
+            );
+        }
         format!(
             "Click to select, drag to move, drag on empty space to select an area · Shift or {command} adds and removes · click a selected object to switch its handles; {handles} · {}",
             bt_utils::text::plural(count, "object selected", "objects selected")

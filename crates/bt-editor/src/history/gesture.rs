@@ -65,7 +65,7 @@ impl Editor {
         let result = f(&mut tx)?;
         let mut after_selection = tx.selection.clone();
         let keeps_carry = tx.keeps_carry;
-        let changed = self.changed_roots(tx.working);
+        let changed = self.changed_roots(tx.working)?;
         super::apply::settle_carry(&mut after_selection, keeps_carry || changed.is_empty());
         for id in changed.keys() {
             let Some(asset) = self.store.get(*id) else {
@@ -146,6 +146,7 @@ impl Editor {
         for (id, start) in gesture.start {
             self.store.set_root(id, start.root, start.version);
         }
+        self.sync_template_caches();
         if let Some(document) = self.documents.get_mut(gesture.document) {
             document.selection = gesture.selection;
         }

@@ -72,10 +72,9 @@ impl Editor {
 
     /// Whether an open map uses a tileset asset (which then stays, its changes saved with it).
     fn map_uses(&self, asset: crate::store::AssetId) -> bool {
-        self.store.assets().any(|other| match other.root() {
-            crate::store::Root::Map(map) => self.store.tilesets_of(map).contains(&asset),
-            _ => false,
-        })
+        self.store
+            .assets()
+            .any(|other| self.store.dependencies_of(other.id()).contains(&asset))
     }
 
     /// Quits, asking first when anything is unsaved.

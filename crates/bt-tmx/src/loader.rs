@@ -231,6 +231,25 @@ impl Loader {
         self.templates.get(key).map(|cached| &cached.value)
     }
 
+    /// Records the editor's current definition for writers and property inspection, without
+    /// reading the file. A later explicit load checks the file's version as usual.
+    pub fn set_template_snapshot(&mut self, path: &Path, template: Arc<ObjectTemplate>) {
+        let key = self
+            .canonical
+            .get(path)
+            .cloned()
+            .unwrap_or_else(|| path.to_path_buf());
+        let modified = self.templates.get(&key).and_then(|cached| cached.modified);
+        self.templates.insert(
+            key,
+            Cached {
+                value: template,
+                warnings: Vec::new(),
+                modified,
+            },
+        );
+    }
+
     /// The size of an image file, from its header.
     pub(crate) fn image_size(&self, path: &Path) -> Result<UVec2, bt_image::Error> {
         bt_image::probe_size(path)

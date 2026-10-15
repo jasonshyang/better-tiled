@@ -700,9 +700,10 @@ impl App {
             return;
         };
         let on_map = self.editor.map_of(doc).is_some();
+        let in_template = self.editor.template_of(doc).is_some();
         // While a map's tileset is edited in its place, the map's layers and objects wait; a
         // tileset's tab has none.
-        if on_map && !self.shows_tileset_editor(doc) {
+        if on_map && !in_template && !self.shows_tileset_editor(doc) {
             egui::Panel::left("left_panels")
                 .resizable(true)
                 .default_size(240.0)
@@ -756,7 +757,12 @@ impl App {
             .resizable(true)
             .default_size(300.0)
             .show(ui, |ui| {
-                if !on_map {
+                if !on_map || in_template {
+                    if in_template {
+                        ui.heading("Template Base");
+                        ui.label("Changes update instances while preserving their overrides.");
+                        ui.separator();
+                    }
                     self.properties_panel
                         .show(ui, &self.editor, doc, &mut self.intents);
                     return;

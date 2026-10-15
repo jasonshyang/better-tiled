@@ -676,6 +676,22 @@ the document. `set_marks(doc, marks)` replaces or adds the outlines `bt mark` as
 - The **project** is an asset; custom types edited in the Custom Types editor are a transaction
   on it; the project file is watched and reloaded, keeping unsaved types.
 
+As built in M6, world and template files are typed roots in the same asset store as maps,
+tilesets and projects. Explicit world loads open a map, retain filename-pattern placements
+separately from the writable world root, and persist loaded world paths in the session.
+Map resize/crop updates explicit world rectangles in the map's transaction; the position shift
+uses projected grid bounds, including for isometric maps. Worlds participate in Save All,
+watching and recovery.
+
+The Template editor derives a one-object map view from the typed template root, so object
+properties, polygon tools and the GPU canvas share their normal paths. Before applying a
+transaction, the view is converted back into a template definition. Changed definitions refresh
+instances across stored maps in the same transaction, preserving field overrides and properties
+that differ from the previous base. Undo, redo, gesture cancellation and external reload keep
+each map writer's template cache synchronized. Saving a map writes dirty external tilesets and
+template definitions before the map; saving a template writes its external tilesets first.
+Template views retain those tilesets when map tabs close and follow tileset root replacements.
+
 As built in M6, Edit Commands applies its draft as one undoable project transaction. Saving
 the owning document writes the project file too. Project commands appear in their menu and the
 command palette, and their Qt-format shortcuts run through the window's focus routing.

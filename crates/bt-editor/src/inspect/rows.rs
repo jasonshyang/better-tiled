@@ -40,7 +40,19 @@ impl Editor {
         inspected: &Inspected,
     ) -> Result<Vec<AttributeRow>, EditError> {
         let source = self.source_of(doc, inspected)?;
-        Ok(source.attribute_rows(inspected)?)
+        let mut rows = source.attribute_rows(inspected)?;
+        if self.template_of(doc).is_some() {
+            rows.retain(|row| {
+                !matches!(
+                    row.attribute,
+                    crate::Attribute::Id
+                        | crate::Attribute::X
+                        | crate::Attribute::Y
+                        | crate::Attribute::Template
+                )
+            });
+        }
+        Ok(rows)
     }
 
     /// The custom properties of what `doc` inspects as `inspected`: every property any of them

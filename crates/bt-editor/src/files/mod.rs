@@ -8,6 +8,7 @@ mod new;
 mod open;
 mod project;
 mod save;
+mod worlds;
 
 use bt_tmx::Loader;
 use std::collections::HashMap;
@@ -19,9 +20,7 @@ use crate::store::AssetId;
 
 pub use autotiles::{AutotilesJob, ExpandedAutotiles};
 pub use load::{LoadJob, Loaded};
-pub(crate) use load::{
-    LoadKind, LoadPurpose, LoadSource, LoadedContent, LoadedFiles, ProjectChoice, hash_file,
-};
+pub(crate) use load::{LoadKind, LoadPurpose, LoadSource, LoadedFiles, ProjectChoice, hash_file};
 pub use new::{NewMap, NewTileset, NewTilesetSource};
 
 /// What the editor knows about files beyond the assets: the loaders the maps were read with
@@ -31,6 +30,8 @@ pub use new::{NewMap, NewTileset, NewTilesetSource};
 pub(crate) struct Files {
     pub(crate) loaders: HashMap<AssetId, Loader>,
     pub(crate) project: Option<AssetId>,
+    /// Pattern-derived world maps; explicit positions remain in the world asset.
+    pub(crate) world_patterns: HashMap<AssetId, Vec<bt_core::WorldMap>>,
     pub(crate) pending: HashMap<DecisionId, Pending>,
     pub(crate) next_decision: u64,
     /// The user chose to save before quitting: quit once nothing is unsaved.

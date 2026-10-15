@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bt_core::{Map, Project, Tileset};
+use bt_core::{Map, ObjectTemplate, Project, Tileset, TilesetRef, World};
 use bt_tmx::Warning;
 
 use super::asset::{Asset, AssetId, AssetKind, OnDisk, Root};
@@ -19,6 +19,7 @@ pub struct AssetStore {
     assets: BTreeMap<AssetId, Asset>,
     by_path: HashMap<PathBuf, AssetId>,
     next_id: u64,
+    template_views: HashMap<AssetId, Arc<Map>>,
 }
 
 /// A new asset for [`AssetStore::insert`]: what it holds, its file, and what is on disk.
@@ -64,6 +65,7 @@ impl AssetStore {
                 warnings: new.warnings,
             },
         );
+        self.refresh_template_view(id);
         id
     }
 
@@ -106,6 +108,88 @@ impl AssetStore {
         }
     }
 
+    /// A world asset's world.
+    pub fn world(&self, id: AssetId) -> Option<&Arc<World>> {
+        match &self.get(id)?.root {
+            Root::World(world) => Some(world),
+            _ => None,
+        }
+    }
+
+    /// A template asset's definition.
+    pub fn template(&self, id: AssetId) -> Option<&Arc<ObjectTemplate>> {
+        match &self.get(id)?.root {
+            Root::Template(template) => Some(template),
+            _ => None,
+        }
+    }
+
+    /// A map document's map or a template document's derived editing view.
+    pub(crate) fn editing_map(&self, id: AssetId) -> Option<&Arc<Map>> {
+        self.map(id).or_else(|| self.template_views.get(&id))
+    }
+
+    fn refresh_template_view(&mut self, id: AssetId) {
+        if let Some(template) = self.template(id) {
+            self.template_views
+                .insert(id, Arc::new(super::template_view::of(template)));
+        }
+    }
+
+    /// Normalises edited template views and includes their instances in the same transaction.
+    pub(crate) fn finish_working_roots(
+        &self,
+        mut working: BTreeMap<AssetId, Root>,
+    ) -> Result<BTreeMap<AssetId, Root>, bt_edit::EditError> {
+        for (id, root) in &mut working {
+            if let Some(original) = self.template(*id)
+                && let Root::Map(map) = root
+            {
+                *root = Root::Template(Arc::new(super::template_view::to_template(map, original)?));
+            }
+        }
+        let changed_templates = working
+            .iter()
+            .filter_map(|(id, root)| {
+                let Root::Template(after) = root else {
+                    return None;
+                };
+                let asset = self.get(*id)?;
+                let before = self.template(*id)?;
+                if before == after {
+                    return None;
+                }
+                Some(TemplateChange {
+                    path: asset.path()?.to_path_buf(),
+                    before: Arc::clone(before),
+                    after: Arc::clone(after),
+                })
+            })
+            .collect::<Vec<_>>();
+        for change in changed_templates {
+            for asset in self.assets() {
+                let Some(map) = self.map(asset.id()) else {
+                    continue;
+                };
+                let mut map = match working.get(&asset.id()) {
+                    Some(Root::Map(map)) => (**map).clone(),
+                    _ => (**map).clone(),
+                };
+                if !bt_edit::refresh_template_instances(
+                    &mut map,
+                    &change.path,
+                    &change.before,
+                    &change.after,
+                )?
+                .is_empty()
+                {
+                    working.insert(asset.id(), Root::Map(Arc::new(map)));
+                }
+            }
+        }
+        Ok(working)
+    }
+
     /// The assets with changes their files lack, whatever their kind: what Save All saves and
     /// what quitting asks about. An untitled project (custom types made with no project open)
     /// lives for the run, as Tiled's does, and is never unsaved.
@@ -120,22 +204,63 @@ impl AssetStore {
 
     /// The tileset assets a map uses, by its external tilesets' files.
     pub fn tilesets_of(&self, map: &Map) -> Vec<AssetId> {
-        map.tilesets
+        self.tileset_assets(&map.tilesets)
+    }
+
+    fn tileset_assets(&self, references: &[TilesetRef]) -> Vec<AssetId> {
+        references
             .iter()
-            .filter_map(|t| t.file.as_ref())
+            .filter_map(|reference| reference.file.as_ref())
             .filter_map(|file| self.by_path(&file.path))
-            .filter(|id| {
-                self.get(*id)
-                    .is_some_and(|a| a.kind() == AssetKind::Tileset)
-            })
+            .filter(|id| self.tileset(*id).is_some())
             .collect()
     }
 
-    /// Points a map's external tilesets at the store's roots for their files; whether any
-    /// changed.
+    /// Loaded dependencies, in save order: external tilesets before template definitions.
+    pub(crate) fn dependencies_of(&self, id: AssetId) -> Vec<AssetId> {
+        let mut dependencies = Vec::new();
+        match self.get(id).map(Asset::root) {
+            Some(Root::Map(map)) => {
+                dependencies.extend(self.tilesets_of(map));
+                let mut templates = Vec::new();
+                map.for_each_layer(|layer, _| {
+                    if let Some(objects) = layer.as_object_layer() {
+                        for object in objects.objects.iter() {
+                            if let Some(id) = object
+                                .template
+                                .as_ref()
+                                .and_then(|file| self.by_path(&file.path))
+                                .filter(|id| self.template(*id).is_some())
+                                && !templates.contains(&id)
+                            {
+                                templates.push(id);
+                            }
+                        }
+                    }
+                });
+                for template in &templates {
+                    dependencies.extend(self.dependencies_of(*template));
+                }
+                dependencies.extend(templates);
+            }
+            Some(Root::Template(template)) => {
+                dependencies.extend(self.tileset_assets(&template.tilesets))
+            }
+            _ => {}
+        }
+        let mut seen = std::collections::HashSet::new();
+        dependencies.retain(|id| seen.insert(*id));
+        dependencies
+    }
+
+    /// Points a map's external tilesets at the store's roots for their files.
     pub fn refresh_tilesets(&self, map: &mut Map) -> bool {
+        self.refresh_references(&mut map.tilesets)
+    }
+
+    fn refresh_references(&self, references: &mut [TilesetRef]) -> bool {
         let mut changed = false;
-        for tileset in &mut map.tilesets {
+        for tileset in references {
             let Some(file) = &tileset.file else { continue };
             let Some(current) = self.by_path(&file.path).and_then(|id| self.tileset(id)) else {
                 continue;
@@ -154,6 +279,7 @@ impl AssetStore {
             asset.root = root;
             asset.version = version;
         }
+        self.refresh_template_view(id);
         self.refresh_maps_using(id);
     }
 
@@ -186,19 +312,29 @@ impl AssetStore {
         {
             return;
         }
-        let maps: Vec<AssetId> = self
+        let ids: Vec<AssetId> = self
             .assets
             .values()
-            .filter(|asset| asset.kind() == AssetKind::Map)
+            .filter(|asset| matches!(asset.kind(), AssetKind::Map | AssetKind::Template))
             .map(|asset| asset.id)
             .collect();
-        for map_id in maps {
-            let Some(map) = self.map(map_id).cloned() else {
-                continue;
+        for id in ids {
+            let root = match self.get(id).map(Asset::root) {
+                Some(Root::Map(map)) => {
+                    let mut refreshed = (**map).clone();
+                    self.refresh_tilesets(&mut refreshed)
+                        .then(|| Root::Map(Arc::new(refreshed)))
+                }
+                Some(Root::Template(template)) => {
+                    let mut refreshed = (**template).clone();
+                    self.refresh_references(&mut refreshed.tilesets)
+                        .then(|| Root::Template(Arc::new(refreshed)))
+                }
+                _ => None,
             };
-            let mut refreshed = (*map).clone();
-            if self.refresh_tilesets(&mut refreshed) {
-                self.set_root_only(map_id, Root::Map(Arc::new(refreshed)));
+            if let Some(root) = root {
+                self.set_root_only(id, root);
+                self.refresh_template_view(id);
             }
         }
     }
@@ -236,6 +372,7 @@ impl AssetStore {
 
     /// Takes an asset out of the store.
     pub(crate) fn remove(&mut self, id: AssetId) -> Option<Asset> {
+        self.template_views.remove(&id);
         let asset = self.assets.remove(&id)?;
         if let Some(path) = &asset.path {
             self.by_path.remove(path);
@@ -249,4 +386,10 @@ impl AssetStore {
             asset.on_disk = None;
         }
     }
+}
+
+struct TemplateChange {
+    path: PathBuf,
+    before: Arc<ObjectTemplate>,
+    after: Arc<ObjectTemplate>,
 }

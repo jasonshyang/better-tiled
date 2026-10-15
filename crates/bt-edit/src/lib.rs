@@ -29,6 +29,7 @@ mod region;
 mod report;
 mod select;
 mod shapes;
+mod templates;
 #[cfg(test)]
 mod testutil;
 mod tile_layers;
@@ -100,6 +101,7 @@ pub use report::{
 };
 pub use select::{fill_area, flood_fill, invert, magic_wand, select_same_tile};
 pub use shapes::{FillShape, rect_select_rect, shape_fill_region};
+pub use templates::{instantiate_template, refresh_template_instances};
 pub use tileset_ops::{
     TilesetUsage, Unified, add_tileset, find_tileset, remove_tileset, replace_tileset, swap_tiles,
     tileset_usage, unify_tileset,

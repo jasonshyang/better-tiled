@@ -192,10 +192,14 @@ impl Editor {
             }
             Inspected::Map | Inspected::Layers(_) | Inspected::Objects(_) => {
                 let asset = document.asset();
-                let map = self.store.map(asset).cloned().ok_or(EditError::WrongKind {
-                    asset,
-                    expected: AssetKind::Map,
-                })?;
+                let map = self
+                    .store
+                    .editing_map(asset)
+                    .cloned()
+                    .ok_or(EditError::WrongKind {
+                        asset,
+                        expected: AssetKind::Map,
+                    })?;
                 Place::Map { asset, map }
             }
         };

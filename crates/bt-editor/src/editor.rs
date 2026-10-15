@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bt_core::{LayerId, LayerKind, Map};
-use bt_tmx::WriteRequest;
 
 use crate::actions::{Keymap, KeymapError, PaletteState};
 use crate::automap::AutoMapState;
@@ -471,29 +470,15 @@ impl Editor {
     fn snapshot_of(&self, id: AssetId) -> Option<Snapshot> {
         let asset = self.store.get(id)?;
         let original = asset.path().map(Path::to_path_buf);
-        if let Some(tileset) = self.store.tileset(id) {
-            let path = original.clone()?;
-            return match WriteRequest::for_tileset(tileset, &path).render() {
-                Ok(rendered) => Some(Snapshot {
-                    path: self.recovery.snapshot_path(id),
-                    text: rendered.text,
-                    meta: SnapshotMeta {
-                        original,
-                        pid: self.recovery.pid(),
-                        automap: None,
-                    },
-                }),
-                Err(error) => {
-                    log::warn!("no recovery snapshot of {}: {error}", asset.display_name());
-                    None
-                }
-            };
+        if asset.kind() == AssetKind::Project
+            || original.is_none() && asset.kind() != AssetKind::Map
+        {
+            return None;
         }
-        let map = self.store.map(id)?;
         let path_for_references = original
             .clone()
             .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
-        let mut request = WriteRequest::for_map(map, &path_for_references);
+        let mut request = asset.root().write_request(&path_for_references);
         if let Some(loader) = self.files.loaders.get(&id) {
             request = request.loader(loader);
         }
@@ -539,9 +524,14 @@ impl Editor {
         self.documents.current()
     }
 
-    /// The map a document shows.
+    /// A map document's map, or a template document's derived object-editing view.
     pub fn map_of(&self, doc: DocumentId) -> Option<&Arc<Map>> {
-        self.store.map(self.documents.get(doc)?.asset)
+        self.store.editing_map(self.documents.get(doc)?.asset)
+    }
+
+    /// The template definition shown by a template document.
+    pub fn template_of(&self, doc: DocumentId) -> Option<&Arc<bt_core::ObjectTemplate>> {
+        self.store.template(self.documents.get(doc)?.asset())
     }
 
     /// The key bindings.
@@ -607,6 +597,12 @@ impl Editor {
     /// The session as it is now: the open files and their view states, with what was kept.
     pub fn session(&self) -> Session {
         let mut session = self.session.clone();
+        session.worlds = self
+            .store
+            .assets()
+            .filter(|asset| asset.kind() == AssetKind::World)
+            .filter_map(|asset| asset.path().map(Path::to_path_buf))
+            .collect();
         session.open_files = self
             .documents
             .in_order()
@@ -640,6 +636,13 @@ impl Editor {
         self.restore_current = session.current.clone();
         self.session = session;
         let mut effects = self.restore_quick_stamps();
+        effects.extend(
+            self.session
+                .worlds
+                .clone()
+                .iter()
+                .flat_map(|path| self.open(path)),
+        );
         effects.extend(open.iter().flat_map(|path| self.open(path)));
         effects
     }
@@ -673,7 +676,10 @@ impl Editor {
     /// Opens a document onto a map asset, current, with its topmost layer selected.
     pub(crate) fn open_document(&mut self, asset: AssetId) -> DocumentId {
         let id = self.documents.next_id();
-        let current_layer = self.store.map(asset).and_then(|map| topmost_leaf(map));
+        let current_layer = self
+            .store
+            .editing_map(asset)
+            .and_then(|map| topmost_leaf(map));
         let mut history = History::default();
         history.set_limit(self.settings.general.history_limit);
         let tileset = (self.store.get(asset).map(|a| a.kind()) == Some(AssetKind::Tileset))

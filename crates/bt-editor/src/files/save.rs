@@ -24,6 +24,15 @@ impl Editor {
     pub(crate) fn save(&mut self, doc: DocumentId) -> Vec<Effect> {
         let mut effects = self.save_document(doc);
         effects.extend(self.save_project());
+        if let Some(path) = self.path_of(doc) {
+            for world in self.worlds_for_path(&path) {
+                if self.store.get(world).is_some_and(|asset| asset.is_dirty())
+                    && let Err(notice) = self.write_auxiliary(world)
+                {
+                    effects.push(Effect::Notify(notice));
+                }
+            }
+        }
         effects
     }
 
@@ -58,6 +67,25 @@ impl Editor {
         else {
             return vec![self.save_as_request(doc)];
         };
+        if self.store.get(asset).is_some_and(|asset| {
+            matches!(
+                asset.kind(),
+                crate::AssetKind::Template | crate::AssetKind::World
+            )
+        }) {
+            let mut effects = self.save_dependencies(asset);
+            effects.extend(match self.write_auxiliary(asset) {
+                Ok(()) => vec![
+                    Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)),
+                    Effect::Notify(Notice::info(format!(
+                        "Saved {}",
+                        bt_utils::paths::display_name(&path)
+                    ))),
+                ],
+                Err(notice) => vec![Effect::Notify(notice)],
+            });
+            return effects;
+        }
         if self.store.tileset(asset).is_some() {
             return match self.write_tileset(asset) {
                 Ok(()) => vec![
@@ -84,6 +112,11 @@ impl Editor {
     /// Saves a document to a new file: its file properties are rebased to the new folder as a
     /// transaction, the asset moves there, and it is written.
     pub(crate) fn save_as(&mut self, doc: DocumentId, path: &Path) -> Vec<Effect> {
+        if self.template_of(doc).is_some() {
+            return vec![Effect::Notify(Notice::error(
+                "Use Save As Template on an instance to make a new template",
+            ))];
+        }
         let Some(asset) = self.documents.get(doc).map(|d| d.asset()) else {
             return Vec::new();
         };
@@ -128,22 +161,7 @@ impl Editor {
     /// Writes a map's unsaved external tilesets, then the map.
     fn save_map_to(&mut self, asset: AssetId, path: &Path) -> Vec<Effect> {
         let mut effects = Vec::new();
-        let tilesets = self
-            .store
-            .map(asset)
-            .map(|map| self.store.tilesets_of(map))
-            .unwrap_or_default();
-        for tileset in tilesets {
-            if !self.store.get(tileset).is_some_and(|t| t.is_dirty()) {
-                continue;
-            }
-            match self.write_tileset(tileset) {
-                Ok(()) => {
-                    effects.push(Effect::DeleteSnapshot(self.recovery.snapshot_path(tileset)))
-                }
-                Err(notice) => effects.push(Effect::Notify(notice)),
-            }
-        }
+        effects.extend(self.save_dependencies(asset));
         match self.write_map(asset, path) {
             Ok(warnings) => {
                 self.recovery.forget(asset);
@@ -165,10 +183,39 @@ impl Editor {
         effects
     }
 
+    /// Saves referenced definitions before their owner, reporting failures individually.
+    fn save_dependencies(&mut self, asset: AssetId) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for dependency in self.store.dependencies_of(asset) {
+            let Some(source) = self.store.get(dependency).filter(|asset| asset.is_dirty()) else {
+                continue;
+            };
+            let result = match source.kind() {
+                crate::AssetKind::Tileset => self.write_tileset(dependency),
+                crate::AssetKind::Template => self.write_auxiliary(dependency),
+                _ => continue,
+            };
+            match result {
+                Ok(()) => effects.push(Effect::DeleteSnapshot(
+                    self.recovery.snapshot_path(dependency),
+                )),
+                Err(notice) => effects.push(Effect::Notify(notice)),
+            }
+        }
+        effects
+    }
+
     /// Writes every unsaved asset that has a file; the notices of those that failed.
     pub(crate) fn save_all(&mut self) -> Vec<Effect> {
         let mut effects = Vec::new();
-        for id in self.store.unsaved() {
+        let mut unsaved = self.store.unsaved();
+        unsaved.sort_by_key(|id| match self.store.get(*id).map(|asset| asset.kind()) {
+            Some(crate::AssetKind::Tileset) => 0,
+            Some(crate::AssetKind::Template) => 1,
+            Some(crate::AssetKind::Map) => 2,
+            _ => 3,
+        });
+        for id in unsaved {
             let Some(asset) = self.store.get(id) else {
                 continue;
             };
@@ -179,6 +226,7 @@ impl Editor {
                 Root::Map(_) => self.write_map(id, &path),
                 Root::Tileset(_) => self.write_tileset(id).map(|()| Vec::new()),
                 Root::Project(_) => self.write_project(id).map(|()| Vec::new()),
+                Root::World(_) | Root::Template(_) => self.write_auxiliary(id).map(|()| Vec::new()),
             };
             match written {
                 Ok(warnings) => {
@@ -280,6 +328,27 @@ impl Editor {
             .text;
         self.write_bytes(&path, text.as_bytes())?;
         self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
+        Ok(())
+    }
+
+    fn write_auxiliary(&mut self, asset: AssetId) -> Result<(), Notice> {
+        let source = self
+            .store
+            .get(asset)
+            .ok_or_else(|| Notice::error(format!("{asset} is no longer open")))?;
+        let path = source
+            .path()
+            .ok_or_else(|| Notice::error(format!("{asset} has no file")))?
+            .to_path_buf();
+        let text = source
+            .root()
+            .write_request(&path)
+            .render()
+            .map_err(|error| cannot_save(&path, &error.to_string()))?
+            .text;
+        self.write_bytes(&path, text.as_bytes())?;
+        self.store.mark_saved(asset, fnv1a_64(text.as_bytes()));
+        self.recovery.forget(asset);
         Ok(())
     }
 
