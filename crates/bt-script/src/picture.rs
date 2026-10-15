@@ -10,12 +10,10 @@
 //!
 //! Writing the file is the caller's: the outcome comes with the picture's pixels.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use bt_core::{
-    ClassUsage, Color, CustomTypes, HAlign, LayerId, Map, Orientation, StaggerAxis, StaggerIndex,
-    VAlign,
+    Color, CustomTypes, HAlign, LayerId, Map, Orientation, StaggerAxis, StaggerIndex, VAlign,
 };
 use bt_image::DecodedImage;
 use bt_render::{HeadlessDevice, ObjectStyle, Render, TextItem, VectorItem};
@@ -328,9 +326,7 @@ impl RenderOutcome {
             .view(origin, size.as_uvec2())
             .scale(scale)
             .background(source.background_color.unwrap_or(BACKDROP))
-            .objects(
-                ObjectStyle::default().class_colors(Arc::new(class_colors(&request.custom_types))),
-            )
+            .objects(ObjectStyle::default().custom_types(&request.custom_types))
             .vectors(Arc::from(vectors))
             .run(device)
             .map_err(|error| Error::NoPicture {
@@ -382,21 +378,6 @@ fn shown_layers(map: &Map, layers: &[LayerId]) -> Map {
         layer.visible = keep.contains(&layer.id);
     });
     shown
-}
-
-/// The colour of each object class the project defines.
-fn class_colors(types: &CustomTypes) -> BTreeMap<String, Color> {
-    types
-        .types
-        .iter()
-        .filter_map(|t| {
-            let class = t.as_class()?;
-            class
-                .use_as
-                .intersects(ClassUsage::OBJECT)
-                .then(|| (t.name.clone(), class.color))
-        })
-        .collect()
 }
 
 /// The room the rulers take, in picture pixels: across the left for the row numbers, down the
@@ -642,7 +623,7 @@ impl crate::report::Outcome for RenderOutcome {
 
 #[cfg(test)]
 mod tests {
-    use bt_core::{ClassType, CustomType, MapObject, Shape};
+    use bt_core::{ClassType, ClassUsage, CustomType, MapObject, Shape};
     use bt_test_data::fixtures::{Atlas, MapBuilder};
 
     use super::*;

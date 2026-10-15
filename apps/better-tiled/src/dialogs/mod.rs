@@ -2,6 +2,7 @@
 
 mod choose_layer;
 mod custom_types;
+mod export_image;
 mod form;
 mod modal;
 mod new_map;
@@ -19,3 +20,5 @@ pub(crate) use new_tileset::NewTilesetDialog;
 pub(crate) use offset_map::OffsetMapDialog;
 pub(crate) use palette::PaletteDialog;
 pub(crate) use resize_map::ResizeMapDialog;
+
+pub(crate) use export_image::ExportImageDialog;

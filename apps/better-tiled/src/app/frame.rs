@@ -930,6 +930,27 @@ impl eframe::App for App {
         let finished = self.workers.take_results();
         for intent in finished {
             match intent {
+                Intent::FilePicked {
+                    request: FileRequest::AttributeImage { doc, inspected },
+                    path,
+                } => {
+                    if let Some(path) = path {
+                        self.start_attribute_image(doc, inspected, path);
+                    }
+                }
+                Intent::FilePicked {
+                    request:
+                        FileRequest::ExportImage {
+                            doc,
+                            scale_percent,
+                            background,
+                        },
+                    path,
+                } => {
+                    if let Some(path) = path {
+                        self.start_image_export(doc, scale_percent, background, path);
+                    }
+                }
                 Intent::ShortcutsRead { dialog, result } => {
                     self.modals.deliver_shortcuts(dialog, result)
                 }

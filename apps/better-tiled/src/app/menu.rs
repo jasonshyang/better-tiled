@@ -29,6 +29,7 @@ const MENUS: [Menu; 7] = [
             Separator,
             Action(ActionId::Export),
             Action(ActionId::ExportAs),
+            Action(ActionId::ExportAsImage),
             Action(ActionId::GodotSetup),
             Action(ActionId::VerifyGodot),
             Separator,

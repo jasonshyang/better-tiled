@@ -93,6 +93,9 @@ impl Editor {
                     vec![Effect::Godot { doc, operation }]
                 })
                 .unwrap_or_default(),
+            ActionId::ExportAsImage => {
+                on_document(self, &|_, doc| vec![Effect::Show(Dialog::ExportImage(doc))])
+            }
             ActionId::SaveAll => {
                 let mut effects = self.save_all();
                 let untitled = self

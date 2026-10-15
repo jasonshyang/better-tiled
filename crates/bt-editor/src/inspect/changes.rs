@@ -164,6 +164,31 @@ impl Editor {
         self.change_properties(doc, inspected, &change, None)
     }
 
+    /// Applies the selected image with a reference relative to the file that owns the field.
+    pub(crate) fn attribute_image_picked(
+        &mut self,
+        doc: DocumentId,
+        inspected: &Inspected,
+        mut image: bt_core::ImageRef,
+    ) -> Vec<Effect> {
+        let source = match self.source_of(doc, inspected) {
+            Ok(source) => source,
+            Err(error) => return vec![warn(error)],
+        };
+        if let bt_core::ImageSource::File(file) = &mut image.source
+            && let Some(folder) = self.folder_of(&source)
+        {
+            file.source = bt_utils::paths::reference_path(folder, &file.path);
+        }
+        self.set_attribute(
+            doc,
+            inspected,
+            Attribute::Image,
+            &AttributeValue::Image(Some(image)),
+            None,
+        )
+    }
+
     /// Runs `f` as a transaction labelled `label` in `doc`; the edits of one run (`merge`) of
     /// one field fold into one step.
     fn transact_in_run<R>(
