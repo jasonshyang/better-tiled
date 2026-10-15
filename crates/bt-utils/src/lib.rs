@@ -7,8 +7,10 @@ mod error;
 
 pub mod atomic_write;
 pub mod bands;
+pub mod command_line;
 pub mod hash;
 pub mod paths;
+pub mod process;
 pub mod raster;
 pub mod rect;
 pub mod rng;
