@@ -118,7 +118,8 @@ mod tests {
                 "../b.png".into(),
             ))])),
         );
-        rebase_file_references(&mut map, Path::new("/p/maps"), Path::new("/p"));
+        let root = std::path::absolute("/p").unwrap();
+        rebase_file_references(&mut map, &root.join("maps"), &root);
         assert_eq!(
             map.properties["script"].value,
             Value::File("maps/a.lua".into())

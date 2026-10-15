@@ -1,5 +1,6 @@
 # Fixtures, goldens and test vectors are compared byte for byte: keep their line endings.
 crates/*/tests/** -text
+crates/*/src/tests/fixtures/** -text
 crates/bt-tmx/src/deflate_vectors.in -text
 crates/bt-tmx/src/automap-tiles.png binary
 fuzz/corpus/** -text

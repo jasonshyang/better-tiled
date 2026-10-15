@@ -18,7 +18,8 @@ fn godot_is_looked_for_in_godot_then_the_app_then_the_path() {
     let (named, app, on_path) = (
         dir.join("named/Godot_v4.7"),
         dir.join("app/Godot"),
-        dir.join("bin/godot"),
+        dir.join("bin")
+            .join(if cfg!(windows) { "godot.exe" } else { "godot" }),
     );
     for file in [&named, &app, &on_path] {
         std::fs::write(file, "").unwrap();

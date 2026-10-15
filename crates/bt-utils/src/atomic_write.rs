@@ -72,6 +72,10 @@ fn resolve_target(path: &Path) -> Result<PathBuf, Error> {
 /// Refuses an existing file that cannot be opened for writing: renaming another file over it
 /// would get around a lock that version control put there on purpose.
 fn refuse_read_only_file(path: &Path, target: &Path) -> Result<(), Error> {
+    // Windows also denies opening a directory for writing; that is not a read-only file.
+    if target.is_dir() {
+        return Ok(());
+    }
     match OpenOptions::new().write(true).open(target) {
         Err(error) if error.kind() == ErrorKind::PermissionDenied => Err(Error::Refused {
             path: path.to_path_buf(),
@@ -86,7 +90,7 @@ fn refuse_read_only_file(path: &Path, target: &Path) -> Result<(), Error> {
 /// The error for a write that failed after the file itself was found writable: permissions
 /// refused are the folder's.
 fn folder_refused_or(path: &Path, source: std::io::Error) -> Error {
-    if source.kind() == ErrorKind::PermissionDenied {
+    if source.kind() == ErrorKind::PermissionDenied && !path.is_dir() {
         Error::Refused {
             path: path.to_path_buf(),
             reason: Refused::ReadOnlyFolder,
@@ -223,13 +227,15 @@ mod tests {
         // Renaming a file over a folder fails after the temporary file was written.
         fs::create_dir(scratch.join("map.tmx")).unwrap();
         fs::write(scratch.join("map.tmx/keep.txt"), "x").unwrap();
-        let error = write_file(&scratch.join("map.tmx"), b"data", WriteMode::Atomic).unwrap_err();
-        assert!(
-            matches!(error, Error::Write { .. }) && error.refused().is_none(),
-            "{error}"
-        );
-        assert!(scratch.join("map.tmx/keep.txt").is_file());
-        assert_eq!(entries(scratch.path()), ["map.tmx"]);
+        for mode in [WriteMode::Atomic, WriteMode::InPlace] {
+            let error = write_file(&scratch.join("map.tmx"), b"data", mode).unwrap_err();
+            assert!(
+                matches!(error, Error::Write { .. }) && error.refused().is_none(),
+                "{error}"
+            );
+            assert_eq!(fs::read(scratch.join("map.tmx/keep.txt")).unwrap(), b"x");
+            assert_eq!(entries(scratch.path()), ["map.tmx"]);
+        }
         assert!(write_file(&scratch.join("missing/map.tmx"), b"data", WriteMode::Atomic).is_err());
     }
 

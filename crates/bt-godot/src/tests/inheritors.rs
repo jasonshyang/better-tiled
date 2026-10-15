@@ -956,13 +956,16 @@ fn level_scenes_are_found_by_path_or_uid() {
     .unwrap();
 
     let report = export_base(&dir, V2);
-    let mut found: Vec<String> = report
+    let mut found: Vec<PathBuf> = report
         .level_scenes
         .iter()
-        .map(|l| l.path.strip_prefix(&dir).unwrap().display().to_string())
+        .map(|l| l.path.strip_prefix(&dir).unwrap().to_path_buf())
         .collect();
     found.sort();
-    assert_eq!(found, ["broken.tscn", "by_uid.tscn", "levels/by_path.tscn"]);
+    assert_eq!(
+        found,
+        ["broken.tscn", "by_uid.tscn", "levels/by_path.tscn"].map(PathBuf::from)
+    );
     for name in ["by_path.tscn", "by_uid.tscn"] {
         assert_eq!(
             seen(findings(&report, name)),

@@ -234,15 +234,11 @@ mod tests {
         .unwrap();
         let read = parse_rules_file(&scratch.join("rules.txt")).unwrap();
         let entries = &read.entries;
-        let shown: Vec<(String, Option<&str>)> = entries
+        let shown: Vec<(PathBuf, Option<&str>)> = entries
             .iter()
             .map(|e| {
                 (
-                    e.path
-                        .strip_prefix(scratch.path())
-                        .unwrap()
-                        .display()
-                        .to_string(),
+                    e.path.strip_prefix(scratch.path()).unwrap().to_path_buf(),
                     e.filter.as_deref(),
                 )
             })
@@ -250,11 +246,11 @@ mod tests {
         assert_eq!(
             shown,
             [
-                ("base.tmx".to_owned(), None),
-                ("sub/inner.tmx".to_owned(), Some("town*")),
-                ("sub/cave.tmx".to_owned(), Some("cave*")),
-                ("town.tmx".to_owned(), Some("town*")),
-                ("all.tmx".to_owned(), None),
+                (PathBuf::from("base.tmx"), None),
+                (PathBuf::from("sub/inner.tmx"), Some("town*")),
+                (PathBuf::from("sub/cave.tmx"), Some("cave*")),
+                (PathBuf::from("town.tmx"), Some("town*")),
+                (PathBuf::from("all.tmx"), None),
             ]
         );
         assert!(entries[1].applies_to("Town2.tmx") && !entries[1].applies_to("cave.tmx"));
