@@ -51,6 +51,7 @@ pub(crate) struct App {
     pub(super) godot: super::godot::GodotState,
     pub(super) canvases: HashMap<DocumentId, Canvas>,
     layers_panel: LayersPanel,
+    project_panel: crate::panels::ProjectPanel,
     objects_panel: ObjectsPanel,
     /// The panel the left group shows.
     left_tab: LeftTab,
@@ -107,6 +108,8 @@ pub(crate) enum LeftTab {
     Layers,
     /// The Objects panel.
     Objects,
+    /// The project's folder tree.
+    Project,
     /// The AutoMap panel.
     AutoMap,
     /// Saved and quick stamps.
@@ -117,9 +120,10 @@ pub(crate) enum LeftTab {
 
 impl LeftTab {
     /// The group's tabs, in order.
-    const ALL: [LeftTab; 5] = [
+    const ALL: [LeftTab; 6] = [
         LeftTab::Layers,
         LeftTab::Objects,
+        LeftTab::Project,
         LeftTab::AutoMap,
         LeftTab::Stamps,
         LeftTab::Issues,
@@ -130,6 +134,7 @@ impl LeftTab {
         match self {
             LeftTab::Layers => "Layers",
             LeftTab::Objects => "Objects",
+            LeftTab::Project => "Project",
             LeftTab::AutoMap => "AutoMap",
             LeftTab::Stamps => "Stamps",
             LeftTab::Issues => "Issues",
@@ -386,6 +391,7 @@ impl App {
             godot: super::godot::GodotState::default(),
             canvases: HashMap::new(),
             layers_panel: LayersPanel::default(),
+            project_panel: crate::panels::ProjectPanel::default(),
             objects_panel: ObjectsPanel::default(),
             left_tab: LeftTab::default(),
             right_tab: RightTab::default(),
@@ -569,6 +575,14 @@ impl App {
         egui::CentralPanel::default().show(ui, |ui| {
             tab_strip(ui, &self.editor, &mut self.intents);
             match self.editor.current() {
+                Some(doc)
+                    if self
+                        .editor
+                        .document(doc)
+                        .is_some_and(|doc| self.editor.store().project(doc.asset()).is_some()) =>
+                {
+                    self.show_project_overview(ui)
+                }
                 Some(doc) if self.shows_tileset_editor(doc) => self.show_tileset_editor(ui, doc),
                 Some(doc) => self.show_canvas(ui, doc),
                 None => self.show_welcome(ui),
@@ -631,6 +645,41 @@ impl App {
         } else {
             self.canvases.get(&doc)
         }
+    }
+
+    fn show_project_overview(&mut self, ui: &mut egui::Ui) {
+        let Some(project) = self.editor.project_asset() else {
+            return;
+        };
+        let Some(asset) = self.editor.store().get(project) else {
+            return;
+        };
+        ui.heading(asset.display_name());
+        if let Some(path) = asset.path() {
+            ui.label(path.display().to_string());
+        }
+        if let Some(project) = self.editor.store().project(project) {
+            ui.label(format!(
+                "{} folders · {} custom types · {} commands",
+                project.folders.len(),
+                project.custom_types.types.len(),
+                project.commands.len()
+            ));
+        }
+        ui.add_space(12.0);
+        ui.label("Open a map, tileset, template or world from the Project browser.");
+        ui.horizontal_wrapped(|ui| {
+            for action in [
+                ActionId::ProjectProperties,
+                ActionId::CustomTypesEditor,
+                ActionId::EditCommands,
+                ActionId::Save,
+            ] {
+                if ui.button(action.spec().label).clicked() {
+                    self.intents.push(Intent::Run(action));
+                }
+            }
+        });
     }
 
     fn show_welcome(&mut self, ui: &mut egui::Ui) {
@@ -696,9 +745,20 @@ impl App {
     }
 
     fn show_panels(&mut self, ui: &mut egui::Ui) {
-        let Some(doc) = self.editor.current() else {
+        let doc = self.editor.current();
+        let project_document = doc
+            .and_then(|doc| self.editor.document(doc))
+            .is_some_and(|doc| self.editor.store().project(doc.asset()).is_some());
+        if (doc.is_none() || project_document) && self.editor.project_asset().is_some() {
+            egui::Panel::left("project-only")
+                .resizable(true)
+                .default_size(300.0)
+                .show(ui, |ui| {
+                    self.project_panel.show(ui, &self.editor, &mut self.intents)
+                });
             return;
-        };
+        }
+        let Some(doc) = doc else { return };
         let on_map = self.editor.map_of(doc).is_some();
         let in_template = self.editor.template_of(doc).is_some();
         // While a map's tileset is edited in its place, the map's layers and objects wait; a
@@ -725,6 +785,9 @@ impl App {
                         LeftTab::Objects => {
                             self.objects_panel
                                 .show(ui, &self.editor, doc, &mut self.intents);
+                        }
+                        LeftTab::Project => {
+                            self.project_panel.show(ui, &self.editor, &mut self.intents)
                         }
                         LeftTab::Issues => self.show_godot_issues(ui, doc),
                         LeftTab::Stamps => {

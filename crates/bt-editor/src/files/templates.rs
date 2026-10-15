@@ -303,7 +303,8 @@ impl Editor {
                     .map(|file| file.path.clone())
             })
         });
-        path.map(|path| self.open(&path)).unwrap_or_default()
+        path.map(|path| self.request_open(&path))
+            .unwrap_or_default()
     }
 
     pub(crate) fn edit_template_instances(

@@ -113,6 +113,28 @@ impl Editor {
                 enabled: true,
             });
         }
+        fn project_files(
+            entries: &[crate::ProjectEntry],
+            candidates: &mut Vec<Candidate>,
+            known: &mut std::collections::HashSet<PathBuf>,
+        ) {
+            for entry in entries {
+                if entry.openable() && known.insert(entry.path.clone()) {
+                    candidates.push(Candidate {
+                        target: PaletteTarget::File(entry.path.clone()),
+                        label: bt_utils::paths::display_name(&entry.path),
+                        detail: entry
+                            .path
+                            .parent()
+                            .map_or_else(String::new, |folder| folder.display().to_string()),
+                        enabled: true,
+                    });
+                }
+                project_files(&entry.children, candidates, known);
+            }
+        }
+        let mut known = self.session.recent_files.iter().cloned().collect();
+        project_files(self.project_entries(), &mut candidates, &mut known);
         if let Some(map) = self.situation().map {
             map.for_each_layer(|layer, _| {
                 let kind = match layer.kind {

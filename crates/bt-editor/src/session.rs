@@ -18,6 +18,10 @@ const RECENT_FILES: usize = 20;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Session {
+    /// Explicit project reopened before its documents.
+    pub project: Option<PathBuf>,
+    /// Document sets remembered while switching between projects.
+    pub projects: Vec<ProjectSession>,
     /// The loaded worlds, reopened before their maps.
     pub worlds: Vec<PathBuf>,
     /// The nine quick stamps, as Tiled stamp JSON with the owning path used for references.
@@ -32,6 +36,20 @@ pub struct Session {
     pub view_states: Vec<FileViewState>,
     /// The window's panel layout, kept as the window wrote it.
     pub layout: serde_json::Value,
+}
+
+/// The document set last shown for one project.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectSession {
+    /// Project filename.
+    pub path: PathBuf,
+    /// Open documents, excluding the project itself.
+    pub open_files: Vec<PathBuf>,
+    /// Active document.
+    pub current: Option<PathBuf>,
+    /// Loaded worlds.
+    pub worlds: Vec<PathBuf>,
 }
 
 /// A quick stamp kept across sessions, with the location its relative references resolve from.

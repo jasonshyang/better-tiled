@@ -720,6 +720,27 @@ each map writer's template cache synchronized. Saving a map writes dirty externa
 template definitions before the map; saving a template writes its external tilesets first.
 Template views retain those tilesets when map tabs close and follow tileset root replacements.
 
+M6 project management uses the existing document/history model for a project settings tab,
+so a newly created project can edit its types, commands and properties before opening a map.
+Automatic project adoption does not create that tab. Explicit opening and Project Properties
+bring it forward. New Project, Close Project and opening another project ask about all unsaved
+assets; Save continues through filename pickers and stops on failure. Completing a switch
+invalidates outstanding loads, closes documents and remembers each project's open files, active
+file and worlds. Session restore loads the project before its documents, using its custom types.
+
+The Project browser scans folders on workers, sorts directories first and names naturally,
+filters entries and feeds supported files into the palette. Scans carry a project identity and
+request generation; older refreshes cannot replace a newer tree. Only folder changes and an
+explicit Refresh rescan the tree. Nested directory symlinks are not followed; depth and entry
+budgets produce typed problems. Adding/removing roots is undoable and does not move files.
+Project Properties is a Cancel/OK draft for compatibility, the global rules file and custom
+properties. Whole-root world and project drafts refuse to overwrite a newer root. Save Project
+As rebases file properties and class defaults, and records its changes in history. Project
+edits now participate in recovery, and successful saves remove their snapshots. The project's
+compatibility target is passed to map, tileset, template and snapshot writers; changed global
+rules paths refresh known maps on tick and follow undo. Generic `.json` files are classified
+by their top-level type on the load worker.
+
 As built in M6, Edit Commands applies its draft as one undoable project transaction. Saving
 the owning document writes the project file too. Project commands appear in their menu and the
 command palette, and their Qt-format shortcuts run through the window's focus routing.

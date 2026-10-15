@@ -59,11 +59,12 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
             Some(ToolFamily::Object) => &OBJECT_TOOLS,
             Some(ToolFamily::Any) | None => &[],
         };
-        let map_tools: &[ToolKind] = if in_tileset || in_template {
-            &[]
-        } else {
-            &[ToolKind::OffsetLayers, ToolKind::Explain, ToolKind::World]
-        };
+        let map_tools: &[ToolKind] =
+            if in_tileset || in_template || doc.is_none_or(|doc| editor.map_of(doc).is_none()) {
+                &[]
+            } else {
+                &[ToolKind::OffsetLayers, ToolKind::Explain, ToolKind::World]
+            };
         for &tool in tools.iter().chain(map_tools) {
             if in_template && !matches!(tool, ToolKind::SelectObjects | ToolKind::EditPolygons) {
                 continue;

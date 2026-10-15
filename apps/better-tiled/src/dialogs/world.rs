@@ -7,6 +7,7 @@ use bt_editor::{AssetId, DocumentId, Editor, Intent};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct WorldDialog {
+    base_version: u64,
     doc: DocumentId,
     world: AssetId,
     value: World,
@@ -17,6 +18,7 @@ impl WorldDialog {
     pub(crate) fn new(doc: DocumentId, editor: &Editor) -> Option<Self> {
         let world = editor.world_of(doc)?;
         Some(Self {
+            base_version: editor.store().get(world)?.version(),
             doc,
             world,
             value: (**editor.store().world(world)?).clone(),
@@ -31,7 +33,10 @@ impl WorldDialog {
     ) -> bool {
         let editing = crate::focus::is_typing(ctx);
         let mut answer = ButtonsAnswer::None;
-        let mut valid = true;
+        let mut valid = editor
+            .store()
+            .get(self.world)
+            .is_some_and(|asset| asset.version() == self.base_version);
         let response = egui::Modal::new(egui::Id::new("world-properties")).show(ctx, |ui| {
             ui.set_min_width(720.0);
             ui.heading("World Properties");
@@ -82,6 +87,7 @@ impl WorldDialog {
                 self.properties.show(ui, &mut self.value.properties, editor.custom_types());
             });
             if let Some(problem) = bt_editor::world_problem(&self.value) { ui.colored_label(ui.visuals().error_fg_color, problem); valid = false; }
+            if editor.store().get(self.world).is_none_or(|asset| asset.version() != self.base_version) { ui.colored_label(ui.visuals().error_fg_color, "The world changed while this draft was open. Cancel and reopen World Properties."); }
             answer = dialog_buttons(ui, valid);
         });
         let keys = DialogKeys::take(ctx);

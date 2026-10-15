@@ -103,6 +103,24 @@ impl Editor {
             ActionId::ResetTemplate | ActionId::DetachTemplate | ActionId::ReplaceWithTemplate => {
                 on_document(self, &|editor, doc| editor.edit_template_instances(doc, id))
             }
+            ActionId::NewProject => vec![Effect::PickFile(FileRequest::NewProject)],
+            ActionId::CloseProject => self.begin_project_switch(crate::files::ProjectSwitch::Close),
+            ActionId::ProjectProperties => self
+                .show_project_document()
+                .map(|doc| Effect::Show(Dialog::ProjectProperties(doc)))
+                .into_iter()
+                .collect(),
+            ActionId::SaveProjectAs => self
+                .project_asset()
+                .map(|project| Effect::PickFile(FileRequest::ProjectAs(project)))
+                .into_iter()
+                .collect(),
+            ActionId::AddProjectFolder => self
+                .project_asset()
+                .map(|project| Effect::PickFile(FileRequest::ProjectFolder(project)))
+                .into_iter()
+                .collect(),
+            ActionId::RefreshProject => self.refresh_project_files(),
             ActionId::NewWorld => on_document(self, &|_, doc| {
                 vec![Effect::PickFile(FileRequest::NewWorld(doc))]
             }),

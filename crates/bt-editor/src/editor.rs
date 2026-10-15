@@ -152,7 +152,7 @@ pub struct Editor {
     pub(crate) session: Session,
     session_generation: u64,
     /// The file that was current in a session being restored, kept current as the others load.
-    restore_current: Option<PathBuf>,
+    pub(crate) restore_current: Option<PathBuf>,
     pub(crate) settings: Settings,
 }
 
@@ -183,6 +183,15 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::SetProject {
+                doc,
+                project,
+                value,
+            } => self.set_project(doc, project, *value),
+            Intent::RemoveProjectFolder { project, path } => {
+                self.remove_project_folder(project, &path)
+            }
+            Intent::ProjectFilesScanned(files) => self.project_files_scanned(files),
             Intent::PlaceTemplate { doc, at, snap } => self.place_template(doc, at, snap),
             Intent::SetWorld { doc, world, value } => self.set_world(doc, world, *value),
             Intent::LoadWorldMaps { doc, visible } => self.load_world_maps(doc, visible),
@@ -224,7 +233,7 @@ impl Editor {
             } => self.resize_map_to(doc, size, offset, remove_objects_outside),
             Intent::OffsetMap { doc, offset } => self.offset_map_contents(doc, offset),
             Intent::CreateTileset { doc, tileset } => self.create_tileset(doc, &tileset),
-            Intent::Open(path) => self.open(&path),
+            Intent::Open(path) => self.request_open(&path),
             Intent::Loaded(loaded) => {
                 let recovered = loaded.recovered_from.is_some();
                 let effects = self.finish_load(*loaded);
@@ -415,6 +424,7 @@ impl Editor {
         let mut effects = self.sync_live();
         self.sync_explanations();
         effects.extend(self.sync_world_patterns());
+        effects.extend(self.sync_project_files());
         effects
     }
 
@@ -480,15 +490,16 @@ impl Editor {
     fn snapshot_of(&self, id: AssetId) -> Option<Snapshot> {
         let asset = self.store.get(id)?;
         let original = asset.path().map(Path::to_path_buf);
-        if asset.kind() == AssetKind::Project
-            || original.is_none() && asset.kind() != AssetKind::Map
-        {
+        if original.is_none() && asset.kind() != AssetKind::Map {
             return None;
         }
         let path_for_references = original
             .clone()
             .unwrap_or_else(|| PathBuf::from("untitled.tmx"));
-        let mut request = asset.root().write_request(&path_for_references);
+        let mut request = asset
+            .root()
+            .write_request(&path_for_references)
+            .compatibility_version(self.compatibility_version());
         if let Some(loader) = self.files.loaders.get(&id) {
             request = request.loader(loader);
         }
@@ -613,9 +624,15 @@ impl Editor {
             .filter(|asset| asset.kind() == AssetKind::World)
             .filter_map(|asset| asset.path().map(Path::to_path_buf))
             .collect();
+        session.project = self.project_path().map(Path::to_path_buf);
         session.open_files = self
             .documents
             .in_order()
+            .filter(|doc| {
+                self.store
+                    .get(doc.asset())
+                    .is_some_and(|asset| asset.kind() != AssetKind::Project)
+            })
             .filter_map(|doc| self.store.get(doc.asset())?.path().map(Path::to_path_buf))
             .collect();
         session.current = self.documents.current().and_then(|doc| self.path_of(doc));
@@ -646,6 +663,13 @@ impl Editor {
         self.restore_current = session.current.clone();
         self.session = session;
         let mut effects = self.restore_quick_stamps();
+        if let Some(project) = self.session.project.clone() {
+            self.files.restore_project = Some(self.session.clone());
+            effects.push(Effect::Load(
+                self.load_job(project, crate::files::LoadSource::File),
+            ));
+            return effects;
+        }
         effects.extend(
             self.session
                 .worlds

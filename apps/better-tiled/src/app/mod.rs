@@ -48,3 +48,6 @@ mod template_tests;
 
 #[cfg(test)]
 mod world_tests;
+
+#[cfg(test)]
+mod project_tests;

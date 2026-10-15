@@ -30,6 +30,11 @@ impl App {
                 }
             }
             Effect::Show(Dialog::Console) => self.console_open = true,
+            Effect::Show(Dialog::ProjectProperties(doc)) => {
+                if let Some(dialog) = crate::dialogs::ProjectDialog::new(doc, &self.editor) {
+                    self.modals.push(Modal::Project(Box::new(dialog)));
+                }
+            }
             Effect::Show(Dialog::WorldProperties(doc)) => {
                 if let Some(dialog) = crate::dialogs::WorldDialog::new(doc, &self.editor) {
                     self.modals.push(Modal::World(Box::new(dialog)));
@@ -41,6 +46,13 @@ impl App {
                         doc,
                         &self.editor,
                     )))
+            }
+            Effect::ScanProject(job) => {
+                if let Err(error) = self.workers.spawn("project scan", move || {
+                    vec![Intent::ProjectFilesScanned(job.run())]
+                }) {
+                    self.notify(Notice::error(error));
+                }
             }
             Effect::Stamps(job) => {
                 let job = std::sync::Arc::new(job);

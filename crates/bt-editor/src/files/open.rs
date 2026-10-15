@@ -14,6 +14,15 @@ use crate::notice::Notice;
 use crate::store::{AssetKind, NewAsset, Root};
 
 impl Editor {
+    /// An explicit Open takes precedence over the restored session's active document.
+    pub(crate) fn request_open(&mut self, path: &Path) -> Vec<Effect> {
+        self.restore_current = None;
+        if self.files.restore_project.take().is_some() {
+            self.files.epoch += 1;
+        }
+        self.open(path)
+    }
+
     /// Opens a file: its tab when it is open, else a load for a worker.
     pub(crate) fn open(&mut self, path: &Path) -> Vec<Effect> {
         let path = match bt_utils::paths::absolute_path(path) {
@@ -48,6 +57,7 @@ impl Editor {
             .unwrap_or_default()
             .to_ascii_lowercase();
         let kind = match extension.as_str() {
+            "json" => LoadKind::Auto,
             "tsx" | "tsj" => LoadKind::Tileset,
             "tx" | "tj" => LoadKind::Template,
             "world" => LoadKind::World,
@@ -55,6 +65,7 @@ impl Editor {
             _ => LoadKind::Map,
         };
         LoadJob {
+            epoch: self.files.epoch,
             path,
             source,
             project,
@@ -77,6 +88,9 @@ impl Editor {
     /// Takes in a finished load: the project, the tilesets (the store's when it has the file),
     /// the map, and a document showing it.
     pub(crate) fn finish_load(&mut self, mut loaded: Loaded) -> Vec<Effect> {
+        if loaded.epoch != self.files.epoch {
+            return Vec::new();
+        }
         if let Ok(files) = &mut loaded.outcome
             && let Root::Map(map) = &mut files.content
         {
@@ -466,14 +480,10 @@ impl Editor {
     ) -> Vec<Effect> {
         let mut effects = Vec::new();
         if let Root::Project(_) = &files.content {
-            if self.project_file().is_some_and(|id| {
-                self.store
-                    .get(id)
-                    .is_some_and(|asset| asset.path() != Some(path) && asset.is_dirty())
-            }) {
-                return vec![Effect::Notify(Notice::error(
-                    "Save the current project before switching projects",
-                ))];
+            if self.project_path() != Some(path)
+                && (self.files.project.is_some() || !self.documents.is_empty())
+            {
+                return self.begin_project_switch(super::ProjectSwitch::Open(path.to_path_buf()));
             }
         } else if let Some(project) = files.project
             && self.project_file().is_none()
@@ -576,6 +586,8 @@ impl Editor {
             }
             AssetKind::Project => {
                 self.files.project = Some(asset);
+                self.show_project_document();
+                effects.extend(self.restore_project_documents(path));
             }
             _ => {
                 return vec![Effect::Notify(Notice::error(

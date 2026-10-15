@@ -37,6 +37,8 @@ pub(crate) enum ProjectChoice {
 /// What a file holds.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum LoadKind {
+    /// A generic JSON file, classified by its top-level type.
+    Auto,
     /// A world file.
     World,
     /// An object template.
@@ -74,6 +76,7 @@ pub(crate) enum LoadPurpose {
 /// A load to run on a worker; [`LoadJob::run`] does it.
 #[derive(Clone, Debug)]
 pub struct LoadJob {
+    pub(crate) epoch: u64,
     pub(crate) path: PathBuf,
     pub(crate) source: LoadSource,
     pub(crate) project: ProjectChoice,
@@ -124,6 +127,7 @@ pub(crate) struct LoadedProject {
 /// What a load gave: the map and its files, or why not.
 #[derive(Debug)]
 pub struct Loaded {
+    pub(crate) epoch: u64,
     pub(crate) path: PathBuf,
     /// The file's canonical path (its identity), or the path asked for when it has none (a
     /// recovered map whose file is gone).
@@ -154,6 +158,7 @@ impl LoadJob {
         };
         let canonical = std::fs::canonicalize(&self.path).unwrap_or_else(|_| self.path.clone());
         Loaded {
+            epoch: self.epoch,
             path: self.path.clone(),
             outcome: self.load(&canonical),
             canonical,
@@ -163,6 +168,24 @@ impl LoadJob {
     }
 
     fn load(&self, canonical: &Path) -> Result<LoadedFiles, String> {
+        let kind = if self.kind == LoadKind::Auto {
+            let source = match &self.source {
+                LoadSource::Snapshot(path) => path,
+                _ => &self.path,
+            };
+            let text = std::fs::read_to_string(source).map_err(|error| error.to_string())?;
+            let value: serde_json::Value =
+                serde_json::from_str(&text).map_err(|error| error.to_string())?;
+            match value.get("type").and_then(|value| value.as_str()) {
+                Some("tileset") => LoadKind::Tileset,
+                Some("template") => LoadKind::Template,
+                Some("world") => LoadKind::World,
+                Some("project") => LoadKind::Project,
+                _ => LoadKind::Map,
+            }
+        } else {
+            self.kind
+        };
         let project = match &self.project {
             ProjectChoice::Known(_) => None,
             ProjectChoice::FindNearest { home } => self
@@ -183,7 +206,7 @@ impl LoadJob {
         };
         let mut loader = Loader::builder().custom_types(custom_types).build();
         if matches!(
-            self.kind,
+            kind,
             LoadKind::World | LoadKind::Template | LoadKind::Project
         ) {
             let text = match &self.source {
@@ -197,7 +220,7 @@ impl LoadJob {
                         .map_err(|error| format!("Cannot read {}: {error}", source.display()))?
                 }
             };
-            let loaded = match self.kind {
+            let loaded = match kind {
                 LoadKind::World => {
                     let loaded = loader
                         .parse_world(&text, &self.path)
@@ -251,7 +274,7 @@ impl LoadJob {
                 layers: Ok(None),
             });
         }
-        if self.kind == LoadKind::Tileset {
+        if kind == LoadKind::Tileset {
             let (loaded, content_hash) = match &self.source {
                 LoadSource::File => (
                     loader

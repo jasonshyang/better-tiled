@@ -75,6 +75,9 @@ impl Editor {
 
     /// Whether an open map uses a tileset asset (which then stays, its changes saved with it).
     fn map_uses(&self, asset: crate::store::AssetId) -> bool {
+        if self.files.project == Some(asset) {
+            return true;
+        }
         self.store
             .assets()
             .any(|other| self.store.dependencies_of(other.id()).contains(&asset))
@@ -191,6 +194,14 @@ impl Editor {
                 | Choice::KeepMine
                 | Choice::Reload => Vec::new(),
             },
+            Pending::ProjectSwitch(destination) => match choice {
+                Choice::Save => {
+                    self.files.switching_project = Some(destination);
+                    self.continue_project_switch()
+                }
+                Choice::DontSave => self.finish_project_switch(destination),
+                _ => Vec::new(),
+            },
             Pending::UnloadWorld(world) => match choice {
                 Choice::Save => match self.write_auxiliary(world) {
                     Ok(()) => self.unload_world_now(world),
@@ -259,12 +270,23 @@ impl Editor {
         path: Option<std::path::PathBuf>,
     ) -> Vec<Effect> {
         let Some(path) = path else {
-            if self.files.quitting {
-                self.files.quitting = false;
-            }
+            self.files.quitting = false;
+            self.files.switching_project = None;
             return Vec::new();
         };
         match request {
+            FileRequest::NewProject => self.begin_project_switch(super::ProjectSwitch::New(path)),
+            FileRequest::ProjectAs(project) => {
+                let mut effects = self.save_project_as(project, &path);
+                if self.files.quitting {
+                    effects.extend(self.continue_quit());
+                }
+                if self.files.switching_project.is_some() {
+                    effects.extend(self.continue_project_switch());
+                }
+                effects
+            }
+            FileRequest::ProjectFolder(project) => self.add_project_folder(project, &path),
             FileRequest::ObjectTemplate(doc) => self.choose_template_file(doc, &path),
             FileRequest::SaveAsTemplate { doc, object } => {
                 self.save_object_template(doc, object, &path)
@@ -280,7 +302,7 @@ impl Editor {
                 doc,
                 operation: crate::GodotOperation::ExportTo(path),
             }],
-            FileRequest::Open => self.open(&path),
+            FileRequest::Open => self.request_open(&path),
             // The window's own request: the New Tileset dialog takes the answer.
             FileRequest::AttributeImage { .. }
             | FileRequest::ExportImage { .. }
@@ -292,6 +314,9 @@ impl Editor {
                 let mut effects = self.save_as(doc, &path);
                 if self.files.quitting {
                     effects.extend(self.continue_quit());
+                }
+                if self.files.switching_project.is_some() {
+                    effects.extend(self.continue_project_switch());
                 }
                 effects
             }

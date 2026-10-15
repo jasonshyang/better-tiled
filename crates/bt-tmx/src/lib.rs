@@ -44,7 +44,7 @@ pub use fragment::fragment_text;
 pub use loader::{Loaded, Loader, LoaderBuilder};
 pub use object_types::{load_object_types, parse_object_types};
 pub use project::{load_project, parse_project};
-pub use rebase::{rebase_file_references, rebase_properties};
+pub use rebase::{rebase_file_references, rebase_project_references, rebase_properties};
 pub use rules::{IncludeCycle, RuleMapEntry, RulesFile, parse_rules_file, read_rules_file};
 pub use stamp::{Stamp, StampVariation};
 pub use warning::{Target, Warning, WarningKind};
