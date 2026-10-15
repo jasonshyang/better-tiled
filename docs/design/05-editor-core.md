@@ -189,6 +189,15 @@ Tests: `tests/external.rs` (one step labelled by the script and taken back; a co
 stroke refused; `bt undo` only while latest, and the one before after it; marks replace, add,
 move and clear).
 
+### 1.5 As built at M5 (2026-10-15)
+
+The action table adds Export, Export As, Godot Setup and Verify in Godot. `Effect::Godot`
+carries `GodotOperation` and `DocumentId`; no exporter dependency enters this crate.
+`Intent::RememberExport` and `Editor::remember_export` record the target in one transaction.
+A successful map save emits `AfterSave`, including Save As and Save All. The window decides
+whether export-on-save is configured and runs the exporter in the background.
+
+
 ## 2. The editor
 
 ```

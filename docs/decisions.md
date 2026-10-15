@@ -986,3 +986,25 @@ are. The rest of what the runs found went into the guide.
 project that wasn't written for them; leaving the guide to say what agents had to work out.
 **Why:** the runs are the measure, and each friction an agent met is either a typed fact a
 report should state or a sentence the guide should hold.
+
+## 2026-10-15 — Godot export uses a caller-owned cache and shared file transformations
+
+**Decided:** keep the exporter independent of the editor and use a caller-owned `Exporter`
+for repeat-export scan caching. Use the permissive `bt-tmx` transformations to resolve
+inherited types and detach templates, `bt-image` for decoded pixels and colour keys, and
+`bt-render` for map files used as images. Keep terrain solver comparisons in dev dependencies.
+**Instead of:** a process-global cache, a second inheritance resolver, or GPL editor/rule code
+in the exporter's production dependency graph.
+**Why:** tests and tools remain isolated, repeat exports reuse resource headers, and all front
+doors use the same file, geometry and image semantics.
+
+## 2026-10-15 — Godot front doors share planning and keep failures visible
+
+**Decided:** `bt-editor` emits Godot operation effects and records remembered targets through
+ordinary transactions. The window runs exports and verification on workers, coalesces saves
+while an export runs, and keeps failures as per-document Issues. The CLI's Godot project flag
+is `--godot-project`; `--project` still names Tiled custom types.
+**Instead of:** export algorithms in widgets, a map save waiting for Godot, or overloading the
+global Tiled project argument.
+**Why:** saved maps remain saved when export refuses, editor and CLI output stays identical,
+and a user can inspect a refusal and choose a concrete recovery action without losing work.

@@ -321,3 +321,20 @@ impl PartialEq<&str> for Code {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_diagnostic_enum_json_and_documented_codes_agree() {
+        let doc = include_str!("../../../docs/design/12-godot-export.md");
+        let documented: std::collections::BTreeSet<&str> = doc
+            .split('`')
+            .filter(|part| part.starts_with("godot/") && !part.ends_with('*'))
+            .collect();
+        let actual: std::collections::BTreeSet<&str> =
+            super::Code::ALL.iter().map(|c| c.as_str()).collect();
+        assert_eq!(actual, documented);
+        for code in super::Code::ALL {
+            assert_eq!(serde_json::to_value(code).unwrap(), code.as_str());
+        }
+    }
+}

@@ -334,3 +334,15 @@ once each need their own target directory (`CARGO_TARGET_DIR`), never a shared o
 | fixtures | each builder round-trips through `bt-tmx` and reads back equal; grids parse every token and refuse unknown ones |
 | goldens | the comparison reports the first differing pixel or line; the update variable rewrites exactly what differs |
 | CI | the skip filter fails on a `reference/` skip and passes an `assets/` skip (a unit test of `disallowed_skips`, which `check-skips` runs) |
+
+## 14. As built at M5 (2026-10-15)
+
+The baseline on Rust 1.95.0 passed 1,478 tests before M5 changes. `bt-godot` adds format and
+regeneration tests, seeded reader mutations, and headless Godot checks for grids, physics,
+navigation, terrain brush behavior, animations, custom data, instances and inherited scenes.
+Its real-map tests load all 14 examples and both Highlands maps in Godot, compare disk and
+in-memory exports byte for byte, then assert repeat exports write nothing. CLI and window
+tests cover the public export flows, saved-file semantics, remember/undo and automatic
+refusal persistence. CI downloads pinned Godot 4.7 on Linux; only the other platforms may
+skip Godot through the existing explicit skip log. The weekly fuzzer includes
+`godot_resource` for the text scene/resource reader.

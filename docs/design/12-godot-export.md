@@ -23,6 +23,55 @@ commands' parsing (`10-agents.md`), the `godot` section's schema (`09-project-fi
 Dependencies: `bt-core`, `bt-image` (image bytes for copies and sizes), `bt-project` (the
 setup), `bt-utils` (`hash`, `atomic_write`, `paths`).
 
+### 1.1 As built at M5 (2026-10-15)
+
+The implementation is in `crates/bt-godot`. `ExportRequest::builder` configures an
+in-memory export; a caller-owned `Exporter` retains resource-header scan results between
+exports. The free `export` entry point loads a saved map with the supplied loader. Both use
+the same plan and regeneration contract, with typed reports, refusal states and diagnostic
+codes. No process-global scan cache or editor dependency is needed.
+
+The crate also depends on `bt-tmx` for saved-map and registered-tileset loading and inherited
+property resolution, and `bt-render` for map files used as images. Both dependencies are
+permissive. `bt-terrain` is a development dependency used as an independent test oracle;
+it is absent from the exporter's production dependency graph. Shared image decoding and
+colour-key conversion stay in `bt-image`; content hashing stays in `bt-utils`.
+
+The CLI is `apps/bt/src/commands/godot.rs`. Its `--godot-project DIR` names the Godot project;
+the global `--project FILE` retains its meaning of a `.tiled-project` with custom types.
+`setup`, `export`, `status` and `verify` emit versioned JSON envelopes with `schema` and
+`result`. `bt export MAP OUT.tscn` routes through the same implementation. `--remember`
+changes the open map through the live link, or writes the saved map when no editor owns it.
+
+The window owns the background jobs and the caller-owned exporter. `bt-editor` emits
+`Effect::Godot` with a document and operation; remembering the resulting target is a single
+transaction. Export As uses the shared asynchronous file-picker path. Successful saves emit
+`AfterSave`; the window repeats exports only when the project's `exportOnSave` is enabled.
+An automatic failure creates a persistent Issue and status button, without a modal. Manual
+refusals offer the applicable backup/replace, moved-target, new-UID, rebuild-all and alternate
+file choices. Issues link back to layers, objects and individual tiles. Verification is always
+explicit. The setup sheet has an explicit background preview of version, node-ID support,
+copy count and target before saving settings.
+
+The public API uses named `Generated`, `SceneCopy`, `FileStatus` and tile diagnostic records.
+Bad setup paths, unknown TileSet modes, unreadable image registries and project scans, invalid
+atlas dimensions, non-finite values and cell/source limits fail before any output is written.
+Embedded images and colour keys become tracked PNG resources.
+
+Headless tests cover all 14 Tiled example maps and both Highlands maps, deterministic output,
+Godot's actual cell centres, collisions, navigation, custom data, animation, terrains, stable
+identity, inherited overrides, safe replacement and verification. Window tests cover
+remember/undo, Export As, repeat export and persistent save-time refusals; protocol tests cover
+remembering a target through the live link. CI pins Godot 4.7 on Linux and permits Godot skips
+only on the other platforms. The text-resource reader has a seeded mutation test and a weekly
+libFuzzer target.
+
+The `godot/level-scene-*` family below expands to these stable codes:
+`godot/level-scene-automap`, `godot/level-scene-connection`, `godot/level-scene-dropped`,
+`godot/level-scene-follows`, `godot/level-scene-lost`, `godot/level-scene-moved-to-root`,
+`godot/level-scene-renamed`, `godot/level-scene-retargeted`, `godot/level-scene-tiles`,
+`godot/level-scene-type`, `godot/level-scene-unreadable`.
+
 ## 2. Terms
 
 | Term | Meaning |
@@ -48,8 +97,8 @@ setup), `bt-utils` (`hash`, `atomic_write`, `paths`).
 | `export` | the API: `export`, `export_map`, `status`, `export_all`, `generated_scenes`, `scene_of`, `images_copied` (§4) |
 | `plan` | every output built in memory before anything is written |
 | `contract` | `Found`, `Refusal`, `Status`, `Summary`, the header and hash, backups, the write (§8) |
-| `scan` | one pass over the Godot project: uids, headers, references; cached by path, size and time |
-| `read` | a reader for `.tscn` and `.tres` text: comments, header, sections, the values the export looks at; FNV-1a; uid text |
+| `project_scan` | one pass over the Godot project: uids, headers, references; cached by path, size and time |
+| `read` | a reader for `.tscn` and `.tres` text: comments, header, sections, the values the export looks at; uid text (hashing delegates to `bt-utils`) |
 | `scene`, `text` | the scene model and Godot's text syntax as Godot 4.7 writes it |
 | `grid` | shapes, layouts, cell boxes, the shift, flipped alternatives (§6) |
 | `tileset`, `animation`, `tiledata`, `collision`, `terrain` | the TileSet's contents (§7) |

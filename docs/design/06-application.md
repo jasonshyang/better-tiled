@@ -233,6 +233,18 @@ Tests: `app/live_tests.rs`, eight end-to-end tests through a socket of the test'
 `11-live-link.md`, §14); `TestWindow::with_live_link` and `ask_bt`, which steps the window while
 `bt`'s client waits on a thread.
 
+### 1.5 As built at M5 (2026-10-15)
+
+`app/godot.rs` owns setup, background export/verify jobs, a caller-owned cached exporter,
+refusal choices and per-document export Issues. The worker channel wakes the window and
+serializes writes through the exporter mutex; a save during an export queues the latest map.
+File's menu and the command palette expose Export to Godot, Export As, Godot Setup and Verify
+in Godot. Export As uses the shared asynchronous file dialog. Export Issues remain visible
+after the status flash, with links to source layers, objects and tiles. Automatic failures do
+not open a dialog or reverse a successful save. The setup sheet provides a background preview
+before settings are stored with the project-file lock.
+
+
 ## 2. Startup
 
 `main` parses the command line (files to open; `--screenshot OUT.png` opens, draws, saves the

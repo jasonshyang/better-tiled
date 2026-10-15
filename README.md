@@ -14,17 +14,18 @@ line for coding agents and an export to Godot 4.
 
 ## Status
 
-The design is complete and the build is under way, milestone by milestone
-([`docs/design/00-high-level-design.md`](docs/design/00-high-level-design.md), §17). Two
-milestones are built:
+Milestones M0–M5 are built ([design and build order](docs/design/00-high-level-design.md), §17):
+file formats, rendering, tile and object editing, properties and custom types, terrain and
+AutoMap tools, the agent CLI and live link, and safe Godot 4.3+ export.
 
-- **Foundations:** the data model, image decoding, and the reading and writing of Tiled's
-  files, which reads every Tiled example and test map and saves the files Tiled saved byte for
-  byte.
-- **See it:** the renderer (Tiled's placement and draw order on every orientation, from one
-  tile to a million cells a layer), the editor core (assets, undoable transactions, settings,
-  the session and recovery of unsaved work), and the window: tabs, the map canvas with pan and
-  zoom, the Layers and Tiles panels, and save. Maps open and save; they cannot be painted yet.
+The Godot exporter includes complete TileSets, stable identities, shared resources, animation,
+collision, navigation and terrain data. Use File ▸ Godot Setup, then Export to Godot; or:
+
+```bash
+cargo run -p bt -- godot setup path/to/map.tmx --godot-project path/to/game
+cargo run -p bt -- godot export path/to/map.tmx
+cargo run -p bt -- godot verify path/to/game/levels/map.tscn
+```
 
 ```bash
 cargo run --release -p better-tiled -- path/to/map.tmx
@@ -41,7 +42,7 @@ cargo run --release -p better-tiled -- path/to/map.tmx
 
 ```bash
 cargo build
-cargo test
+cargo test --workspace
 ```
 
 The tests read Tiled's examples and test data, which are not part of this repository. Fetch them
@@ -50,6 +51,9 @@ once, at the commit the tests are pinned to:
 ```bash
 scripts/fetch-reference.sh
 ```
+
+Godot tests require Godot 4.3+; set `GODOT` to its executable when it is not on PATH. CI pins
+Godot 4.7 on Linux. Rust 1.95.0 is pinned in `rust-toolchain.toml`.
 
 A test whose data is missing fails and names it; `BT_SKIP_MISSING_TEST_DATA=1` turns that into
 a skip that says what it skipped ([`docs/design/13-testing.md`](docs/design/13-testing.md)).

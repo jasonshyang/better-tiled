@@ -339,3 +339,11 @@ root's and the tests are not run as root.
   `apps/bt` tests `bt edit` routed to an editor (a stand-in server) with `--mark`.
 
 Not here yet: `RememberExport`, which comes with the Godot export (M5).
+
+### 15 As built at M5 (2026-10-15)
+
+The protocol adds `remember_export` with canonical map `path` and absolute scene `target`,
+answered by `Done`. The window waits for a stroke to finish within the existing request
+deadline, then records one ordinary undoable transaction. It changes the open map without
+saving it. Wire round trips cover the request and a window test proves ordinary Undo restores
+the previous export settings.

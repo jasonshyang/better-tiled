@@ -606,3 +606,14 @@ tilesets, Tiled's examples and the Highlands pack; `tests/reports.rs`); `apps/bt
 command on fixtures and Tiled's examples, `bt edit` on files and against a stand-in editor, the
 guide's tests; the end-to-end tests of the live link are in `apps/better-tiled`. The agent runs
 and what they changed are in `13-testing.md`, §10.1.
+
+### 18 As built at M5 (2026-10-15)
+
+`bt godot setup MAP --godot-project DIR` stores the project setup. `export MAP [OUT.tscn]`
+reads the saved file and warns about unsaved editor changes. `--remember` uses the live link
+for an open map. `--check` is read-only (exit 4 for changes); refusals exit 3, failures 1.
+`export --all --godot-project DIR` regenerates the project's generated scenes after checking
+all of them. `status [MAP]` inspects without writing; `verify SCENE` explicitly runs Godot's
+headless import and load. JSON has a versioned `schema` and structured `result`.
+`bt export MAP OUT.tscn` uses the same exporter. The global `--project` continues to name a
+Tiled project. `bt guide` and the command table are checked recursively for all options.

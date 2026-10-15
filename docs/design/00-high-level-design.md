@@ -174,7 +174,7 @@ layer 0     bt-utils
 | `bt-automap` | `bt-core`, `bt-tmx` (rule maps are Tiled maps; confined to one module, §10.2), `bt-project` (the AutoMap record its layers module writes and restores, §10.3) |
 | `bt-project` | `bt-utils`, `bt-core` |
 | `bt-live` | `bt-utils` |
-| `bt-godot` | `bt-core`, `bt-image`, `bt-project` |
+| `bt-godot` | `bt-core`, `bt-image`, `bt-project`, `bt-tmx` (load and resolve), `bt-render` (map images), `bt-utils` |
 | `bt-editor` | `bt-core`, `bt-tmx`, `bt-image`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
 | `bt-script` | `bt-utils`, `bt-core`, `bt-tmx`, `bt-image`, `bt-render`, `bt-edit`, `bt-terrain`, `bt-automap`, `bt-project` |
 | `apps/bt` | `bt-script`, `bt-godot`, `bt-live`, `bt-tmx`, `bt-render`, `bt-image` (pictures), `bt-automap` (a map's rules), `bt-project` (AutoMap records), `bt-core`, `bt-utils` |
@@ -827,6 +827,13 @@ test. Building it changed designs recorded in `decisions.md`: a script's input a
 the runner filling the whole report for both doors, the snapshot carrying a map's AutoMap
 layers, the marks' colours in the editor's status, pictures framed on their region, and what
 the agent runs asked of the reports and the guide.
+
+M5 was built on 2026-10-15. `12-godot-export.md`, §1.1 records the implementation and
+validation; the CLI, window and live-link docs include the new front doors. The independent
+`bt-godot` crate plans every output and checks ownership before writing, with the window and
+CLI using the same exporter. Its measure exports all 14 example maps and both Highlands maps
+and loads every scene through Godot headless; changed scenes are refused, including automatic
+exports after a successful map save. CI requires Godot on Linux.
 
 ## 18. Glossary
 
