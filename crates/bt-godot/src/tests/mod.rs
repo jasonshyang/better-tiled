@@ -8,5 +8,7 @@ mod oracle;
 mod safety;
 mod shared;
 mod support;
+mod tiledata;
+mod tileset;
 
 use crate::*;
