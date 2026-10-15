@@ -124,22 +124,14 @@ impl Editor {
             ActionId::ProjectProperties if self.project_path().is_none() => {
                 Enabled::Disabled(Some("Save the project to a file first".into()))
             }
-            ActionId::ChooseTemplate
-            | ActionId::InsertTemplateTool
-            | ActionId::SaveAsTemplate
-            | ActionId::EditTemplate
-            | ActionId::ResetTemplate
-            | ActionId::DetachTemplate
-            | ActionId::ReplaceWithTemplate
-                if editing_tileset =>
-            {
-                Enabled::Disabled(Some("Template instance commands act on map objects".into()))
-            }
             ActionId::SaveAsTemplate => {
                 let objects = selection
                     .map(|selection| selection.objects.as_slice())
                     .unwrap_or_default();
-                let object = objects.first().and_then(|id| here.map?.object(*id));
+                let view = self
+                    .current()
+                    .and_then(|doc| self.template_editing_map(doc));
+                let object = objects.first().and_then(|id| view.as_ref()?.object(*id));
                 let problem = if objects.len() != 1 {
                     Some("Select one object to save as a template")
                 } else if object.is_some_and(|object| object.template.is_some()) {
@@ -161,7 +153,9 @@ impl Editor {
             ActionId::EditTemplate | ActionId::ResetTemplate | ActionId::DetachTemplate => {
                 let instances = selection.is_some_and(|selection| {
                     selection.objects.iter().any(|id| {
-                        here.map
+                        self.current()
+                            .and_then(|doc| self.template_editing_map(doc))
+                            .as_ref()
                             .and_then(|map| map.object(*id))
                             .is_some_and(|object| object.template.is_some())
                     })
@@ -171,6 +165,18 @@ impl Editor {
                 } else {
                     Enabled::Disabled(Some("Select a template instance first".into()))
                 }
+            }
+            ActionId::InsertTemplateTool | ActionId::ReplaceWithTemplate
+                if editing_tileset
+                    && self
+                        .chosen_template()
+                        .and_then(|id| self.store.template(id))
+                        .and_then(|template| template.object.as_ref())
+                        .is_some_and(|object| object.tile.is_some()) =>
+            {
+                Enabled::Disabled(Some(
+                    "Tile-object templates cannot be used in collision groups".into(),
+                ))
             }
             ActionId::ReplaceWithTemplate if self.chosen_template().is_none() || !has_objects => {
                 Enabled::Disabled(Some("Choose a template and select objects first".into()))

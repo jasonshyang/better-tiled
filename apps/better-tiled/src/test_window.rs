@@ -185,6 +185,11 @@ impl TestWindow {
     /// Moves the pointer over a world point without pressing a button.
     pub(crate) fn hover_world(&mut self, at: glam::DVec2) {
         let at = self.screen_of_world(at);
+        self.hover_on_screen(at);
+    }
+
+    /// Moves the pointer in either the map or collision canvas.
+    pub(crate) fn hover_on_screen(&mut self, at: egui::Pos2) {
         self.pointer(egui::Event::PointerMoved(at));
         self.settle();
     }

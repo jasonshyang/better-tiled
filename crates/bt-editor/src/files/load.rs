@@ -115,7 +115,7 @@ pub(crate) struct LoadedFiles {
 }
 
 /// An external tileset read with a map.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct LoadedAsset {
     pub(crate) path: PathBuf,
     pub(crate) root: Root,
@@ -300,13 +300,14 @@ impl LoadJob {
                     (loaded, None)
                 }
             };
+            let dependencies = loaded_templates(&loader, &Root::Tileset(Arc::clone(&loaded.value)));
             return Ok(LoadedFiles {
                 nearby_worlds: Vec::new(),
                 world_maps: Vec::new(),
                 content: Root::Tileset(loaded.value),
                 warnings: loaded.warnings,
                 content_hash,
-                dependencies: Vec::new(),
+                dependencies,
                 project,
                 loader,
                 layers: Ok(None),
@@ -332,32 +333,10 @@ impl LoadJob {
             LoadSource::Snapshot(_) | LoadSource::Text(_) => None,
         };
         let mut dependencies = loaded_tilesets(&loaded.value.tilesets);
-        let mut templates = std::collections::BTreeSet::new();
-        loaded.value.for_each_layer(|layer, _| {
-            if let Some(objects) = layer.as_object_layer() {
-                templates.extend(
-                    objects.objects.iter().filter_map(|object| {
-                        object.template.as_ref().map(|file| file.path.clone())
-                    }),
-                );
-            }
-        });
-        for path in templates {
-            let Some(template) = loader
-                .cached_template(&path)
-                .filter(|template| template.object.is_some())
-            else {
-                continue;
-            };
-            if let Ok(content_hash) = hash_file(&path) {
-                dependencies.extend(loaded_tilesets(&template.tilesets));
-                dependencies.push(LoadedAsset {
-                    path,
-                    root: Root::Template(Arc::clone(template)),
-                    content_hash,
-                });
-            }
-        }
+        dependencies.extend(loaded_templates(
+            &loader,
+            &Root::Map(Arc::new(loaded.value.clone())),
+        ));
         // A recovered map is what was painted already; AutoMap layers are read for the file.
         let layers = match &self.source {
             LoadSource::File => read_layers(canonical, self.home.as_deref(), &loaded.value),
@@ -383,6 +362,27 @@ impl LoadJob {
             layers,
         })
     }
+}
+
+fn loaded_templates(loader: &Loader, root: &Root) -> Vec<LoadedAsset> {
+    let mut dependencies = Vec::new();
+    for path in root.template_paths() {
+        let Some(template) = loader
+            .cached_template(&path)
+            .filter(|template| template.object.is_some())
+        else {
+            continue;
+        };
+        if let Ok(content_hash) = hash_file(&path) {
+            dependencies.extend(loaded_tilesets(&template.tilesets));
+            dependencies.push(LoadedAsset {
+                path,
+                root: Root::Template(Arc::clone(template)),
+                content_hash,
+            });
+        }
+    }
+    dependencies
 }
 
 fn loaded_tilesets(references: &[bt_core::TilesetRef]) -> Vec<LoadedAsset> {

@@ -19,9 +19,13 @@ Edit visually, work with agents through `bt`, and export to Godot.
 
 ## Status
 
-Milestones M0–M5 are built ([design and build order](docs/design/00-high-level-design.md), §17):
+Milestones M0–M6 are built ([design and build order](docs/design/00-high-level-design.md), §17):
 file formats, rendering, tile and object editing, properties and custom types, terrain and
 AutoMap tools, the agent CLI and live link, and safe Godot 4.3+ export.
+
+M6 adds worlds and the World tool, editable object templates (including collision shapes),
+saved and quick stamps, image layers and PNG export, project browsing and commands, Tiled
+shortcut schemes, and a unified Issues panel with source navigation and Locate File repairs.
 
 The Godot exporter includes complete TileSets, stable identities, shared resources, animation,
 collision, navigation and terrain data. Use File ▸ Godot Setup, then Export to Godot; or:

@@ -91,33 +91,34 @@ impl Editor {
         if loaded.epoch != self.files.epoch {
             return Vec::new();
         }
-        if let Ok(files) = &mut loaded.outcome
-            && let Root::Map(map) = &mut files.content
-        {
-            for dependency in &files.dependencies {
+        if let Ok(files) = &mut loaded.outcome {
+            for dependency in files.dependencies.clone() {
                 if let Root::Template(before) = &dependency.root
                     && let Some(after) = self
                         .store
                         .by_path(&dependency.path)
                         .and_then(|id| self.store.template(id))
                 {
-                    let refreshed = bt_edit::refresh_template_instances(
-                        Arc::make_mut(map),
-                        &dependency.path,
-                        before,
-                        after,
-                    )
-                    .and_then(|_| {
-                        if let Ok(Some(layers)) = &mut files.layers {
-                            bt_edit::refresh_template_instances(
-                                &mut layers.painted,
-                                &dependency.path,
-                                before,
-                                after,
-                            )?;
-                        }
-                        Ok(())
-                    });
+                    let refreshed = files
+                        .content
+                        .refresh_template_instances(&dependency.path, before, after)
+                        .and_then(|_| {
+                            for asset in &mut files.dependencies {
+                                asset.root.refresh_template_instances(
+                                    &dependency.path,
+                                    before,
+                                    after,
+                                )?;
+                            }
+                            if let Ok(Some(layers)) = &mut files.layers {
+                                let mut root = Root::Map(Arc::new(layers.painted.clone()));
+                                root.refresh_template_instances(&dependency.path, before, after)?;
+                                if let Root::Map(map) = root {
+                                    layers.painted = map.as_ref().clone();
+                                }
+                            }
+                            Ok(())
+                        });
                     if let Err(error) = refreshed {
                         loaded.outcome = Err(error.to_string());
                         break;
@@ -189,7 +190,9 @@ impl Editor {
             }
             Root::Map(map) => map,
             Root::Tileset(tileset) => {
+                self.adopt_dependencies(files.dependencies);
                 let read = ReadTileset {
+                    loader: files.loader,
                     tileset,
                     content_hash: files.content_hash,
                     warnings: files.warnings,
@@ -329,6 +332,8 @@ impl Editor {
                 warnings: read.warnings,
             }),
         };
+        self.files.loaders.insert(asset, read.loader);
+        self.sync_template_caches();
         if let Some(snapshot) = read.recovered_from {
             self.store.forget_disk(asset);
             effects.push(Effect::DeleteSnapshot(snapshot));
@@ -662,6 +667,7 @@ impl Editor {
 
 /// A tileset file a load read, and the snapshot it came from when it was recovered.
 struct ReadTileset {
+    loader: bt_tmx::Loader,
     tileset: Arc<bt_core::Tileset>,
     content_hash: Option<u64>,
     warnings: Vec<bt_tmx::Warning>,

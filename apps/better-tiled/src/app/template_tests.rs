@@ -182,3 +182,78 @@ fn template_picker_previews_real_tiles_places_and_edits_the_shared_base() {
     window.apply(Intent::Run(ActionId::SaveAll));
     window.exit();
 }
+
+#[test]
+fn collision_canvas_previews_and_places_shape_templates() {
+    use bt_core::TileId;
+    use bt_editor::{FileRequest, TilesetMode};
+    let scratch = Scratch::new("window-collision-template").unwrap();
+    let atlas = bt_test_data::fixtures::Atlas::builder()
+        .tile_size(32, 32)
+        .build_in(scratch.path())
+        .unwrap();
+    let tileset_path = scratch.join("tiles.tsx");
+    bt_tmx::WriteRequest::for_tileset(&atlas.tileset, &tileset_path)
+        .write()
+        .unwrap();
+    let template = ObjectTemplate {
+        object: Some(MapObject {
+            name: "Solid".into(),
+            size: DVec2::new(12.0, 8.0),
+            shape: Shape::Ellipse,
+            ..MapObject::default()
+        }),
+        ..ObjectTemplate::default()
+    };
+    let path = scratch.join("solid.tx");
+    bt_tmx::WriteRequest::for_template(&template, &path)
+        .write()
+        .unwrap();
+    let mut window = TestWindow::with_gpu(&scratch.join("data"));
+    window.drop_file(&tileset_path);
+    let doc = window.editor().current().unwrap();
+    window.apply(Intent::SelectTilesetTiles {
+        doc,
+        tiles: vec![TileId(0)],
+        current: Some(TileId(0)),
+    });
+    window.apply(Intent::SetTilesetMode {
+        doc,
+        mode: TilesetMode::Collision,
+    });
+    window.press(Modifiers::NONE, Key::V);
+    window.answer_file_dialog(FileRequest::ObjectTemplate(doc), &path);
+    let at = window.collision_point(DVec2::new(16.0, 16.0));
+    window.hover_on_screen(at);
+    if let Some(path) = std::env::var_os("BT_COLLISION_TEMPLATE_SCREENSHOT") {
+        window.save_picture(std::path::Path::new(&path));
+    }
+    window.click_on_screen(at, egui::PointerButton::Primary, Modifiers::NONE);
+    let asset = window.editor().document(doc).unwrap().asset();
+    let objects = &window
+        .editor()
+        .store()
+        .tileset(asset)
+        .unwrap()
+        .tile(TileId(0))
+        .unwrap()
+        .collision
+        .as_ref()
+        .unwrap()
+        .layer
+        .objects;
+    assert_eq!(objects.len(), 1);
+    assert_eq!(objects[0].name, "Solid");
+    assert!(objects[0].template.is_some());
+    window.apply(Intent::Run(ActionId::Undo));
+    assert!(
+        window
+            .editor()
+            .store()
+            .tileset(asset)
+            .unwrap()
+            .tile(TileId(0))
+            .is_none_or(|tile| tile.collision.is_none())
+    );
+    window.exit();
+}

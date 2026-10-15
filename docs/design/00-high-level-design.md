@@ -835,6 +835,15 @@ CLI using the same exporter. Its measure exports all 14 example maps and both Hi
 and loads every scene through Godot headless; changed scenes are refused, including automatic
 exports after a successful map save. CI requires Godot on Linux.
 
+M6 was built on 2026-10-15. The M6 sections of `05-editor-core.md` and
+`06-application.md` record worlds and their editing tool, template bases and instances,
+including tile collision shapes, saved and quick stamps, image layers and nested map images,
+PNG export, project browsing/settings/commands, `.kms` import/export, and the unified Issues
+panel. Jobs that probe files, scan folders, read images or run processes stay off the frame
+thread; request identities and source versions guard their completions. The acceptance checks
+exercise these features through editor transactions and real window/GPU flows, including
+undo, save/reopen, cancellation, stale workers, failed dependency writes and repaired files.
+
 ## 18. Glossary
 
 - **Asset**: a loaded map, tileset, template, world or project, with a path and a dirty state.

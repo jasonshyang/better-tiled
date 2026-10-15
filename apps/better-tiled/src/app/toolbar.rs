@@ -70,12 +70,7 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, editor: &Editor, out: &mut Vec<Intent>)
                 continue;
             }
             // The collision editor's shapes are never tiles or text, as in Tiled.
-            if in_tileset
-                && matches!(
-                    tool,
-                    ToolKind::InsertTile | ToolKind::InsertText | ToolKind::InsertTemplate
-                )
-            {
+            if in_tileset && matches!(tool, ToolKind::InsertTile | ToolKind::InsertText) {
                 continue;
             }
             tool_button(ui, editor, tool, current == tool, out);

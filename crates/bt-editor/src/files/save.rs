@@ -91,6 +91,9 @@ impl Editor {
             )
         }) {
             let mut effects = self.save_dependencies(asset);
+            if save_failed(&effects) {
+                return effects;
+            }
             effects.extend(match self.write_auxiliary(asset) {
                 Ok(()) => vec![
                     Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)),
@@ -104,7 +107,11 @@ impl Editor {
             return effects;
         }
         if self.store.tileset(asset).is_some() {
-            return match self.write_tileset(asset) {
+            let mut effects = self.save_dependencies(asset);
+            if save_failed(&effects) {
+                return effects;
+            }
+            effects.extend(match self.write_tileset(asset) {
                 Ok(()) => vec![
                     Effect::DeleteSnapshot(self.recovery.snapshot_path(asset)),
                     Effect::Notify(Notice::info(format!(
@@ -113,7 +120,8 @@ impl Editor {
                     ))),
                 ],
                 Err(notice) => vec![Effect::Notify(notice)],
-            };
+            });
+            return effects;
         }
         self.save_map_to(asset, &path)
     }
@@ -186,6 +194,9 @@ impl Editor {
     fn save_map_to(&mut self, asset: AssetId, path: &Path) -> Vec<Effect> {
         let mut effects = Vec::new();
         effects.extend(self.save_dependencies(asset));
+        if save_failed(&effects) {
+            return effects;
+        }
         match self.write_map(asset, path) {
             Ok(warnings) => {
                 self.recovery.forget(asset);
@@ -223,7 +234,10 @@ impl Editor {
                 Ok(()) => effects.push(Effect::DeleteSnapshot(
                     self.recovery.snapshot_path(dependency),
                 )),
-                Err(notice) => effects.push(Effect::Notify(notice)),
+                Err(notice) => {
+                    effects.push(Effect::Notify(notice));
+                    return effects;
+                }
             }
         }
         effects
@@ -240,7 +254,13 @@ impl Editor {
             _ => 3,
         });
         for id in unsaved {
-            let Some(asset) = self.store.get(id) else {
+            let dependencies = self.save_dependencies(id);
+            let failed = save_failed(&dependencies);
+            effects.extend(dependencies);
+            if failed {
+                continue;
+            }
+            let Some(asset) = self.store.get(id).filter(|asset| asset.is_dirty()) else {
                 continue;
             };
             let Some(path) = asset.path().map(Path::to_path_buf) else {
@@ -325,7 +345,11 @@ impl Editor {
             .get(asset)
             .and_then(|a| a.path().map(Path::to_path_buf))
             .ok_or_else(|| Notice::error(format!("{asset} has no file")))?;
-        let text = WriteRequest::for_tileset(&tileset, &path)
+        let mut request = WriteRequest::for_tileset(&tileset, &path);
+        if let Some(loader) = self.files.loaders.get(&asset) {
+            request = request.loader(loader);
+        }
+        let text = request
             .compatibility_version(self.compatibility_version())
             .render()
             .map_err(|error| cannot_save(&path, &error.to_string()))?
@@ -394,6 +418,10 @@ impl Editor {
             None => cannot_save(path, &error.to_string()),
         })
     }
+}
+
+fn save_failed(effects: &[Effect]) -> bool {
+    effects.iter().any(|effect| matches!(effect, Effect::Notify(notice) if notice.severity == crate::Severity::Error))
 }
 
 fn cannot_save(path: &Path, why: &str) -> Notice {

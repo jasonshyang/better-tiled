@@ -87,6 +87,15 @@ pub enum IssueTarget {
         /// Specific tile, when any.
         tile: Option<TileId>,
     },
+    /// A collision shape of one tileset tile.
+    CollisionObject {
+        /// Owning tileset.
+        home: TilesetHome,
+        /// Collision tile.
+        tile: TileId,
+        /// Shape identity within that tile.
+        object: ObjectId,
+    },
     /// A rule map or another source file.
     File(PathBuf),
 }
@@ -122,6 +131,15 @@ pub enum LocateTarget {
         /// Instance identity.
         object: ObjectId,
     },
+    /// Template link of a tile's collision shape.
+    CollisionTemplate {
+        /// Owning tileset.
+        home: TilesetHome,
+        /// Collision tile.
+        tile: TileId,
+        /// Shape identity.
+        object: ObjectId,
+    },
     /// Explicit world-map reference.
     WorldMap {
         /// World asset.
@@ -135,7 +153,7 @@ impl LocateTarget {
     pub fn asset(self) -> AssetId {
         match self {
             Self::Tileset { owner, .. } => owner,
-            Self::TilesetImage { home, .. } => home.asset(),
+            Self::TilesetImage { home, .. } | Self::CollisionTemplate { home, .. } => home.asset(),
             Self::LayerImage { map, .. } | Self::Template { map, .. } => map,
             Self::WorldMap { world, .. } => world,
         }

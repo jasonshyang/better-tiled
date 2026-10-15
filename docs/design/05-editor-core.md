@@ -817,3 +817,12 @@ of one reference form one issue. Replaced references drop obsolete loader warnin
 `LocateIssue` captures an owner version; both picker and load completions reject a changed
 owner. Tileset, template, atlas/collection image, nested image-layer and explicit world-map
 repairs are transactions. Existing edited dependency roots remain authoritative.
+
+Template instance commands and V placement also work on tile collision shapes. Their preview
+uses the collision map view and commits the prepared shapes to the tileset home. Template base
+changes propagate through standalone and embedded tilesets in the same history transaction;
+file loads adopt collision-template dependencies and refresh them against edited bases. A tile
+object template is refused in collision groups, matching Tiled's `templateAllowed` rule.
+Dependency save order follows references, including templates used by tilesets. If a dependency
+write fails, its owner remains unsaved. Collision-template Issues navigate to the exact tile
+and shape and offer the same version-checked Locate File repair.
