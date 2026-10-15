@@ -255,6 +255,11 @@ impl Editor {
             return Vec::new();
         };
         match request {
+            FileRequest::StampsFolder => {
+                let mut settings = self.settings().clone();
+                settings.general.stamps_folder = Some(path);
+                self.change_settings(settings)
+            }
             FileRequest::GodotScene { doc, .. } => vec![Effect::Godot {
                 doc,
                 operation: crate::GodotOperation::ExportTo(path),

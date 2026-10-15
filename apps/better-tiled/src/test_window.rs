@@ -40,6 +40,28 @@ pub(crate) struct TestWindow {
 }
 
 impl TestWindow {
+    /// A window with the real GPU canvas, for workflows whose visual result is inspected.
+    pub(crate) fn with_gpu(data: &Path) -> TestWindow {
+        let mut startup = Startup::from_folder(Cli::default(), data).unwrap();
+        let locks = data.join("locks");
+        std::fs::create_dir_all(&locks).unwrap();
+        startup.lock_folder = Some(locks);
+        let harness = Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .with_step_dt(1.0 / 60.0)
+            .with_render_every_step(true)
+            .wgpu()
+            .build_eframe(|cc| App::for_recording(cc, startup).unwrap());
+        let mut window = TestWindow { harness };
+        window.settle();
+        window
+    }
+
+    /// Saves the current GPU-rendered window for visual review.
+    pub(crate) fn save_picture(&mut self, path: &Path) {
+        self.harness.render().unwrap().save(path).unwrap();
+    }
+
     /// A window whose settings, session and recovery folder are in `data`.
     pub(crate) fn with_data(data: &Path) -> TestWindow {
         TestWindow::run_as(data, std::process::id())

@@ -25,6 +25,7 @@ mod properties;
 mod recovery;
 mod session;
 mod settings;
+mod stamps;
 mod store;
 mod terrain_helpers;
 mod terrain_sets;
@@ -77,12 +78,13 @@ pub use properties::{
 pub use recovery::{
     Orphan, Snapshot, SnapshotMeta, delete_snapshot, orphans, remove_heartbeat, touch_heartbeat,
 };
-pub use session::{FileViewState, Session};
+pub use session::{FileViewState, Session, SessionStamp};
 pub use settings::{
     Behaviour, General, Interface, MAX_FINE_GRID_DIVISIONS, MajorGrid, MigrateError,
     ObjectSelection, SETTINGS_VERSION, SettingColor, Settings, SettingsError, Snapping, Theme,
     data_folder,
 };
+pub use stamps::{SavedStamp, StampEdit, StampJob, StampStore, StampsLoaded};
 pub use store::{Asset, AssetId, AssetKind, AssetStore, NewAsset, OnDisk, Root, TilesetHome};
 pub use tools::{
     FillPreview, MAX_BRUSH_SIZE, NoTerrain, Stroke, StrokeKind, TerrainChoice, TerrainInUse,

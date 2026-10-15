@@ -619,6 +619,24 @@ behaviour, and Tiled reads the folder too). A stamp becomes a `Brush` by resolvi
 against the map's (by file, or for embedded tilesets by name and image). The nine quick stamps
 are brushes in `ToolState` and in the session.
 
+As built in M6, `Intent::Stamp(StampEdit)` chooses or edits stamps; `Effect::Stamps(StampJob)`
+runs file operations and session reads on a worker, and `StampsLoaded` returns the result.
+The library scans subfolders, reports unreadable files while keeping readable stamps, and
+serializes writes. It writes a stamp atomically before replacing the cached value. Rename
+changes the stored display name while retaining its filename and relative-reference base.
+Folder changes invalidate outstanding reads; a late quick-stamp restore cannot replace a
+slot saved since it started. `general.stamps_folder` selects an absolute folder, defaulting to
+`<data>/stamps`. The window exposes folder selection, filtering, a folder tree, rendered
+thumbnails, variation weights and all library edits.
+
+`ToolState` keeps the nine quick stamps as their small variation maps, so each retains its
+capture grid. The session stores Tiled stamp JSON with the path used to resolve its references.
+Number keys 1–9 choose a quick stamp, Command/Ctrl plus a number stores one, and adding Shift
+appends the current brush's variations, following Tiled's fixed quick-stamp shortcuts. Text
+fields keep those keys. Saving uses the painting tool's brush or the selection tool's selected
+tiles. Staggered and hexagonal captures preserve row/column parity across serialization;
+choosing an individual variation gives it weight 1 even when its library weight is zero.
+
 ## 16. AutoMap layers
 
 A document's `automap: Option<AutoMapSetup { rules: PathBuf, runs: Vec<Run { bindings: rule

@@ -30,6 +30,9 @@ pub struct ToolState {
     pub(crate) fill_shape: FillShape,
     /// What the painting tools paint.
     pub(crate) brush: Option<Brush>,
+    /// Nine quick stamps, including the grid their variations were captured on.
+    pub(crate) quick_stamps: [Option<bt_tmx::Stamp>; 9],
+    pub(crate) quick_stamps_generation: u64,
     /// The seed the next placement, fill or random tile is drawn from; it moves on after each
     /// paint, so the next preview shows the next variation.
     pub(crate) seed: u64,
@@ -58,6 +61,8 @@ impl Default for ToolState {
             selection_mode: SelectionMode::Replace,
             fill_shape: FillShape::Rectangle,
             brush: None,
+            quick_stamps: Default::default(),
+            quick_stamps_generation: 0,
             seed: 0x5EED_0FB7_7E55,
             last_paint: None,
             terrain: None,
@@ -100,6 +105,11 @@ impl ToolState {
     /// The brush, if one was picked.
     pub fn brush(&self) -> Option<&Brush> {
         self.brush.as_ref()
+    }
+
+    /// The quick stamp stored in a slot (0–8), if any.
+    pub fn quick_stamp(&self, slot: usize) -> Option<&bt_tmx::Stamp> {
+        self.quick_stamps.get(slot).and_then(Option::as_ref)
     }
 
     /// Where the last brush stroke ended.

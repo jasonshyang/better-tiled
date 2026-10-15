@@ -55,6 +55,9 @@ pub(crate) struct Due {
 }
 
 impl RecoveryPlan {
+    pub(crate) fn folder(&self) -> &Path {
+        &self.folder
+    }
     pub(crate) fn new(folder: PathBuf, pid: u32) -> RecoveryPlan {
         RecoveryPlan {
             folder,

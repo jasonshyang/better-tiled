@@ -2,6 +2,7 @@
 //! names nothing is an error rather than ignored, so a typo in `settings.toml` is reported.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use bt_core::Color;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -34,6 +35,11 @@ impl Settings {
     /// What is wrong with a value that is of the right kind but out of range; `None` when
     /// nothing is. Loading and changing settings refuse such values.
     pub fn problem(&self) -> Option<String> {
+        if let Some(folder) = &self.general.stamps_folder
+            && !folder.is_absolute()
+        {
+            return Some("general.stamps_folder must be an absolute folder path".into());
+        }
         let divisions = self.interface.fine_grid_divisions;
         if !(1..=MAX_FINE_GRID_DIVISIONS).contains(&divisions) {
             return Some(format!(
@@ -61,6 +67,8 @@ impl Default for Settings {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct General {
+    /// An existing Tiled stamp folder, or the data folder's `stamps` directory by default.
+    pub stamps_folder: Option<PathBuf>,
     /// Reopen last session's files at start when none are given.
     pub restore_session: bool,
     /// Write files through a temporary file renamed over the target.
@@ -79,6 +87,7 @@ pub struct General {
 impl Default for General {
     fn default() -> General {
         General {
+            stamps_folder: None,
             restore_session: true,
             safe_writing: true,
             recovery: true,

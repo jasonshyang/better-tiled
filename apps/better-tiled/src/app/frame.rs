@@ -59,6 +59,7 @@ pub(crate) struct App {
     tiles_panel: TilesPanel,
     terrains_panel: TerrainsPanel,
     automap_panel: AutoMapPanel,
+    stamps_panel: crate::panels::StampsPanel,
     /// The Properties panel, below the Tiles panel.
     properties_panel: PropertiesPanel,
     /// The tileset editor, shown in place of a map or in a tileset's tab.
@@ -106,16 +107,19 @@ pub(crate) enum LeftTab {
     Objects,
     /// The AutoMap panel.
     AutoMap,
+    /// Saved and quick stamps.
+    Stamps,
     /// Export and verification diagnostics.
     Issues,
 }
 
 impl LeftTab {
     /// The group's tabs, in order.
-    const ALL: [LeftTab; 4] = [
+    const ALL: [LeftTab; 5] = [
         LeftTab::Layers,
         LeftTab::Objects,
         LeftTab::AutoMap,
+        LeftTab::Stamps,
         LeftTab::Issues,
     ];
 
@@ -125,6 +129,7 @@ impl LeftTab {
             LeftTab::Layers => "Layers",
             LeftTab::Objects => "Objects",
             LeftTab::AutoMap => "AutoMap",
+            LeftTab::Stamps => "Stamps",
             LeftTab::Issues => "Issues",
         }
     }
@@ -384,6 +389,7 @@ impl App {
             tiles_panel: TilesPanel::default(),
             terrains_panel: TerrainsPanel,
             automap_panel: AutoMapPanel,
+            stamps_panel: crate::panels::StampsPanel::default(),
             properties_panel: PropertiesPanel::default(),
             tileset_editor: TilesetEditorView::default(),
             tile_images: TileImages::default(),
@@ -427,6 +433,8 @@ impl App {
     /// Restores the session, offers back what a run that ended badly left, and opens the files
     /// given. A check opens only its files and asks nothing.
     fn start(&mut self, ctx: &egui::Context, startup: Startup, checking: bool) {
+        self.intents
+            .push(Intent::Stamp(bt_editor::StampEdit::Reload));
         if !checking {
             let orphans =
                 bt_editor::orphans(&startup.recovery_folder, startup.pid, SystemTime::now());
@@ -695,7 +703,7 @@ impl App {
                 .resizable(true)
                 .default_size(240.0)
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         for tab in LeftTab::ALL {
                             let title = egui::RichText::new(tab.title()).heading();
                             if ui.selectable_label(self.left_tab == tab, title).clicked() {
@@ -714,6 +722,23 @@ impl App {
                                 .show(ui, &self.editor, doc, &mut self.intents);
                         }
                         LeftTab::Issues => self.show_godot_issues(ui, doc),
+                        LeftTab::Stamps => {
+                            let mut files = Vec::new();
+                            self.stamps_panel.show(
+                                ui,
+                                &self.editor,
+                                &mut self.workers,
+                                &mut self.intents,
+                                &mut files,
+                            );
+                            for request in files {
+                                if let Err(error) =
+                                    self.file_dialogs.ask(&mut self.workers, request)
+                                {
+                                    self.notify(Notice::error(error));
+                                }
+                            }
+                        }
                         LeftTab::AutoMap => {
                             self.automap_panel
                                 .show(ui, &self.editor, doc, &mut self.intents);
@@ -1016,6 +1041,8 @@ impl eframe::App for App {
             for id in shortcuts(&ctx, &self.editor) {
                 self.intents.push(Intent::Run(id));
             }
+            self.intents
+                .extend(crate::focus::quick_stamp_shortcuts(&ctx, &self.editor));
         }
         egui::Panel::top("menu_bar").show(ui, |ui| menu_bar(ui, &self.editor, &mut self.intents));
         if self.editor.current().is_some() {
