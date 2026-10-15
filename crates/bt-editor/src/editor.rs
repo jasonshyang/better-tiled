@@ -176,6 +176,10 @@ impl Editor {
     pub fn apply(&mut self, intent: Intent) -> Vec<Effect> {
         let current_before = self.documents.current();
         let mut effects = match intent {
+            Intent::Report(notice) => vec![Effect::Notify(notice)],
+            Intent::ShortcutsRead { .. } => vec![Effect::Notify(Notice::error(
+                "Shortcut imports need an open Preferences dialog",
+            ))],
             Intent::Run(id) => self.run(id),
             Intent::RunPalette(target) => self.run_palette(target),
             Intent::CreateMap(new) => self.create_map(&new),

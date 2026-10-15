@@ -16,6 +16,7 @@ mod m3_tests;
 mod menu;
 #[cfg(test)]
 mod properties_tests;
+mod shortcuts;
 mod startup;
 mod status_bar;
 mod tabs;
@@ -30,3 +31,6 @@ pub(crate) use startup::Startup;
 
 #[cfg(test)]
 mod godot_tests;
+
+#[cfg(test)]
+mod shortcuts_tests;

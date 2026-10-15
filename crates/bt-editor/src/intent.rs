@@ -25,6 +25,15 @@ use crate::watch::Observation;
 /// A request to the editor.
 #[derive(Debug)]
 pub enum Intent {
+    /// A window worker finished an operation that reports a notice.
+    Report(crate::Notice),
+    /// A keyboard mapping scheme read for the window’s Preferences draft.
+    ShortcutsRead {
+        /// The Preferences dialog instance that asked.
+        dialog: u64,
+        /// The file text or read failure.
+        result: Result<String, String>,
+    },
     /// Run a command.
     Run(ActionId),
     /// Run an entry of the command palette.

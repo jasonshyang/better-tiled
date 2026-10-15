@@ -35,7 +35,7 @@ mod watch;
 
 pub use actions::{
     ACTIONS, ActionId, ActionKind, ActionSpec, Chord, Context, Enabled, Key, Keymap, KeymapError,
-    Modifiers, PaletteEntry, PaletteTarget, tool_action,
+    KmsImport, Modifiers, PaletteEntry, PaletteTarget, tool_action,
 };
 pub use automap::{
     AutoMapRules, CellExplanation, ExplainedRun, KnownTileset, LastRun, LiveEdit, RulesJob,

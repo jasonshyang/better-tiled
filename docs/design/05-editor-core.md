@@ -401,6 +401,14 @@ both be active, so S on tile layers and S on object layers is no conflict), `to_
 every hint and message in the window says the right key; a command without a key is named
 without one. The keymap is passed to whoever needs it; nothing publishes it through a global.
 
+The M6 implementation imports and exports Tiled's `<mapping>` `.kms` files with Qt portable
+key names. Each action declares its Tiled id in the action table; commands specific to Better
+Tiled use a `BetterTiled.` id on export. Imports replace only named bindings, preserve explicit
+unbinding and alternative chords, report unknown action ids, and reject an unsupported chord
+without changing any bindings. Multi-stroke Qt sequences and the Meta modifier on non-macOS
+platforms are reported as unsupported. The Preferences draft owns an asynchronous import by
+dialog id: Cancel discards it, and a late read cannot change a later Preferences dialog.
+
 ### 7.3 Enabled, checked, why not, execute
 
 - `enabled(&self, id) -> Enabled | Disabled(Option<Reason>)`: the context must match the

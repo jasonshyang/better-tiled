@@ -9,6 +9,9 @@ use super::table::{ACTIONS, ActionId};
 /// A binding in settings that does not name a command or a chord.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum KeymapError {
+    /// A keyboard mapping scheme is malformed or contains an unsupported shortcut.
+    #[error("invalid keyboard mapping scheme: {0}")]
+    InvalidScheme(String),
     /// No command has this name.
     #[error("the keymap names “{0}”, which is not a command")]
     UnknownAction(String),

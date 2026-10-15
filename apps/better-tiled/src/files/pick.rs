@@ -48,6 +48,20 @@ impl FileDialogs {
 /// Asks for a file on a worker.
 fn pick_file(workers: &mut Workers, request: FileRequest) -> Result<(), String> {
     workers.spawn("file-dialog", move || match &request {
+        FileRequest::ImportShortcuts { .. } | FileRequest::ExportShortcuts { .. } => {
+            let dialog = rfd::AsyncFileDialog::new()
+                .set_title("Keyboard Mapping Scheme")
+                .add_filter("Tiled keyboard mappings", &["kms"]);
+            let picked = if matches!(request, FileRequest::ImportShortcuts { .. }) {
+                pollster::block_on(dialog.pick_file())
+            } else {
+                pollster::block_on(dialog.set_file_name("shortcuts.kms").save_file())
+            };
+            vec![Intent::FilePicked {
+                request: request.clone(),
+                path: picked.map(|file| file.path().to_path_buf()),
+            }]
+        }
         FileRequest::Open => {
             let dialog = rfd::AsyncFileDialog::new()
                 .set_title("Open")

@@ -261,7 +261,9 @@ impl Editor {
             }],
             FileRequest::Open => self.open(&path),
             // The window's own request: the New Tileset dialog takes the answer.
-            FileRequest::TilesetImage => Vec::new(),
+            FileRequest::TilesetImage
+            | FileRequest::ImportShortcuts { .. }
+            | FileRequest::ExportShortcuts { .. } => Vec::new(),
             FileRequest::ExternalTileset(doc) => self.load_external_tileset(doc, &path),
             FileRequest::SaveAs { doc, .. } => {
                 let mut effects = self.save_as(doc, &path);

@@ -80,6 +80,16 @@ pub enum Dialog {
 /// A file to ask for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileRequest {
+    /// A Tiled keyboard mapping scheme for the open Preferences draft.
+    ImportShortcuts {
+        /// The Preferences dialog instance that asked.
+        dialog: u64,
+    },
+    /// Where to write the Preferences draft’s keyboard mapping scheme.
+    ExportShortcuts {
+        /// The scheme captured when Export was clicked.
+        scheme: String,
+    },
     /// Files to open.
     Open,
     /// An image for a new tileset (the window's own: the editor never sees the answer).
