@@ -12,6 +12,7 @@ mod effect;
 mod error;
 mod external;
 mod files;
+mod godot;
 mod history;
 mod inspect;
 mod intent;

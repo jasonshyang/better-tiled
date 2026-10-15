@@ -225,6 +225,10 @@ impl Editor {
             }
             Intent::CloseDocument(doc) => self.close_document(doc),
             Intent::SaveDocument(doc) => self.save(doc),
+            Intent::RememberExport { doc, target } => match self.remember_export(doc, &target) {
+                Ok(()) => Vec::new(),
+                Err(error) => vec![Effect::Notify(Notice::error(error.to_string()))],
+            },
             Intent::SelectLayer { doc, layer } => {
                 self.select_layer(doc, layer);
                 self.set_inspecting(doc, Inspecting::Layers);

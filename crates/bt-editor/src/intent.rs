@@ -91,6 +91,13 @@ pub enum Intent {
         /// The answer.
         choice: Choice,
     },
+    /// Remember a Godot export as one undoable map change.
+    RememberExport {
+        /// The source document.
+        doc: DocumentId,
+        /// The absolute .tscn target.
+        target: PathBuf,
+    },
     /// Make a tab current.
     SelectDocument(DocumentId),
     /// Close a tab (asking about unsaved work).
