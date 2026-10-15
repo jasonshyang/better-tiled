@@ -4,10 +4,12 @@ mod front_door;
 mod images;
 mod inheritors;
 mod names;
+mod navigation;
 mod oracle;
 mod safety;
 mod shared;
 mod support;
+mod terrain;
 mod tiledata;
 mod tileset;
 
